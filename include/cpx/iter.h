@@ -1,6 +1,7 @@
 #ifndef CPX_ITER_H
 #define CPX_ITER_H
 
+#include <cpx/tuple.h>
 #include <iterator>
 #include <tuple>
 #include <limits>
@@ -46,8 +47,8 @@ namespace cpx {
     template <typename F, template <typename...> typename Tuple, typename... Ts>
     struct is_invocable_with_tuple<F, Tuple<Ts...>> : std::is_invocable<F, Ts...> {};
 
-    template <typename F, typename Tuple>
-    inline constexpr bool is_invocable_with_tuple_v = is_invocable_with_tuple<F, Tuple>::value;
+    // Note: is_invocable_with_tuple_v is also provided by <cpx/tuple.h> for std::tuple.
+    // This variant supports any template (not just std::tuple), so we keep it locally.
 
     template <typename... Iterables>
     class TupleIterable {
@@ -130,29 +131,27 @@ namespace cpx {
             return Iter<T1, T2, FF>(start, stop, std::forward<FF>(fn));
         }
 
-        template <
-            template <typename...> typename Container,
-            typename... ContainerSpecs,
-            typename... Args>
+        template <template <typename...> typename Container>
         constexpr auto collect() {
-            struct Iterator {
-                Iter *ptr;
-
-                using value_type = std::decay_t<decltype(ptr->get())>;
-                decltype(auto) operator*() const {
-                    return ptr->get();
+            using raw_type = decltype(get());
+            using decayed  = std::decay_t<raw_type>;
+            if constexpr (is_tuple_v<decayed> && std::tuple_size_v<decayed> == 1) {
+                // Unwrap single-element tuples (the common case for iterate(container))
+                using value_type = std::decay_t<std::tuple_element_t<0, decayed>>;
+                Container<value_type> result;
+                while (*this) {
+                    result.push_back(std::get<0>(get()));
+                    next();
                 }
-                bool operator==(Iterator) const {
-                    return !(*ptr);
+                return result;
+            } else {
+                Container<decayed> result;
+                while (*this) {
+                    result.push_back(get());
+                    next();
                 }
-                bool operator!=(Iterator) const {
-                    return (*ptr);
-                }
-                Iter operator++() {
-                    return {&ptr->next()};
-                }
-            };
-            return T(Iterator{this}, Iterator{this});
+                return result;
+            }
         }
 
         T1 start;
