@@ -1,0 +1,117 @@
+#ifndef CPX_TAG_INFO_H
+#define CPX_TAG_INFO_H
+
+#include <cpx/tag.h>
+#include <cpx/optional.h>
+#include <cpx/tuple.h>
+#include <array>
+
+namespace cpx {
+    struct TagInfo {
+        std::string_view key         = "";
+        std::string_view env         = "";
+        bool             skipmissing = false;
+        bool             omitempty   = false;
+        bool             noserde     = false;
+        bool             positional  = false;
+        std::string_view help        = "";
+
+        TagInfo() = default;
+    };
+
+    template <size_t N>
+    struct TagInfoTuple {
+        std::array<TagInfo, N> ts     = {};
+        bool                   is_obj = true;
+    };
+
+    template <typename T>
+    constexpr TagInfo get_tag_info(const T &field, std::string_view tag, char separator = ',') {
+        TagInfo ti    = {};
+        bool    first = true;
+
+        std::string_view sv;
+        if constexpr (is_tagged_v<T>)
+            sv = field.get_tag(tag);
+
+        while (!sv.empty()) {
+            size_t           next = sv.find(separator);
+            std::string_view part = sv.substr(0, next);
+            constexpr char   ws[] = " \t\n\r\f\v";
+
+            size_t start = part.find_first_not_of(ws);
+            size_t end   = part.find_last_not_of(ws);
+
+            part = start == std::string_view::npos ? std::string_view{} : part.substr(start, end - start + 1);
+
+            if (first)
+                (ti.key = part, first = false);
+            else if (std::string_view e = "env="; part.size() >= e.size() && part.compare(0, e.size(), e) == 0)
+                ti.env = part.substr(e.size());
+            else if (part == "skipmissing")
+                ti.skipmissing = true;
+            else if (part == "omitempty")
+                ti.omitempty = true;
+            else if (part == "noserde")
+                ti.noserde = true;
+            else if (part == "positional")
+                ti.positional = true;
+            else if (std::string_view h = "help="; part.size() >= h.size() && part.compare(0, h.size(), h) == 0)
+                ti.help = part.substr(h.size());
+
+            if (next == std::string_view::npos)
+                break;
+            sv.remove_prefix(next + 1);
+        }
+
+        return ti;
+    }
+
+    template <typename... T>
+    constexpr TagInfoTuple<sizeof...(T)>
+    get_tag_info_from_tuple(const std::tuple<T...> &fields, std::string_view tag, char separator = ',') {
+        TagInfoTuple<sizeof...(T)> ts       = {};
+        bool                       is_array = sizeof...(T) > 0;
+
+        tuple_for_each(fields, [&](const auto &field, size_t i) {
+            if (const TagInfo &t = ts.ts[i] = get_tag_info(field, tag, separator); t.key != "")
+                is_array &= t.positional;
+        });
+
+        ts.is_obj = !is_array;
+        return ts;
+    }
+} // namespace cpx
+
+namespace cpx::detail {
+    template <typename T>
+    decltype(auto) get_underlying_value(T &value) {
+        if constexpr (is_tagged_v<std::decay_t<decltype(value)>>)
+            return value.get_value();
+        else
+            return value;
+    }
+
+    template <typename, typename = void>
+    struct has_empty : std::false_type {};
+
+    template <typename T>
+    struct has_empty<T, std::void_t<decltype(std::declval<const T &>().empty())>> : std::true_type {};
+
+    template <typename T>
+    std::enable_if_t<!has_empty<T>::value, bool> is_empty_value(const T &value) {
+        if constexpr (is_optional<T>::value)
+            return !value.has_value();
+        else if constexpr (std::is_arithmetic_v<T>)
+            return !bool(value);
+        else
+            return false;
+    }
+
+    template <typename T>
+    std::enable_if_t<has_empty<T>::value, bool> is_empty_value(const T &value) {
+        return value.empty();
+    }
+} // namespace cpx::detail
+
+#endif
