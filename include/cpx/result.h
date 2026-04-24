@@ -56,29 +56,21 @@ namespace cpx {
         constexpr Result(U &&err, bool /*is_err*/)
             : data(std::in_place_index<1>, std::forward<U>(err)) {}
 
-        // Internal construction helpers
+        // Internal construction helpers — use in_place_index for direct initialization.
         static constexpr Result ok(T &&v) {
-            Result r;
-            r.data.template emplace<0>(std::move(v));
-            return r;
+            return Result(std::in_place_index<0>, std::move(v));
         }
 
         static constexpr Result ok(const T &v) {
-            Result r;
-            r.data.template emplace<0>(v);
-            return r;
+            return Result(std::in_place_index<0>, v);
         }
 
         static constexpr Result err(E &&e) {
-            Result r;
-            r.data.template emplace<1>(std::move(e));
-            return r;
+            return Result(std::in_place_index<1>, std::move(e));
         }
 
         static constexpr Result err(const E &e) {
-            Result r;
-            r.data.template emplace<1>(e);
-            return r;
+            return Result(std::in_place_index<1>, e);
         }
 
         /// Returns true if this is a success value.
@@ -243,7 +235,9 @@ namespace cpx {
         }
 
     private:
-        Result() = default;
+        template <std::size_t I, typename U>
+        constexpr Result(std::in_place_index_t<I> tag, U &&v)
+            : data(tag, std::forward<U>(v)) {}
     };
 
     /// Helper tag to construct a Result in the error state.

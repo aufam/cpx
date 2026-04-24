@@ -41,15 +41,6 @@ namespace cpx {
     using template_rebind_t = typename template_rebind<To, From>::type;
 
 
-    template <typename F, typename Tuple>
-    struct is_invocable_with_tuple;
-
-    template <typename F, template <typename...> typename Tuple, typename... Ts>
-    struct is_invocable_with_tuple<F, Tuple<Ts...>> : std::is_invocable<F, Ts...> {};
-
-    // Note: is_invocable_with_tuple_v is also provided by <cpx/tuple.h> for std::tuple.
-    // This variant supports any template (not just std::tuple), so we keep it locally.
-
     template <typename... Iterables>
     class TupleIterable {
         std::tuple<Iterables...> tpl;

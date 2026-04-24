@@ -203,9 +203,7 @@ TEST(Overload, DirectOverload) {
 TEST(Iter, CollectVector) {
     std::vector<int> src = {1, 2, 3, 4, 5};
     auto collected = cpx::iterate(src).collect<std::vector>();
-    ASSERT_EQ(collected.size(), src.size());
-    for (size_t i = 0; i < src.size(); ++i)
-        EXPECT_EQ(collected[i], src[i]);
+    EXPECT_EQ(collected, src);
 }
 
 TEST(Iter, CollectAfterDrop) {
