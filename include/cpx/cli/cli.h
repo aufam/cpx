@@ -6,12 +6,12 @@
 namespace cpx::cli {
     template <typename T>
     constexpr TagInfo get_tag_info(const T &field) {
-        return get_tag_info(field, "opt");
+        return ::cpx::get_tag_info(field, "opt");
     }
 
     template <typename... T>
     constexpr TagInfoTuple<sizeof...(T)> get_tag_info_from_tuple(const std::tuple<T...> &fields) {
-        return get_tag_info_from_tuple(fields, "opt");
+        return ::cpx::get_tag_info_from_tuple(fields, "opt");
     }
 } // namespace cpx::cli
 

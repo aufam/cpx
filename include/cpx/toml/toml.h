@@ -6,12 +6,12 @@
 namespace cpx::toml {
     template <typename T>
     constexpr TagInfo get_tag_info(const T &field) {
-        return get_tag_info(field, "toml");
+        return ::cpx::get_tag_info(field, "toml");
     }
 
     template <typename... T>
     constexpr TagInfoTuple<sizeof...(T)> get_tag_info_from_tuple(const std::tuple<T...> &fields) {
-        return get_tag_info_from_tuple(fields, "toml");
+        return ::cpx::get_tag_info_from_tuple(fields, "toml");
     }
 } // namespace cpx::toml
 
