@@ -84,7 +84,7 @@ namespace cpx {
     struct is_extended<Extend<T>> : std::true_type {};
 
     template <typename T>
-    inline static constexpr bool is_extended_v = is_extended<T>::value;
+    inline constexpr bool is_extended_v = is_extended<T>::value;
 
 
     template <typename T>

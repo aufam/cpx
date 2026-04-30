@@ -21,7 +21,7 @@ namespace cpx::serde {
     };
 
     template <typename Serializer, typename From>
-    static constexpr bool is_serializable_v = is_serializable<Serializer, From>::value;
+    inline constexpr bool is_serializable_v = is_serializable<Serializer, From>::value;
 } // namespace cpx::serde
 
 #endif

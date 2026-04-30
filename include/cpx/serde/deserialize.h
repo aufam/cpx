@@ -20,7 +20,7 @@ namespace cpx::serde {
         std::void_t<decltype(std::declval<Deserialize<Deserializer, To>>().into(std::declval<To &>()))>> : std::true_type {};
 
     template <typename Deserializer, typename To>
-    static constexpr bool is_deserializable_v = is_deserializable<Deserializer, To>::value;
+    inline constexpr bool is_deserializable_v = is_deserializable<Deserializer, To>::value;
 } // namespace cpx::serde
 
 #endif

@@ -109,7 +109,7 @@ namespace cpx {
     struct is_tagged<Tag<T>> : std::true_type {};
 
     template <typename T>
-    inline static constexpr bool is_tagged_v = is_tagged<T>::value;
+    inline constexpr bool is_tagged_v = is_tagged<T>::value;
 
 
     template <typename T>

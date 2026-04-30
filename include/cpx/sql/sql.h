@@ -441,20 +441,20 @@ namespace cpx::sql {
     };
 
     template <typename Table>
-    inline static const Statement<> create_table = {
+    inline const Statement<> create_table = {
         std::string("create table ") + Schema<Table>::name() + " " + Schema<Table>::columns()
     };
 
     template <typename Table>
-    inline static const Statement<> create_table_if_not_exists = {
+    inline const Statement<> create_table_if_not_exists = {
         std::string("create table if not exists ") + Schema<Table>::name() + " " + Schema<Table>::columns()
     };
 
     template <typename Table>
-    inline static const Statement<> alter_table = {std::string("alter table ") + Schema<Table>::name()};
+    inline const Statement<> alter_table = {std::string("alter table ") + Schema<Table>::name()};
 
     template <typename Table>
-    inline static const Statement<> update = {std::string("update ") + Schema<Table>::name()};
+    inline const Statement<> update = {std::string("update ") + Schema<Table>::name()};
 
     template <typename Table, typename Col, typename... Cols>
     auto insert_into(const Col &col, const Cols &...cols) {
