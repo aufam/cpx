@@ -35,6 +35,27 @@ namespace cpx::json::nlohmann_json {
 
     template <typename From = std::string>
     using Parse = ::cpx::serde::Parse<nlohmann::json, From>;
+
+    template <typename T>
+    std::string dump(const T &val, int indent = -1, char indent_char = ' ', bool ensure_ascii = false);
+
+    template <typename T>
+    T parse(const std::string &str, bool ignore_comments = false);
+
+    template <typename T>
+    T parse(std::istream &stream, bool ignore_comments = false);
+
+    template <typename T>
+    T parse(FILE *pfile, bool ignore_comments = false);
+
+    template <typename T>
+    void parse(const std::string &str, T &val, bool ignore_comments = false);
+
+    template <typename T>
+    void parse(std::istream &stream, T &val, bool ignore_comments = false);
+
+    template <typename T>
+    void parse(FILE *pfile, T &val, bool ignore_comments = false);
 } // namespace cpx::json::nlohmann_json
 
 namespace nlohmann {
@@ -312,13 +333,13 @@ namespace cpx::serde {
 
     template <>
     struct Parse<nlohmann::json, std::istream> {
-        std::istream stream;
-        bool         ignore_comments = false;
+        std::istream &stream;
+        bool          ignore_comments = false;
 
         template <typename T>
         void into(T &val) const {
             try {
-                auto j = nlohmann::json::parse(std::move(stream), nullptr, true, ignore_comments);
+                auto j = nlohmann::json::parse(stream, nullptr, true, ignore_comments);
                 Deserialize<nlohmann::json, T>{j}.into(val);
             } catch (nlohmann::json::exception &e) {
                 throw error(e.what());
@@ -358,4 +379,47 @@ namespace cpx::serde {
         }
     };
 } // namespace cpx::serde
+
+namespace cpx::json::nlohmann_json {
+    template <typename T>
+    std::string dump(const T &val, int indent, char indent_char, bool ensure_ascii) {
+        return Dump{indent, indent_char, ensure_ascii}.from(val);
+    }
+
+    template <typename T>
+    T parse(const std::string &str, bool ignore_comments) {
+        T val = {};
+        Parse<std::string>{str, ignore_comments}.into(val);
+        return val;
+    }
+
+    template <typename T>
+    T parse(std::istream &stream, bool ignore_comments) {
+        T val = {};
+        Parse<std::istream>{stream, ignore_comments}.into(val);
+        return val;
+    }
+
+    template <typename T>
+    T parse(FILE *pfile, bool ignore_comments) {
+        T val = {};
+        Parse<FILE *>{pfile, ignore_comments}.into(val);
+        return val;
+    }
+
+    template <typename T>
+    void parse(const std::string &str, T &val, bool ignore_comments) {
+        Parse<std::string>{str, ignore_comments}.into(val);
+    }
+
+    template <typename T>
+    void parse(std::istream &stream, T &val, bool ignore_comments) {
+        Parse<std::istream>{stream, ignore_comments}.into(val);
+    }
+
+    template <typename T>
+    void parse(FILE *pfile, T &val, bool ignore_comments) {
+        Parse<FILE *>{pfile, ignore_comments}.into(val);
+    }
+} // namespace cpx::json::nlohmann_json
 #endif
