@@ -10,7 +10,7 @@ option(CPX_BUILD_TESTS      "Build unit tests"                            OFF)
 option(CPX_BUILD_EXAMPLES   "Build unit tests"                            OFF)
 option(CPX_REQUIREMENTS     "Only populate the external targets"          OFF)
 
-message(STATUS "CPX_VERSION        : ${CPX_VERSION}")
+message(STATUS "CPX_VERSION        : ${cpx_VERSION}")
 message(STATUS "CPX_BUILD_TESTS    : ${CPX_BUILD_TESTS}")
 message(STATUS "CPX_BUILD_EXAMPLES : ${CPX_BUILD_EXAMPLES}")
 message(STATUS "CPX_REQUIREMENTS   : ${CPX_REQUIREMENTS}")
@@ -93,6 +93,15 @@ CPMAddPackage(
     OPTIONS         "TOML11_INSTALL OFF"
 )
 
+## yaml
+CPMAddPackage(
+    NAME            yaml-cpp
+    GIT_REPOSITORY  "https://github.com/jbeder/yaml-cpp"
+    GIT_TAG         yaml-cpp-0.9.0
+    OPTIONS         "YAML_CPP_BUILD_CONTRIB OFF"
+                    "YAML_CPP_BUILD_TOOLS OFF"
+)
+
 ## Boost's struct reflection
 CPMAddPackage(
     NAME            pfr
@@ -165,6 +174,7 @@ target_link_libraries(cpx_private INTERFACE
     rapidjson
     tomlplusplus::tomlplusplus
     toml11::toml11
+    yaml-cpp
     Boost::pfr
     magic_enum
     cxxopts
@@ -180,7 +190,7 @@ target_compile_options(cpx_private INTERFACE
 target_compile_options(cpx_private INTERFACE
     -Wall
     -Wextra
-    -fmacro-prefix-map=${CMAKE_CURRENT_SOURCE_DIR}=cpp++
+    -fmacro-prefix-map=${CMAKE_CURRENT_SOURCE_DIR}=cpx
     $<$<COMPILE_LANGUAGE:CXX>:-Wno-redundant-move>
     $<$<CONFIG:Debug>:-fsanitize=address,undefined>
 )

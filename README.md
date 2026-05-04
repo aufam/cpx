@@ -7,7 +7,7 @@
 ## Features
 
 - **Tag-based serialization/deserialization**  
-  Unified interface for JSON, TOML, Protobuf, CLI, and SQL
+  Unified interface for JSON, TOML, YAML, Protobuf, CLI, and SQL
 
 - **Composable iterator utilities**  
   `iterate`, `enumerate`, `zip`, `map`, `drop`, `take`, `collect`
@@ -50,6 +50,9 @@ It does not bundle or enforce specific libraries, instead it provides adapters s
 
 - **TOML**  
   [`toml11`](https://github.com/ToruNiina/toml11), [`toml++`](https://github.com/marzer/tomlplusplus)
+
+- **YAML**
+  [`yaml-cpp`](https://github.com/jbeder/yaml-cpp)
 
 - **Inference runtimes**  
   [ONNX Runtime](https://onnx.ai), [OpenVINO](https://openvino.ai)
