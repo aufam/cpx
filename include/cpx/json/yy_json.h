@@ -37,8 +37,11 @@ namespace cpx::json::yy_json {
     template <typename To>
     using Deserialize = ::cpx::serde::Deserialize<yyjson_val, To>;
 
-    using Parse = ::cpx::serde::Parse<yyjson_doc, std::string>;
-    using Dump  = ::cpx::serde::Dump<yyjson_mut_doc, std::string>;
+    template <typename From>
+    using Parse = ::cpx::serde::Parse<yyjson_doc, From>;
+
+    template <typename To>
+    using Dump = ::cpx::serde::Dump<yyjson_mut_doc, To>;
 
     template <typename T>
     void parse(const std::string &str, T &val, yyjson_read_flag = YYJSON_READ_NOFLAG);

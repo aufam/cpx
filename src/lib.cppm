@@ -14,6 +14,8 @@ module;
 
 export module cpx;
 
+export using std::tm;
+
 export namespace cpx {
     using ::cpx::defer;
 

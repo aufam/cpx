@@ -41,6 +41,9 @@ namespace cpx::cli::cli11 {
     template <typename T>
     std::enable_if_t<std::is_default_constructible_v<T>, std::pair<T, std::vector<std::string>>>
     parse_with_subcommands(const std::string &app_desc, int argc, char **argv);
+
+    template <typename T>
+    std::string help(const std::string &app_desc, int argc, char **argv, T &v);
 } // namespace cpx::cli::cli11
 
 namespace cpx::cli::cli11::detail {
@@ -99,12 +102,6 @@ namespace cpx::serde {
         template <typename... Ts>
         void into(std::tuple<Ts...> &tpl) const {
             CLI::App app{app_desc, argv[0]};
-            argv = app.ensure_utf8(argv);
-
-#ifdef _WIN32
-            app.allow_windows_style_options();
-#endif
-
             tuple_for_each(tpl, [&](auto &v, size_t) {
                 auto &val    = detail::get_underlying_value(v);
                 using Tagged = std::decay_t<decltype(v)>;
@@ -120,6 +117,10 @@ namespace cpx::serde {
                 }
             });
 
+            argv = app.ensure_utf8(argv);
+#ifdef _WIN32
+            app.allow_windows_style_options();
+#endif
             try {
                 app.parse(argc, argv);
             } catch (const CLI::ParseError &e) {
@@ -132,11 +133,38 @@ namespace cpx::serde {
                     parsed_subcommands->push_back(sub->get_name());
         }
 
+        template <typename... Ts>
+        std::string help(std::tuple<Ts...> &tpl) const {
+            CLI::App app{app_desc, argv[0]};
+            tuple_for_each(tpl, [&](auto &v, size_t) {
+                auto &val    = detail::get_underlying_value(v);
+                using Tagged = std::decay_t<decltype(v)>;
+                using T      = std::decay_t<decltype(val)>;
+
+                if constexpr (is_tagged_v<Tagged> && is_deserializable_v<CLI::App, T>) {
+                    TagInfo ti = cpx::cli::get_tag_info(v);
+                    if (ti.key.empty())
+                        return;
+
+                    Deserialize<CLI::App, T> d(app);
+                    d.configure(ti).into(val);
+                }
+            });
+
+            return app.help();
+        }
+
 #ifdef BOOST_PFR_HPP
         template <typename S>
         std::enable_if_t<std::is_aggregate_v<S>> into(S &v) const {
             auto tpl = boost::pfr::structure_tie(v);
             into(tpl);
+        }
+
+        template <typename S>
+        std::enable_if_t<std::is_aggregate_v<S>, std::string> help(S &v) const {
+            auto tpl = boost::pfr::structure_tie(v);
+            return help(tpl);
         }
 #endif
     };
@@ -411,6 +439,11 @@ namespace cpx::cli::cli11 {
         std::vector<std::string> parsed_subcommands;
         Parse{app_desc, argc, argv, &parsed_subcommands}.into(v);
         return std::make_pair(std::move(v), std::move(parsed_subcommands));
+    }
+
+    template <typename T>
+    std::string help(const std::string &app_desc, int argc, char **argv, T &v) {
+        return Parse{app_desc, argc, argv}.help(v);
     }
 } // namespace cpx::cli::cli11
 #endif

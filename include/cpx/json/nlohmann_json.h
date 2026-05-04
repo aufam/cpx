@@ -31,7 +31,8 @@ namespace cpx::json::nlohmann_json {
     template <typename To>
     using Deserialize = ::cpx::serde::Deserialize<nlohmann::json, To>;
 
-    using Dump = ::cpx::serde::Dump<nlohmann::json, std::string>;
+    template <typename To>
+    using Dump = ::cpx::serde::Dump<nlohmann::json, To>;
 
     template <typename From = std::string>
     using Parse = ::cpx::serde::Parse<nlohmann::json, From>;
@@ -364,6 +365,22 @@ namespace cpx::serde {
     };
 
     template <>
+    struct Dump<nlohmann::json, std::ostream> {
+        int  indent       = -1;
+        char indent_char  = ' ';
+        bool ensure_ascii = false;
+
+        template <typename T>
+        nlohmann::json from(const T &val) const {
+            try {
+                return Serialize<nlohmann::json, T>{}.from(val);
+            } catch (nlohmann::json::exception &e) {
+                throw error(e.what());
+            }
+        }
+    };
+
+    template <>
     struct Dump<nlohmann::json, std::string> {
         int  indent       = -1;
         char indent_char  = ' ';
@@ -383,7 +400,12 @@ namespace cpx::serde {
 namespace cpx::json::nlohmann_json {
     template <typename T>
     std::string dump(const T &val, int indent, char indent_char, bool ensure_ascii) {
-        return Dump{indent, indent_char, ensure_ascii}.from(val);
+        return Dump<std::string>{indent, indent_char, ensure_ascii}.from(val);
+    }
+
+    template <typename T>
+    nlohmann::json dump_to_stream(const T &val, int indent, char indent_char, bool ensure_ascii) {
+        return Dump<std::ostream>{indent, indent_char, ensure_ascii}.from(val);
     }
 
     template <typename T>

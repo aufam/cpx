@@ -38,11 +38,17 @@ namespace cpx::toml::toruniina_toml {
     template <typename To>
     using Deserialize = cpx::serde::Deserialize<__toml11::value, To>;
 
-    using Parse = cpx::serde::Parse<__toml11::table, std::string>;
-    using Dump  = cpx::serde::Dump<__toml11::table, std::string>;
+    template <typename From>
+    using Parse = cpx::serde::Parse<__toml11::table, From>;
+
+    template <typename To>
+    using Dump = cpx::serde::Dump<__toml11::table, To>;
 
     template <typename T>
     void parse(const std::string &str, T &val, const spec &s = spec::default_version());
+
+    template <typename T>
+    void parse(std::istream &stream, T &val, const spec &s = spec::default_version(), const std::string &filename = "");
 
     template <typename T>
     void parse_from_file(const std::string &path, T &val, const spec &s = spec::default_version());
@@ -51,6 +57,11 @@ namespace cpx::toml::toruniina_toml {
     [[nodiscard]]
     std::enable_if_t<std::is_default_constructible_v<T>, T>
     parse(const std::string &str, const spec &s = spec::default_version());
+
+    template <typename T>
+    [[nodiscard]]
+    std::enable_if_t<std::is_default_constructible_v<T>, T>
+    parse(std::istream &str, const spec &s = spec::default_version(), const std::string &filename = "");
 
     template <typename T>
     [[nodiscard]]
@@ -100,13 +111,32 @@ namespace cpx::serde {
         template <typename T>
         std::string from(const T &v) const {
             __toml11::value val = Serialize<__toml11::value, T>{}.from(v);
+            return __toml11::format(val, spec);
+        }
+    };
 
-            if (val.is_table()) {
-                std::ostringstream oss;
-                oss << __toml11::format(val, spec);
-                return oss.str();
-            } else
-                throw type_mismatch_error("table", std::string(::cpx::toml::toruniina_toml::detail::type(val)));
+    template <>
+    struct Parse<__toml11::table, std::istream> {
+        std::istream                     &stream;
+        ::cpx::toml::toruniina_toml::spec spec     = ::cpx::toml::toruniina_toml::spec::default_version();
+        std::string                       filename = "";
+
+        template <typename T>
+        void into(T &val) const {
+            __toml11::value tbl;
+
+            try {
+                try {
+                    tbl = __toml11::parse(stream, filename, spec);
+                } catch (std::exception &e) {
+                    throw error(e.what());
+                }
+                Deserialize<__toml11::value, T>{tbl}.into(val);
+            } catch (error &err) {
+                if (!filename.empty())
+                    err.path = filename;
+                throw;
+            }
         }
     };
 
@@ -117,12 +147,16 @@ namespace cpx::serde {
 
         template <typename T>
         void into(T &val, bool src_is_path = false) const {
-            __toml11::value    tbl;
-            std::istringstream iss(src);
+            __toml11::value tbl;
 
             try {
                 try {
-                    tbl = src_is_path ? __toml11::parse(src, spec) : __toml11::parse(iss, "<unknown>", spec);
+                    if (src_is_path) {
+                        tbl = __toml11::parse(src, spec);
+                    } else {
+                        std::istringstream iss(src);
+                        tbl = __toml11::parse(iss, "<unknown>", spec);
+                    }
                 } catch (std::exception &e) {
                     throw error(e.what());
                 }
@@ -310,9 +344,9 @@ namespace cpx::serde {
         };
     };
 
-    template <typename T>
-    struct Serialize<__toml11::value, std::vector<T>, std::enable_if_t<is_serializable_v<__toml11::value, T>>> {
-        __toml11::value from(const std::vector<T> &v) const {
+    template <typename T, typename A>
+    struct Serialize<__toml11::value, std::vector<T, A>, std::enable_if_t<is_serializable_v<__toml11::value, T>>> {
+        __toml11::value from(const std::vector<T, A> &v) const {
             __toml11::value arr = __toml11::array();
             for (auto &item : v)
                 arr.push_back(Serialize<__toml11::value, T>{}.from(item));
@@ -320,14 +354,14 @@ namespace cpx::serde {
         }
     };
 
-    template <typename T>
+    template <typename T, typename A>
     struct Deserialize<
         __toml11::value,
-        std::vector<T>,
+        std::vector<T, A>,
         std::enable_if_t<std::is_default_constructible_v<T> && is_deserializable_v<__toml11::value, T>>> {
         const __toml11::value &node;
 
-        void into(std::vector<T> &v) const {
+        void into(std::vector<T, A> &v) const {
             if (!node.is_array())
                 throw type_mismatch_error("array", ::cpx::toml::toruniina_toml::detail::type(node));
 
@@ -486,12 +520,12 @@ namespace cpx::serde {
     };
 
     // table
-    template <typename T>
+    template <typename T, typename H, typename P, typename A>
     struct Serialize<
         __toml11::value,
-        std::unordered_map<std::string, T>,
+        std::unordered_map<std::string, T, H, P, A>,
         std::enable_if_t<is_serializable_v<__toml11::value, T>>> {
-        __toml11::value from(const std::unordered_map<std::string, T> &v) const {
+        __toml11::value from(const std::unordered_map<std::string, T, H, P, A> &v) const {
             __toml11::value node = __toml11::table();
             for (auto &[key, item] : v)
                 node.as_table()[key] = Serialize<__toml11::value, T>{}.from(item);
@@ -499,14 +533,14 @@ namespace cpx::serde {
         }
     };
 
-    template <typename T>
+    template <typename T, typename H, typename P, typename A>
     struct Deserialize<
         __toml11::value,
-        std::unordered_map<std::string, T>,
+        std::unordered_map<std::string, T, H, P, A>,
         std::enable_if_t<std::is_default_constructible_v<T> && is_deserializable_v<__toml11::value, T>>> {
         const __toml11::value &node;
 
-        void into(std::unordered_map<std::string, T> &v) const {
+        void into(std::unordered_map<std::string, T, H, P, A> &v) const {
             if (!node.is_table())
                 throw type_mismatch_error("table", ::cpx::toml::toruniina_toml::detail::type(node));
 
@@ -625,19 +659,33 @@ namespace cpx::serde {
 namespace cpx::toml::toruniina_toml {
     template <typename T>
     void parse(const std::string &str, T &val, const spec &spec) {
-        cpx::toml::toruniina_toml::Parse{str, spec}.into(val, false);
+        cpx::toml::toruniina_toml::Parse<std::string>{str, spec}.into(val, false);
+    }
+
+    template <typename T>
+    void parse(std::istream &stream, T &val, const spec &spec, const std::string &filename) {
+        cpx::toml::toruniina_toml::Parse<std::istream>{stream, spec, filename}.into(val, false);
     }
 
     template <typename T>
     void parse_from_file(const std::string &path, T &val, const spec &spec) {
-        cpx::toml::toruniina_toml::Parse{path, spec}.into(val, true);
+        cpx::toml::toruniina_toml::Parse<std::string>{path, spec}.into(val, true);
     }
 
     template <typename T>
     [[nodiscard]]
     std::enable_if_t<std::is_default_constructible_v<T>, T> parse(const std::string &str, const spec &spec) {
         T val = {};
-        cpx::toml::toruniina_toml::Parse{str, spec}.into(val, false);
+        cpx::toml::toruniina_toml::Parse<std::string>{str, spec}.into(val, false);
+        return val;
+    }
+
+    template <typename T>
+    [[nodiscard]]
+    std::enable_if_t<std::is_default_constructible_v<T>, T>
+    parse(std::istream &stream, const spec &spec, const std::string &filename) {
+        T val = {};
+        cpx::toml::toruniina_toml::Parse<std::istream>{stream, spec, filename}.into(val, false);
         return val;
     }
 
@@ -645,14 +693,14 @@ namespace cpx::toml::toruniina_toml {
     [[nodiscard]]
     std::enable_if_t<std::is_default_constructible_v<T>, T> parse_from_file(const std::string &path, const spec &spec) {
         T val = {};
-        cpx::toml::toruniina_toml::Parse{path, spec}.into(val, true);
+        cpx::toml::toruniina_toml::Parse<std::string>{path, spec}.into(val, true);
         return val;
     }
 
     template <typename T>
     [[nodiscard]]
     std::string dump(const T &val, const spec &spec) {
-        return cpx::toml::toruniina_toml::Dump{spec}.from(val);
+        return cpx::toml::toruniina_toml::Dump<std::string>{spec}.from(val);
     }
 } // namespace cpx::toml::toruniina_toml
 #endif
