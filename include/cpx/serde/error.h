@@ -46,8 +46,8 @@ namespace cpx::serde {
     public:
         std::string expected_type;
 
-        type_mismatch_error(const std::string &expected_type, const std::string &got)
-            : error("Type mismatch error: expect `" + expected_type + "` got `" + got + "`")
+        type_mismatch_error(const std::string &expected_type, const std::string &got, const std::string &extra = "")
+            : error("Type mismatch error: expect `" + expected_type + "` got `" + got + "`" + (extra.empty() ? "" : ": ") + extra)
             , expected_type(expected_type) {}
     };
 

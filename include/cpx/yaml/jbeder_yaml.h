@@ -132,14 +132,15 @@ namespace cpx::serde {
         const std::string &src;
 
         template <typename T>
-        void into(T &val, bool src_is_path = false) const {
+        void into(T &v, bool src_is_path = false) const {
             try {
+                __yaml_cpp::Node val;
                 try {
-                    __yaml_cpp::Node val = src_is_path ? __yaml_cpp::LoadFile(src) : __yaml_cpp::Load(src);
+                    val = src_is_path ? __yaml_cpp::LoadFile(src) : __yaml_cpp::Load(src);
                 } catch (std::exception &e) {
                     throw error(e.what());
                 }
-                Deserialize<__yaml_cpp::Node, T>{val}.into(val);
+                Deserialize<__yaml_cpp::Node, T>{val}.into(v);
             } catch (error &err) {
                 if (src_is_path)
                     err.path = src;
@@ -154,14 +155,15 @@ namespace cpx::serde {
         std::string_view filename = "";
 
         template <typename T>
-        void into(T &val) const {
+        void into(T &v) const {
             try {
+                __yaml_cpp::Node val;
                 try {
-                    __yaml_cpp::Node val = __yaml_cpp::Load(stream);
+                    val = __yaml_cpp::Load(stream);
                 } catch (std::exception &e) {
                     throw error(e.what());
                 }
-                Deserialize<__yaml_cpp::Node, T>{val}.into(val);
+                Deserialize<__yaml_cpp::Node, T>{val}.into(v);
             } catch (error &err) {
                 if (!filename.empty())
                     err.path = std::string(filename);
@@ -434,7 +436,7 @@ namespace cpx::serde {
                     if (i < arr.size())
                         val = arr[i];
                 }
-                if (!val.IsDefined() && t.skipmissing)
+                if ((!val.IsDefined() || val.IsNull()) && t.skipmissing)
                     return;
 
                 try {

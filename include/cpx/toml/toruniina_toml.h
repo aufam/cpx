@@ -39,10 +39,10 @@ namespace cpx::toml::toruniina_toml {
     using Deserialize = cpx::serde::Deserialize<__toml11::value, To>;
 
     template <typename From>
-    using Parse = cpx::serde::Parse<__toml11::table, From>;
+    using Parse = cpx::serde::Parse<__toml11::value, From>;
 
     template <typename To>
-    using Dump = cpx::serde::Dump<__toml11::table, To>;
+    using Dump = cpx::serde::Dump<__toml11::value, To>;
 
     template <typename T>
     void parse(const std::string &str, T &val, const spec &s = spec::default_version());
@@ -105,7 +105,7 @@ namespace cpx::toml::toruniina_toml::detail {
 
 namespace cpx::serde {
     template <>
-    struct Dump<__toml11::table, std::string> {
+    struct Dump<__toml11::value, std::string> {
         ::cpx::toml::toruniina_toml::spec spec = ::cpx::toml::toruniina_toml::spec::default_version();
 
         template <typename T>
@@ -116,7 +116,7 @@ namespace cpx::serde {
     };
 
     template <>
-    struct Parse<__toml11::table, std::istream> {
+    struct Parse<__toml11::value, std::istream> {
         std::istream                     &stream;
         ::cpx::toml::toruniina_toml::spec spec     = ::cpx::toml::toruniina_toml::spec::default_version();
         std::string                       filename = "";
@@ -141,7 +141,7 @@ namespace cpx::serde {
     };
 
     template <>
-    struct Parse<__toml11::table, std::string> {
+    struct Parse<__toml11::value, std::string> {
         const std::string                &src;
         ::cpx::toml::toruniina_toml::spec spec = ::cpx::toml::toruniina_toml::spec::default_version();
 
