@@ -28,6 +28,21 @@
                 "CPX_BUILD_TESTS": "ON",
                 "CPX_BUILD_EXAMPLES": "ON"
             }
+        },
+        {
+            "name": "mod",
+            "displayName": "mod",
+            "binaryDir": "${sourceDir}/build/mod",
+            "generator": "Ninja",
+            "cacheVariables": {
+                "CMAKE_CXX_COMPILER": "clang++",
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_EXTENSIONS": "OFF",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CPM_USE_LOCAL_PACKAGES": "OFF",
+                "CPX_MODULES": "ON"
+            }
         }
     ]
 }

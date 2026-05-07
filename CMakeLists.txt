@@ -9,11 +9,13 @@ project(cpx
 option(CPX_BUILD_TESTS      "Build unit tests"                            OFF)
 option(CPX_BUILD_EXAMPLES   "Build unit tests"                            OFF)
 option(CPX_REQUIREMENTS     "Only populate the external targets"          OFF)
+option(CPX_MODULES          "Enable module target"                        OFF)
 
 message(STATUS "CPX_VERSION        : ${cpx_VERSION}")
 message(STATUS "CPX_BUILD_TESTS    : ${CPX_BUILD_TESTS}")
 message(STATUS "CPX_BUILD_EXAMPLES : ${CPX_BUILD_EXAMPLES}")
 message(STATUS "CPX_REQUIREMENTS   : ${CPX_REQUIREMENTS}")
+message(STATUS "CPX_MODULES        : ${CPX_MODULES}")
 
 
 # core interface
@@ -24,6 +26,18 @@ target_include_directories(cpx INTERFACE
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
+
+if (CPX_MODULES)
+    add_library(cpx_mod)
+    add_library(cpx::mod ALIAS cpx_mod)
+    target_compile_features(cpx_mod PUBLIC cxx_std_23)
+
+    file(GLOB MOD_SOURCES src/*.cppm)
+    target_sources(cpx_mod
+        PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES ${MOD_SOURCES}
+    )
+    target_link_libraries(cpx_mod PRIVATE cpx)
+endif()
 
 if (NOT CPX_BUILD_TESTS AND NOT CPX_BUILD_EXAMPLES AND NOT CPX_REQUIREMENTS)
     return()
