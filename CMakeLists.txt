@@ -7,7 +7,8 @@ project(cpx
 )
 
 option(CPX_BUILD_TESTS      "Build unit tests"                            OFF)
-option(CPX_BUILD_EXAMPLES   "Build unit tests"                            OFF)
+option(CPX_BUILD_BENCHMARK  "Build benchmark"                             OFF)
+option(CPX_BUILD_EXAMPLES   "Build examples"                              OFF)
 option(CPX_REQUIREMENTS     "Only populate the external targets"          OFF)
 option(CPX_MODULES          "Enable module target"                        OFF)
 
@@ -30,12 +31,10 @@ target_include_directories(cpx INTERFACE
 if (CPX_MODULES)
     add_library(cpx_mod)
     add_library(cpx::mod ALIAS cpx_mod)
-    target_compile_features(cpx_mod PUBLIC cxx_std_23)
+    target_compile_features(cpx_mod PUBLIC cxx_std_20)
 
     file(GLOB MOD_SOURCES src/*.cppm)
-    target_sources(cpx_mod
-        PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES ${MOD_SOURCES}
-    )
+    target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES ${MOD_SOURCES})
     target_link_libraries(cpx_mod PRIVATE cpx)
 endif()
 
@@ -47,6 +46,7 @@ endif()
 # system libraries
 find_package(SQLite3 REQUIRED)
 find_package(Protobuf REQUIRED STATIC)
+find_package(absl REQUIRED)
 
 
 # external libraries
@@ -194,6 +194,7 @@ target_link_libraries(cpx_private INTERFACE
     cxxopts
     CLI11
     protobuf::libprotobuf
+    absl::log
 )
 
 target_compile_options(cpx_private INTERFACE
@@ -231,10 +232,12 @@ if (CPX_BUILD_TESTS)
 
 	enable_testing()
     add_test(NAME test_all COMMAND test_all)
+endif()
 
-    # benchmark
-    file(GLOB BENCH_SOURCES tests/bench/*.cpp)
-    file(GLOB BENCH_PROTOS tests/bench/*.proto)
+# benchmark
+if (CPX_BUILD_BENCHMARK)
+    file(GLOB BENCH_SOURCES bench/*.cpp)
+    file(GLOB BENCH_PROTOS bench/*.proto)
     add_executable(bench_all ${BENCH_SOURCES})
 
     target_compile_features(bench_all PRIVATE cxx_std_17)
