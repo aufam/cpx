@@ -85,9 +85,24 @@ namespace cpx {
 
 namespace cpx::detail {
     template <typename T>
+    struct is_value_and_tag_info : std::false_type {};
+
+    template <typename T>
+    struct is_value_and_tag_info<std::tuple<T, TagInfo>> : std::true_type {};
+
+    template <typename T>
+    struct is_value_and_tag_info<std::tuple<T, const TagInfo>> : std::true_type {};
+
+    template <typename T>
+    inline constexpr bool is_value_and_tag_info_v = is_value_and_tag_info<T>::value;
+
+
+    template <typename T>
     decltype(auto) get_underlying_value(T &value) {
         if constexpr (is_tagged_v<std::decay_t<decltype(value)>>)
             return value.get_value();
+        else if constexpr (is_value_and_tag_info_v<std::decay_t<decltype(value)>>)
+            return std::get<0>(value);
         else
             return value;
     }
