@@ -7,6 +7,9 @@ namespace cpx::serde {
     template <typename Serializer, typename From, typename Enable = void>
     struct Serialize;
 
+    template <typename Serializer, typename From, typename Enable = void>
+    struct SerializeAs : std::false_type {};
+
     template <typename Serializer, typename To, typename Enable = void>
     struct Dump;
 

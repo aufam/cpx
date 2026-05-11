@@ -14,6 +14,7 @@ option(CPX_MODULES          "Enable module target"                        OFF)
 
 message(STATUS "CPX_VERSION        : ${cpx_VERSION}")
 message(STATUS "CPX_BUILD_TESTS    : ${CPX_BUILD_TESTS}")
+message(STATUS "CPX_BUILD_BENCHMARK: ${CPX_BUILD_BENCHMARK}")
 message(STATUS "CPX_BUILD_EXAMPLES : ${CPX_BUILD_EXAMPLES}")
 message(STATUS "CPX_REQUIREMENTS   : ${CPX_REQUIREMENTS}")
 message(STATUS "CPX_MODULES        : ${CPX_MODULES}")
@@ -194,8 +195,11 @@ target_link_libraries(cpx_private INTERFACE
     cxxopts
     CLI11
     protobuf::libprotobuf
-    absl::log
 )
+
+if (TARGET absl::log)
+    target_link_libraries(cpx_private INTERFACE absl::log)
+endif()
 
 target_compile_options(cpx_private INTERFACE
     -Wno-unused-parameter

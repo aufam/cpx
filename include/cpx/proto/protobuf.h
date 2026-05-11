@@ -43,6 +43,9 @@ namespace cpx::proto::protobuf {
     using Parse = ::cpx::serde::Parse<google::protobuf::io::CodedInputStream, std::string>;
 
     template <typename T>
+    struct Message : std::false_type {};
+
+    template <typename T>
     [[nodiscard]]
     std::string dump(const T &val);
 
@@ -53,50 +56,14 @@ namespace cpx::proto::protobuf {
     [[nodiscard]]
     T parse(const std::string &str);
 
-    struct TagInfo {
-        int              field_number = 0;
-        bool             fixed        = false;
-        bool             zigzag       = false;
-        bool             packed       = true;
-        std::string_view name         = "";
-    };
+    using TagInfo = ::cpx::TagInfo;
 
     template <typename T>
-    constexpr TagInfo get_tag_info(const T &field, std::string_view tag = "protobuf", char separator = ',') {
-        TagInfo ti    = {};
-        bool    first = true;
-
-        std::string_view sv;
-        if constexpr (is_tagged_v<T>)
-            sv = field.get_tag(tag);
-
-        while (!sv.empty()) {
-            size_t           next = sv.find(separator);
-            std::string_view part = sv.substr(0, next);
-
-            if (first) {
-                first   = false;
-                ti.name = sv;
-                for (size_t i = 0; i < sv.length(); ++i)
-                    if (sv[i] >= '0' && sv[i] <= '9')
-                        ti.field_number = ti.field_number * 10 + (sv[i] - '0');
-                    else
-                        break;
-            } else if (part == "fixed")
-                ti.fixed = true;
-            else if (part == "zigzag")
-                ti.zigzag = true;
-            else if (part == "packed=false")
-                ti.packed = false;
-            else if (std::string_view n = "name="; part.size() >= n.size() && part.compare(0, n.size(), n) == 0)
-                ti.name = part.substr(n.size());
-
-            if (next == std::string_view::npos)
-                break;
-            sv.remove_prefix(next + 1);
-        }
-
-        return ti;
+    constexpr TagInfo get_tag_info(const T &field) {
+        if constexpr (::cpx::detail::is_value_and_tag_info_v<T>)
+            return std::get<1>(field);
+        else
+            return ::cpx::get_tag_info(field, "protobuf");
     }
 } // namespace cpx::proto::protobuf
 
@@ -172,6 +139,9 @@ namespace cpx::proto::protobuf::detail {
 
     template <typename T>
     struct is_message : std::false_type {};
+
+    template <typename T>
+    struct is_message<cpx::proto::protobuf::Message<T>> : std::bool_constant<cpx::proto::protobuf::Message<T>::value> {};
 
     template <typename... Ts>
     struct is_message<std::tuple<Ts...>> : std::true_type {};
@@ -256,7 +226,7 @@ namespace cpx::serde {
     template <>
     struct Dump<google::protobuf::io::CodedOutputStream, std::string> {
         template <typename S>
-        std::enable_if_t<proto::protobuf::detail::is_message<S>::value, std::string> from(const S &tpl) const {
+        std::enable_if_t<cpx::is_tuple_v<S>, std::string> from(const S &tpl) const {
             std::string                              buffer;
             google::protobuf::io::StringOutputStream os(&buffer);
             google::protobuf::io::CodedOutputStream  doc(&os);
@@ -274,9 +244,20 @@ namespace cpx::serde {
             return buffer;
         }
 
+        // TODO: map?
+
+        template <typename T>
+        std::enable_if_t<proto::protobuf::Message<const T>::value && !cpx::is_tuple_v<T>, std::string> from(const T &msg) const {
+            using M = proto::protobuf::Message<const T>;
+            auto m  = M(msg);
+
+            typename M::type hook = m;
+            return from(hook);
+        }
+
 #ifdef BOOST_PFR_HPP
         template <typename S>
-        std::enable_if_t<std::is_aggregate_v<S>, std::string> from(const S &v) const {
+        std::enable_if_t<std::is_aggregate_v<S> && !proto::protobuf::Message<S>::value, std::string> from(const S &v) const {
             auto tpl = boost::pfr::structure_tie(v);
             return from(tpl);
         }
@@ -339,7 +320,7 @@ namespace cpx::serde {
                     if (index >= sizeof...(Ts))
                         e.add_context(std::to_string(field_number));
                     else
-                        e.add_context(tis[index].name);
+                        e.add_context(tis[index].key);
                     throw;
                 }
             }
@@ -383,9 +364,18 @@ namespace cpx::serde {
                 throw serde::error("message not fully consumed");
         }
 
+        template <typename T>
+        std::enable_if_t<proto::protobuf::Message<T>::value && !cpx::is_tuple_v<T>> into(T &msg) const {
+            using M = proto::protobuf::Message<T>;
+            auto m  = M(msg);
+
+            typename M::type hook = m;
+            return into(hook);
+        }
+
 #ifdef BOOST_PFR_HPP
         template <typename S>
-        std::enable_if_t<std::is_aggregate_v<S>> into(S &v) const {
+        std::enable_if_t<std::is_aggregate_v<S> && !proto::protobuf::Message<S>::value> into(S &v) const {
             auto tpl = boost::pfr::structure_tie(v);
             into(tpl);
         }
@@ -768,7 +758,9 @@ namespace cpx::serde {
     struct Serialize<
         google::protobuf::io::CodedOutputStream,
         S,
-        std::enable_if_t<std::is_aggregate_v<S> && !proto::protobuf::detail::is_repeated<S>::value>> {
+        std::enable_if_t<
+            std::is_aggregate_v<S> && !proto::protobuf::detail::is_repeated<S>::value &&
+            !proto::protobuf::detail::is_message<S>::value>> {
         google::protobuf::io::CodedOutputStream &doc;
 
         void from(const S &v, const proto::protobuf::TagInfo &ti) {
@@ -786,8 +778,9 @@ namespace cpx::serde {
     struct Deserialize<
         google::protobuf::io::CodedInputStream,
         S,
-        std::enable_if_t<std::is_aggregate_v<S> && !proto::protobuf::detail::is_repeated<S>::value>>
-        : public proto::protobuf::detail::DeserializeDispatcherFor<S> {
+        std::enable_if_t<
+            std::is_aggregate_v<S> && !proto::protobuf::detail::is_repeated<S>::value &&
+            !proto::protobuf::detail::is_message<S>::value>> : public proto::protobuf::detail::DeserializeDispatcherFor<S> {
 
         using proto::protobuf::detail::DeserializeDispatcherFor<S>::DeserializeDispatcherFor;
         ~Deserialize() override = default;
@@ -822,7 +815,7 @@ namespace cpx::serde {
         }
 
         void from(const std::unordered_map<K, T, H, P, A> &map) {
-            proto::protobuf::TagInfo tk = {1}, tv = {2};
+            proto::protobuf::TagInfo tk = cpx::TagInfoBuilder("1").field_number(1), tv = cpx::TagInfoBuilder("2").field_number(2);
             for (auto &[k, v] : map) {
                 Serialize<google::protobuf::io::CodedOutputStream, K>{this->doc}.from(k, tk);
                 Serialize<google::protobuf::io::CodedOutputStream, T>{this->doc}.from(v, tv);

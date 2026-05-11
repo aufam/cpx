@@ -8,15 +8,89 @@
 
 namespace cpx {
     struct TagInfo {
-        std::string_view key         = "";
-        std::string_view env         = "";
-        bool             skipmissing = false;
-        bool             omitempty   = false;
-        bool             noserde     = false;
-        bool             positional  = false;
-        std::string_view help        = "";
+        std::string_view key = "";
+
+        // for cli
+        std::string_view env  = "";
+        std::string_view help = "";
+
+        int field_number = 0;
+
+        bool skipmissing = false;
+        bool omitempty   = false;
+        bool noserde     = false;
+        bool positional  = false;
+
+        // for proto
+        bool fixed  = false;
+        bool zigzag = false;
+        bool packed = true;
 
         TagInfo() = default;
+    };
+    static_assert(sizeof(TagInfo) <= 64ul, "TagInfo is too big");
+
+    class TagInfoBuilder {
+        TagInfo t = {};
+
+    public:
+        constexpr TagInfoBuilder(std::string_view key) {
+            t.key = key;
+        }
+
+        constexpr operator TagInfo() const {
+            return t;
+        }
+
+        constexpr TagInfoBuilder &env(std::string_view env) {
+            t.env = env;
+            return *this;
+        }
+
+        constexpr TagInfoBuilder &help(std::string_view help) {
+            t.help = help;
+            return *this;
+        }
+
+        constexpr TagInfoBuilder &field_number(int field_number) {
+            t.field_number = field_number;
+            return *this;
+        }
+
+        constexpr TagInfoBuilder &skipmissing(bool skipmissing = true) {
+            t.skipmissing = skipmissing;
+            return *this;
+        }
+
+        constexpr TagInfoBuilder &omitempty(bool omitempty = true) {
+            t.omitempty = omitempty;
+            return *this;
+        }
+
+        constexpr TagInfoBuilder &noserde(bool noserde = true) {
+            t.noserde = noserde;
+            return *this;
+        }
+
+        constexpr TagInfoBuilder &positional(bool positional = true) {
+            t.noserde = positional;
+            return *this;
+        }
+
+        constexpr TagInfoBuilder &fixed(bool fixed = true) {
+            t.fixed = fixed;
+            return *this;
+        }
+
+        constexpr TagInfoBuilder &zigzag(bool zigzag = true) {
+            t.zigzag = zigzag;
+            return *this;
+        }
+
+        constexpr TagInfoBuilder &packed(bool packed = true) {
+            t.packed = packed;
+            return *this;
+        }
     };
 
     template <size_t N>
@@ -44,8 +118,20 @@ namespace cpx {
 
             part = start == std::string_view::npos ? std::string_view{} : part.substr(start, end - start + 1);
 
-            if (first)
-                (ti.key = part, first = false);
+            if (first) {
+                first  = false;
+                ti.key = part;
+                for (size_t i = 0; i < part.length(); ++i)
+                    if (sv[i] >= '0' && sv[i] <= '9')
+                        ti.field_number = ti.field_number * 10 + (part[i] - '0');
+                    else
+                        break;
+            } else if (part == "fixed")
+                ti.fixed = true;
+            else if (part == "zigzag")
+                ti.zigzag = true;
+            else if (part == "packed=false")
+                ti.packed = false;
             else if (std::string_view e = "env="; part.size() >= e.size() && part.compare(0, e.size(), e) == 0)
                 ti.env = part.substr(e.size());
             else if (part == "skipmissing")
@@ -91,7 +177,7 @@ namespace cpx::detail {
     struct is_value_and_tag_info<std::tuple<T, TagInfo>> : std::true_type {};
 
     template <typename T>
-    struct is_value_and_tag_info<std::tuple<T, const TagInfo>> : std::true_type {};
+    struct is_value_and_tag_info<std::tuple<T, const TagInfo &>> : std::true_type {};
 
     template <typename T>
     inline constexpr bool is_value_and_tag_info_v = is_value_and_tag_info<T>::value;

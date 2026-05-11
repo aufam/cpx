@@ -10,10 +10,10 @@ namespace cpx::json {
     struct JsonGeneric {};
 
     template <typename From>
-    using Serialize = ::cpx::serde::Serialize<JsonGeneric, From>;
+    using SerializeAs = ::cpx::serde::SerializeAs<JsonGeneric, From>;
 
     template <typename To>
-    using Deserialize = ::cpx::serde::Deserialize<JsonGeneric, To>;
+    using DeserializeAs = ::cpx::serde::DeserializeAs<JsonGeneric, To>;
 
     template <typename T>
     constexpr TagInfo get_tag_info(const T &field) {
@@ -39,36 +39,36 @@ namespace cpx::json {
 } // namespace cpx::json
 
 
-template <typename T>
-struct cpx::serde::Serialize<cpx::json::JsonGeneric, T> : std::false_type {};
-
-template <typename T>
-struct cpx::serde::Deserialize<cpx::json::JsonGeneric, T> : std::false_type {};
-
 template <>
-struct cpx::serde::Serialize<cpx::json::JsonGeneric, std::tm> : std::true_type {
-    using From = std::string;
-    From from(const std::tm &tm) {
+struct cpx::serde::SerializeAs<cpx::json::JsonGeneric, std::tm> : std::true_type {
+    using type = std::string;
+
+    const std::tm &tm;
+
+    SerializeAs(const std::tm &tm)
+        : tm(tm) {}
+
+    operator type() const {
         return cpx::tm_to_string(tm);
     }
 };
 
 template <>
-struct cpx::serde::Deserialize<cpx::json::JsonGeneric, std::tm> : std::true_type {
-    using Into = std::string;
-    auto into(std::tm &tm) {
-        struct _Into {
-            std::tm &tm;
-            Into     into{};
+struct cpx::serde::DeserializeAs<cpx::json::JsonGeneric, std::tm> : std::true_type {
+    using type = std::string;
 
-            operator Into &() {
-                return into;
-            }
-            ~_Into() {
-                tm = cpx::tm_from_string(into);
-            }
-        } ret{tm};
-        return ret;
+    std::tm    &tm;
+    std::string str;
+
+    DeserializeAs(std::tm &tm)
+        : tm(tm) {}
+
+    ~DeserializeAs() {
+        tm = cpx::tm_from_string(str);
+    }
+
+    operator type &() {
+        return str;
     }
 };
 
