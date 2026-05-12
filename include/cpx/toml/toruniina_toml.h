@@ -561,7 +561,7 @@ namespace cpx::serde {
     template <>
     struct Serialize<__toml11::value, std::tm> {
         __toml11::value from(const std::tm &tm) const {
-            __toml11::local_datetime dt;
+            __toml11::offset_datetime dt;
 
             dt.date.year  = (int16_t)(tm.tm_year + 1900);
             dt.date.month = tm.tm_mon + 1;
@@ -580,14 +580,15 @@ namespace cpx::serde {
         const __toml11::value &node;
 
         void into(std::tm &v) const {
-            if (auto val = &node.as_local_time(std::nothrow); node.is_local_time())
+            if (auto val = &node.as_offset_datetime(std::nothrow); node.is_local_datetime()) {
+                to_tm(val->time, v);
+                to_tm(val->date, v);
+                apply_offset(val->offset, v);
+            } else if (auto val = &node.as_local_time(std::nothrow); node.is_local_time())
                 to_tm(*val, v);
             else if (auto val = &node.as_local_date(std::nothrow); node.is_local_date())
                 to_tm(*val, v);
-            else if (auto val = &node.as_local_datetime(std::nothrow); node.is_local_datetime()) {
-                to_tm(val->time, v);
-                to_tm(val->date, v);
-            } else
+            else
                 throw type_mismatch_error("time", ::cpx::toml::toruniina_toml::detail::type(node));
         }
 
@@ -601,6 +602,19 @@ namespace cpx::serde {
             tm.tm_hour = t.hour;
             tm.tm_min  = t.minute;
             tm.tm_sec  = t.second;
+        }
+
+        static void apply_offset(const __toml11::time_offset &o, std::tm &tm) {
+            tm.tm_hour = (tm.tm_hour - o.hour + 24) % 24; // Handle negative offsets
+            tm.tm_min  = tm.tm_min - o.minute;
+
+            if (tm.tm_min < 0) {
+                tm.tm_min += 60;
+                tm.tm_hour = (tm.tm_hour - 1 + 24) % 24;
+            } else if (tm.tm_min >= 60) {
+                tm.tm_min -= 60;
+                tm.tm_hour = (tm.tm_hour + 1) % 24;
+            }
         }
     };
 
