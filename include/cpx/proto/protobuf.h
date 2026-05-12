@@ -62,6 +62,8 @@ namespace cpx::proto::protobuf {
     constexpr TagInfo get_tag_info(const T &field) {
         if constexpr (::cpx::detail::is_value_and_tag_info_v<T>)
             return std::get<1>(field);
+        else if constexpr (::cpx::detail::is_tag_info_for_v<T>)
+            return field.ti;
         else
             return ::cpx::get_tag_info(field, "protobuf");
     }

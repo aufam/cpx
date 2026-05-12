@@ -26,9 +26,23 @@ namespace cpx {
         bool zigzag = false;
         bool packed = true;
 
-        TagInfo() = default;
+        constexpr TagInfo() = default;
     };
-    static_assert(sizeof(TagInfo) <= 64ul, "TagInfo is too big");
+
+    template <typename T, typename TI = const TagInfo &>
+    struct TagInfoFor {
+        T  value;
+        TI ti;
+
+        constexpr TagInfoFor(T value, TI ti)
+            : value(value)
+            , ti(ti) {}
+    };
+
+    template <typename T, typename TI>
+    constexpr auto tag_tie(T &val, TI &ti) {
+        return TagInfoFor<T &, TI &>(val, ti);
+    }
 
     class TagInfoBuilder {
         TagInfo t = {};
@@ -171,6 +185,15 @@ namespace cpx {
 
 namespace cpx::detail {
     template <typename T>
+    struct is_tag_info_for : std::false_type {};
+
+    template <typename T, typename TI>
+    struct is_tag_info_for<TagInfoFor<T, TI>> : std::true_type {};
+
+    template <typename T>
+    inline constexpr bool is_tag_info_for_v = is_tag_info_for<T>::value;
+
+    template <typename T>
     struct is_value_and_tag_info : std::false_type {};
 
     template <typename T>
@@ -187,6 +210,8 @@ namespace cpx::detail {
     decltype(auto) get_underlying_value(T &value) {
         if constexpr (is_tagged_v<std::decay_t<decltype(value)>>)
             return value.get_value();
+        else if constexpr (is_tag_info_for_v<std::decay_t<decltype(value)>>)
+            return value.value;
         else if constexpr (is_value_and_tag_info_v<std::decay_t<decltype(value)>>)
             return std::get<0>(value);
         else

@@ -67,127 +67,8 @@ namespace {
           "createdAt": "2024-01-02T03:04:05Z"
         }
     )json";
-
 } // namespace
 
-
-namespace {
-    struct Person2 {
-        std::string                name;
-        int                        age;
-        std::optional<std::string> address;
-        std::string                department = "unset";
-        int                        salary     = 0;
-        std::tm                    created_at = {};
-        int                        dummy      = 42;
-        void                      *dummy2     = nullptr;
-    };
-} // namespace
-
-
-template <typename T>
-struct member_pointer_traits;
-
-template <typename Class, typename Member>
-struct member_pointer_traits<Member Class::*> {
-    using class_type  = Class;
-    using member_type = Member;
-};
-
-template <auto MemberPtr>
-struct field {
-    using traits = member_pointer_traits<decltype(MemberPtr)>;
-
-    using class_type  = typename traits::class_type;
-    using member_type = typename traits::member_type;
-
-    TagInfo tag;
-
-    constexpr explicit field(TagInfo tag)
-        : tag(tag) {}
-
-    constexpr decltype(auto) get(class_type &obj) const {
-        return obj.*MemberPtr;
-    }
-
-    constexpr decltype(auto) get(const class_type &obj) const {
-        return obj.*MemberPtr;
-    }
-};
-
-template <>
-struct cpx::serde::SerializeAs<cpx::json::JsonGeneric, Person2> : std::true_type {
-private:
-    static constexpr cpx::TagInfo name       = cpx::TagInfoBuilder("name");
-    static constexpr cpx::TagInfo age        = cpx::TagInfoBuilder("age");
-    static constexpr cpx::TagInfo address    = cpx::TagInfoBuilder("address");
-    static constexpr cpx::TagInfo department = cpx::TagInfoBuilder("department").omitempty();
-    static constexpr cpx::TagInfo salary     = cpx::TagInfoBuilder("salary").omitempty();
-    static constexpr cpx::TagInfo created_at = cpx::TagInfoBuilder("createdAt");
-
-    const Person2 &p;
-
-public:
-    SerializeAs(const Person2 &p)
-        : p(p) {}
-
-    using type = std::tuple<
-        std::tuple<const decltype(Person2::name) &, const cpx::TagInfo &>,
-        std::tuple<const decltype(Person2::age) &, const cpx::TagInfo &>,
-        std::tuple<const decltype(Person2::address) &, const cpx::TagInfo &>,
-        std::tuple<const decltype(Person2::department) &, const cpx::TagInfo &>,
-        std::tuple<const decltype(Person2::salary) &, const cpx::TagInfo &>,
-        std::tuple<const decltype(Person2::created_at) &, const cpx::TagInfo &>>;
-
-    operator type() const {
-        return std::make_tuple(
-            std::tie(p.name, name),
-            std::tie(p.age, age),
-            std::tie(p.address, address),
-            std::tie(p.department, department),
-            std::tie(p.salary, salary),
-            std::tie(p.created_at, created_at)
-        );
-    }
-};
-
-template <>
-struct cpx::serde::DeserializeAs<cpx::json::JsonGeneric, Person2> : std::true_type {
-private:
-    static constexpr cpx::TagInfo name       = cpx::TagInfoBuilder("name");
-    static constexpr cpx::TagInfo age        = cpx::TagInfoBuilder("age");
-    static constexpr cpx::TagInfo address    = cpx::TagInfoBuilder("address");
-    static constexpr cpx::TagInfo department = cpx::TagInfoBuilder("department").omitempty();
-    static constexpr cpx::TagInfo salary     = cpx::TagInfoBuilder("salary").omitempty();
-    static constexpr cpx::TagInfo created_at = cpx::TagInfoBuilder("createdAt");
-
-    Person2 &p;
-
-public:
-    DeserializeAs(Person2 &p)
-        : p(p) {}
-
-    using type = std::tuple<
-        std::tuple<decltype(Person2::name) &, const cpx::TagInfo &>,
-        std::tuple<decltype(Person2::age) &, const cpx::TagInfo &>,
-        std::tuple<decltype(Person2::address) &, const cpx::TagInfo &>,
-        std::tuple<decltype(Person2::department) &, const cpx::TagInfo &>,
-        std::tuple<decltype(Person2::salary) &, const cpx::TagInfo &>,
-        std::tuple<decltype(Person2::created_at) &, const cpx::TagInfo &>>;
-
-    operator type() const {
-        return std::make_tuple(
-            std::tie(p.name, name),
-            std::tie(p.age, age),
-            std::tie(p.address, address),
-            std::tie(p.department, department),
-            std::tie(p.salary, salary),
-            std::tie(p.created_at, created_at)
-        );
-    }
-};
-
-static_assert(serde::is_serializable<yyjson_mut_val, Person2>::value);
 
 TEST(json, yy_json_parse_full) {
     Person p = json::yy_json::parse<Person>(json_full);
@@ -225,9 +106,9 @@ TEST(json, yy_json_parse_missing_department) {
 
 
 TEST(json, yy_json_dump_omitempty) {
-    Person2 p;
-    p.name = "Sucipto";
-    p.age  = 24;
+    Person p;
+    p.name() = "Sucipto";
+    p.age()  = 24;
 
     std::string dumped = json::yy_json::dump(p);
 

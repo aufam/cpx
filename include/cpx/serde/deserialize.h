@@ -7,9 +7,6 @@ namespace cpx::serde {
     template <typename Deserializer, typename To, typename Enable = void>
     struct Deserialize;
 
-    template <typename Deserializer, typename To, typename Enable = void>
-    struct DeserializeAs : std::false_type {};
-
     template <typename Deserializer, typename From, typename Enable = void>
     struct Parse;
 

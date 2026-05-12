@@ -2,23 +2,14 @@
 #define CPX_JSON_JSON_H
 
 #include <cpx/tag_info.h>
-#include <cpx/serde/serialize.h>
-#include <cpx/serde/deserialize.h>
-#include <cpx/time.h>
 
 namespace cpx::json {
-    struct JsonGeneric {};
-
-    template <typename From>
-    using SerializeAs = ::cpx::serde::SerializeAs<JsonGeneric, From>;
-
-    template <typename To>
-    using DeserializeAs = ::cpx::serde::DeserializeAs<JsonGeneric, To>;
-
     template <typename T>
     constexpr TagInfo get_tag_info(const T &field) {
         if constexpr (::cpx::detail::is_value_and_tag_info_v<T>)
             return std::get<1>(field);
+        else if constexpr (::cpx::detail::is_tag_info_for_v<T>)
+            return field.ti;
         else
             return ::cpx::get_tag_info(field, "json");
     }
@@ -37,39 +28,5 @@ namespace cpx::json {
         return ts;
     }
 } // namespace cpx::json
-
-
-template <>
-struct cpx::serde::SerializeAs<cpx::json::JsonGeneric, std::tm> : std::true_type {
-    using type = std::string;
-
-    const std::tm &tm;
-
-    SerializeAs(const std::tm &tm)
-        : tm(tm) {}
-
-    operator type() const {
-        return cpx::tm_to_string(tm);
-    }
-};
-
-template <>
-struct cpx::serde::DeserializeAs<cpx::json::JsonGeneric, std::tm> : std::true_type {
-    using type = std::string;
-
-    std::tm    &tm;
-    std::string str;
-
-    DeserializeAs(std::tm &tm)
-        : tm(tm) {}
-
-    ~DeserializeAs() {
-        tm = cpx::tm_from_string(str);
-    }
-
-    operator type &() {
-        return str;
-    }
-};
 
 #endif

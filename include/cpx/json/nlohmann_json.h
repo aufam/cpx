@@ -2,7 +2,10 @@
 #define CPX_JSON_NLOHMANN_JSON_H
 
 #include <cpx/json/json.h>
+#include <cpx/serde/serialize.h>
+#include <cpx/serde/deserialize.h>
 #include <cpx/serde/error.h>
+#include <cpx/reflect.h>
 #include <variant>
 
 #ifndef INCLUDE_NLOHMANN_JSON_HPP_
@@ -227,9 +230,9 @@ namespace nlohmann {
     };
 
     template <typename T>
-    struct adl_serializer<T, std::enable_if_t<cpx::json::SerializeAs<T>::value && cpx::json::DeserializeAs<T>::value>> {
-        using S = cpx::json::SerializeAs<T>;
-        using D = cpx::json::DeserializeAs<T>;
+    struct adl_serializer<T, std::enable_if_t<cpx::has_reflect_v<const T> && cpx::has_reflect_v<T>>> {
+        using S = cpx::Reflect<const T>;
+        using D = cpx::Reflect<T>;
 
         static void to_json(nlohmann::json &j, const T &v) {
             auto hook = S(v);
@@ -253,7 +256,7 @@ namespace nlohmann {
     template <typename S>
     struct adl_serializer<
         S,
-        std::enable_if_t<std::is_aggregate_v<S> && !(cpx::json::SerializeAs<S>::value || cpx::json::DeserializeAs<S>::value)>> {
+        std::enable_if_t<std::is_aggregate_v<S> && !(cpx::has_reflect_v<const S> || cpx::has_reflect_v<S>)>> {
         static void from_json(const json &j, S &v) {
             auto tpl = boost::pfr::structure_tie(v);
             j.get_to(tpl);
@@ -267,9 +270,7 @@ namespace nlohmann {
 
 #ifdef NEARGYE_MAGIC_ENUM_HPP
     template <typename S>
-    struct adl_serializer<
-        S,
-        std::enable_if_t<std::is_enum_v<S> && !(cpx::json::SerializeAs<S>::value || cpx::json::DeserializeAs<S>::value)>> {
+    struct adl_serializer<S, std::enable_if_t<std::is_enum_v<S> && !(cpx::has_reflect_v<const S> || cpx::has_reflect_v<S>)>> {
         static void from_json(const json &j, S &v) {
             auto str = j.get<std::string>();
             auto e   = magic_enum::enum_cast<S>(str);
