@@ -3,7 +3,7 @@
 #ifndef CPX_PROTO_PROTOBUF_H
 #define CPX_PROTO_PROTOBUF_H
 
-#include <cpx/tag_info.h>
+#include <cpx/reflect.h>
 #include <cpx/serde/serialize.h>
 #include <cpx/serde/deserialize.h>
 #include <cpx/serde/error.h>
@@ -43,9 +43,6 @@ namespace cpx::proto::protobuf {
     using Parse = ::cpx::serde::Parse<google::protobuf::io::CodedInputStream, std::string>;
 
     template <typename T>
-    struct Message : std::false_type {};
-
-    template <typename T>
     [[nodiscard]]
     std::string dump(const T &val);
 
@@ -60,9 +57,7 @@ namespace cpx::proto::protobuf {
 
     template <typename T>
     constexpr TagInfo get_tag_info(const T &field) {
-        if constexpr (::cpx::detail::is_value_and_tag_info_v<T>)
-            return std::get<1>(field);
-        else if constexpr (::cpx::detail::is_tag_info_for_v<T>)
+        if constexpr (::cpx::detail::is_tag_info_for_v<T>)
             return field.ti;
         else
             return ::cpx::get_tag_info(field, "protobuf");
@@ -140,10 +135,7 @@ namespace cpx::proto::protobuf::detail {
 
 
     template <typename T>
-    struct is_message : std::false_type {};
-
-    template <typename T>
-    struct is_message<cpx::proto::protobuf::Message<T>> : std::bool_constant<cpx::proto::protobuf::Message<T>::value> {};
+    struct is_message : cpx::is_tuple<typename cpx::Reflect<T>::type> {};
 
     template <typename... Ts>
     struct is_message<std::tuple<Ts...>> : std::true_type {};
@@ -239,7 +231,8 @@ namespace cpx::serde {
                 using Tagged                       = std::decay_t<decltype(v)>;
                 using T                            = std::decay_t<decltype(val)>;
 
-                if constexpr (is_tagged_v<Tagged> && is_serializable_v<google::protobuf::io::CodedOutputStream, T>)
+                if constexpr ((is_tagged_v<Tagged> || cpx::detail::is_tag_info_for_v<Tagged>) &&
+                              is_serializable_v<google::protobuf::io::CodedOutputStream, T>)
                     Serialize<google::protobuf::io::CodedOutputStream, T>{doc}.from(val, ti);
             });
 
@@ -249,17 +242,18 @@ namespace cpx::serde {
         // TODO: map?
 
         template <typename T>
-        std::enable_if_t<proto::protobuf::Message<const T>::value && !cpx::is_tuple_v<T>, std::string> from(const T &msg) const {
-            using M = proto::protobuf::Message<const T>;
-            auto m  = M(msg);
-
-            typename M::type hook = m;
-            return from(hook);
+        std::enable_if_t<proto::protobuf::detail::is_message<T>::value && !cpx::is_tuple_v<T>, std::string>
+        from(const T &msg) const {
+            using R = cpx::Reflect<T>;
+            return from(R::of(msg));
         }
 
 #ifdef BOOST_PFR_HPP
         template <typename S>
-        std::enable_if_t<std::is_aggregate_v<S> && !proto::protobuf::Message<S>::value, std::string> from(const S &v) const {
+        std::enable_if_t<
+            std::is_aggregate_v<S> && !proto::protobuf::detail::is_message<S>::value && !cpx::is_time_v<S>,
+            std::string>
+        from(const S &v) const {
             auto tpl = boost::pfr::structure_tie(v);
             return from(tpl);
         }
@@ -283,7 +277,8 @@ namespace cpx::serde {
                 using Tagged = std::decay_t<decltype(v)>;
                 using T      = std::decay_t<decltype(val)>;
 
-                if constexpr (is_tagged_v<Tagged> && is_deserializable_v<google::protobuf::io::CodedInputStream, T>) {
+                if constexpr ((is_tagged_v<Tagged> || cpx::detail::is_tag_info_for_v<Tagged>) &&
+                              is_deserializable_v<google::protobuf::io::CodedInputStream, T>) {
                     tis[i] = proto::protobuf::get_tag_info(v);
                     des[i] = std::unique_ptr<proto::protobuf::detail::DeserializeDispatcher>(
                         new serde::Deserialize<google::protobuf::io::CodedInputStream, T>(doc, val)
@@ -367,17 +362,17 @@ namespace cpx::serde {
         }
 
         template <typename T>
-        std::enable_if_t<proto::protobuf::Message<T>::value && !cpx::is_tuple_v<T>> into(T &msg) const {
-            using M = proto::protobuf::Message<T>;
-            auto m  = M(msg);
+        std::enable_if_t<proto::protobuf::detail::is_message<T>::value && !cpx::is_tuple_v<T>> into(T &msg) const {
+            using R = cpx::Reflect<T>;
 
-            typename M::type hook = m;
+            decltype(auto) hook = R::of(msg);
             return into(hook);
         }
 
 #ifdef BOOST_PFR_HPP
         template <typename S>
-        std::enable_if_t<std::is_aggregate_v<S> && !proto::protobuf::Message<S>::value> into(S &v) const {
+        std::enable_if_t<std::is_aggregate_v<S> && !proto::protobuf::detail::is_message<S>::value && !cpx::is_time_v<S>>
+        into(S &v) const {
             auto tpl = boost::pfr::structure_tie(v);
             into(tpl);
         }

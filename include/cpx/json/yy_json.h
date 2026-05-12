@@ -584,38 +584,30 @@ namespace cpx::serde {
 
     // generic reflection
     template <typename T>
-    struct Serialize<yyjson_mut_val, T, std::enable_if_t<cpx::has_reflect_v<const T>>> {
-        using R  = cpx::Reflect<const T>;
-        using RT = cpx::reflect_t<const T>;
+    struct Serialize<yyjson_mut_val, T, std::enable_if_t<cpx::has_reflect_v<T>>> {
+        using R = cpx::Reflect<T>;
         yyjson_mut_doc *doc;
 
         yyjson_mut_val *from(const T &v) const {
-            R r(v);
-            return Serialize<yyjson_mut_val, RT>{doc}.from(r);
+            return Serialize<yyjson_mut_val, typename R::const_type>{doc}.from(R::of(v));
         }
     };
 
     template <typename T>
     struct Deserialize<yyjson_val, T, std::enable_if_t<cpx::has_reflect_v<T>>> {
-        using R  = cpx::Reflect<T>;
-        using RT = cpx::reflect_t<T>;
+        using R = cpx::Reflect<T>;
         yyjson_val *val;
 
         void into(T &v) {
-            R r(v);
-            if constexpr (cpx::is_tuple_v<RT>) {
-                RT tpl = r;
-                cpx::serde::Deserialize<yyjson_val, RT>{val}.into(tpl);
-            } else {
-                cpx::serde::Deserialize<yyjson_val, RT>{val}.into(r);
-            }
+            decltype(auto) r = R::of(v);
+            cpx::serde::Deserialize<yyjson_val, typename R::type>{val}.into(r);
         }
     };
 
 #ifdef BOOST_PFR_HPP
     // aggregate struct
     template <typename S>
-    struct Serialize<yyjson_mut_val, S, std::enable_if_t<std::is_aggregate_v<S> && !cpx::has_reflect_v<const S>>> {
+    struct Serialize<yyjson_mut_val, S, std::enable_if_t<std::is_aggregate_v<S> && !cpx::has_reflect_v<S>>> {
         yyjson_mut_doc *doc;
 
         yyjson_mut_val *from(const S &v) const {
@@ -638,7 +630,7 @@ namespace cpx::serde {
 #ifdef NEARGYE_MAGIC_ENUM_HPP
     // enum
     template <typename S>
-    struct Serialize<yyjson_mut_val, S, std::enable_if_t<std::is_enum_v<S> && !cpx::has_reflect_v<const S>>> {
+    struct Serialize<yyjson_mut_val, S, std::enable_if_t<std::is_enum_v<S> && !cpx::has_reflect_v<S>>> {
         yyjson_mut_doc *doc;
 
         yyjson_mut_val *from(const S &v) const {

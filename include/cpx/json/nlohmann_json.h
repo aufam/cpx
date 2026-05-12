@@ -230,33 +230,22 @@ namespace nlohmann {
     };
 
     template <typename T>
-    struct adl_serializer<T, std::enable_if_t<cpx::has_reflect_v<const T> && cpx::has_reflect_v<T>>> {
-        using S = cpx::Reflect<const T>;
-        using D = cpx::Reflect<T>;
+    struct adl_serializer<T, std::enable_if_t<cpx::has_reflect_v<T>>> {
+        using R = cpx::Reflect<T>;
 
         static void to_json(nlohmann::json &j, const T &v) {
-            auto hook = S(v);
-
-            j = cpx::serde::Serialize<nlohmann::json, typename S::type>{}.from(hook);
+            j = cpx::serde::Serialize<nlohmann::json, typename R::const_type>{}.from(R::of(v));
         }
 
         static void from_json(const nlohmann::json &j, T &v) {
-            auto hook = D(v);
-
-            if constexpr (cpx::is_tuple_v<typename D::type>) {
-                typename D::type tpl = hook;
-                cpx::serde::Deserialize<nlohmann::json, typename D::type>{j}.into(tpl);
-            } else {
-                cpx::serde::Deserialize<nlohmann::json, typename D::type>{j}.into(hook);
-            }
+            decltype(auto) hook = R::of(v);
+            cpx::serde::Deserialize<nlohmann::json, typename R::type>{j}.into(hook);
         }
     };
 
 #ifdef BOOST_PFR_HPP
     template <typename S>
-    struct adl_serializer<
-        S,
-        std::enable_if_t<std::is_aggregate_v<S> && !(cpx::has_reflect_v<const S> || cpx::has_reflect_v<S>)>> {
+    struct adl_serializer<S, std::enable_if_t<std::is_aggregate_v<S> && !cpx::has_reflect_v<S>>> {
         static void from_json(const json &j, S &v) {
             auto tpl = boost::pfr::structure_tie(v);
             j.get_to(tpl);
@@ -270,7 +259,7 @@ namespace nlohmann {
 
 #ifdef NEARGYE_MAGIC_ENUM_HPP
     template <typename S>
-    struct adl_serializer<S, std::enable_if_t<std::is_enum_v<S> && !(cpx::has_reflect_v<const S> || cpx::has_reflect_v<S>)>> {
+    struct adl_serializer<S, std::enable_if_t<std::is_enum_v<S> && !cpx::has_reflect_v<S>>> {
         static void from_json(const json &j, S &v) {
             auto str = j.get<std::string>();
             auto e   = magic_enum::enum_cast<S>(str);

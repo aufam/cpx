@@ -27,79 +27,37 @@ struct Person3 {
 };
 
 template <>
-struct cpx::proto::protobuf::Message<const Person3> {
-    static constexpr bool value = true;
+struct cpx::Reflect<Person3>
+    : cpx::Fields<&Person3::name, &Person3::id, &Person3::email, &Person3::num1, &Person3::num2, &Person3::num3, &Person3::nums> {
+    static constexpr cpx::TagInfo name  = "name,field_number=1";
+    static constexpr cpx::TagInfo id    = "id,field_number=2";
+    static constexpr cpx::TagInfo email = "email,field_number=3";
+    static constexpr cpx::TagInfo num1  = "num1,field_number=4";
+    static constexpr cpx::TagInfo num2  = "num2,field_number=5";
+    static constexpr cpx::TagInfo num3  = "num3,field_number=6";
+    static constexpr cpx::TagInfo nums  = "7";
 
-    static constexpr cpx::TagInfo name  = cpx::TagInfoBuilder("name").field_number(1);
-    static constexpr cpx::TagInfo id    = cpx::TagInfoBuilder("id").field_number(2);
-    static constexpr cpx::TagInfo email = cpx::TagInfoBuilder("email").field_number(3);
-    static constexpr cpx::TagInfo num1  = cpx::TagInfoBuilder("num1").field_number(4).fixed();
-    static constexpr cpx::TagInfo num2  = cpx::TagInfoBuilder("num2").field_number(5).zigzag();
-    static constexpr cpx::TagInfo num3  = cpx::TagInfoBuilder("num3").field_number(6);
-    static constexpr cpx::TagInfo nums  = cpx::TagInfoBuilder("nums").field_number(7);
-
-    const Person3 &p;
-
-    Message(const Person3 &p)
-        : p(p) {}
-
-    using type = std::tuple<
-        std::tuple<const decltype(Person3::name) &, const cpx::TagInfo &>,
-        std::tuple<const decltype(Person3::id) &, const cpx::TagInfo &>,
-        std::tuple<const decltype(Person3::email) &, const cpx::TagInfo &>,
-        std::tuple<const decltype(Person3::num1) &, const cpx::TagInfo &>,
-        std::tuple<const decltype(Person3::num2) &, const cpx::TagInfo &>,
-        std::tuple<const decltype(Person3::num3) &, const cpx::TagInfo &>,
-        std::tuple<const decltype(Person3::nums) &, const cpx::TagInfo &>>;
-
-    operator type() const {
+    static const_type of(const Person3 &p) {
         return std::make_tuple(
-            std::tie(p.name, name),
-            std::tie(p.id, id),
-            std::tie(p.email, email),
-            std::tie(p.num1, num1),
-            std::tie(p.num2, num2),
-            std::tie(p.num3, num3),
-            std::tie(p.nums, nums)
+            cpx::tag_tie(p.name, name),
+            cpx::tag_tie(p.id, id),
+            cpx::tag_tie(p.email, email),
+            cpx::tag_tie(p.num1, num1),
+            cpx::tag_tie(p.num2, num2),
+            cpx::tag_tie(p.num3, num3),
+            cpx::tag_tie(p.nums, nums)
         );
     }
-};
 
-template <>
-struct cpx::proto::protobuf::Message<Person3> {
-    static constexpr bool value = true;
-
-    static constexpr cpx::TagInfo name  = cpx::TagInfoBuilder("name").field_number(1);
-    static constexpr cpx::TagInfo id    = cpx::TagInfoBuilder("id").field_number(2);
-    static constexpr cpx::TagInfo email = cpx::TagInfoBuilder("email").field_number(3);
-    static constexpr cpx::TagInfo num1  = cpx::TagInfoBuilder("num1").field_number(4).fixed();
-    static constexpr cpx::TagInfo num2  = cpx::TagInfoBuilder("num2").field_number(5).zigzag();
-    static constexpr cpx::TagInfo num3  = cpx::TagInfoBuilder("num3").field_number(6);
-    static constexpr cpx::TagInfo nums  = cpx::TagInfoBuilder("nums").field_number(7);
-
-    Person3 &p;
-
-    Message(Person3 &p)
-        : p(p) {}
-
-    using type = std::tuple<
-        std::tuple<decltype(Person3::name) &, const cpx::TagInfo &>,
-        std::tuple<decltype(Person3::id) &, const cpx::TagInfo &>,
-        std::tuple<decltype(Person3::email) &, const cpx::TagInfo &>,
-        std::tuple<decltype(Person3::num1) &, const cpx::TagInfo &>,
-        std::tuple<decltype(Person3::num2) &, const cpx::TagInfo &>,
-        std::tuple<decltype(Person3::num3) &, const cpx::TagInfo &>,
-        std::tuple<decltype(Person3::nums) &, const cpx::TagInfo &>>;
-
-    operator type() const {
+    static type of(Person3 &p) {
         return std::make_tuple(
-            std::tie(p.name, name),
-            std::tie(p.id, id),
-            std::tie(p.email, email),
-            std::tie(p.num1, num1),
-            std::tie(p.num2, num2),
-            std::tie(p.num3, num3),
-            std::tie(p.nums, nums)
+            cpx::tag_tie(p.name, name),
+            cpx::tag_tie(p.id, id),
+            cpx::tag_tie(p.email, email),
+            cpx::tag_tie(p.num1, num1),
+            cpx::tag_tie(p.num2, num2),
+            cpx::tag_tie(p.num3, num3),
+            cpx::tag_tie(p.nums, nums)
         );
     }
 };
@@ -149,7 +107,7 @@ int main() {
         fmt::println("p.num3 = {:02x}", fmt::join(buf, " "));
     }
 
-    auto pp = cpx::proto::protobuf::parse<Person>(buf);
+    auto pp = cpx::proto::protobuf::parse<Person3>(buf);
     fmt::println("person = {}", pp);
 
     auto e = cpx::proto::protobuf::parse<Person>("");

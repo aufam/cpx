@@ -44,25 +44,8 @@ namespace cpx {
         using type       = std::tuple<typename Field<MemberPtr>::ref, typename Field<MemberPtrs>::ref...>;
     };
 
-    template <typename T, auto... MemberPtrs>
-    struct Reflect {
-        static constexpr bool value = sizeof...(MemberPtrs) > 0;
-
-        using type = std::tuple<
-            std::conditional_t<std::is_const_v<T>, typename Field<MemberPtrs>::const_ref, typename Field<MemberPtrs>::ref>...>;
-
-        constexpr Reflect(T &p)
-            : p(p) {}
-
-    protected:
-        T &p;
-    };
-
-    template <>
-    struct Reflect<void> : std::false_type {};
-
-    template <>
-    struct Reflect<const void> : std::false_type {};
+    template <typename T>
+    struct Reflect : std::false_type {};
 
     template <typename T>
     struct has_reflect : std::bool_constant<Reflect<T>::value> {};
@@ -72,43 +55,68 @@ namespace cpx {
 
     template <typename T>
     using reflect_t = typename Reflect<T>::type;
+
+    template <typename T>
+    using reflect_const_t = typename Reflect<T>::const_type;
+
+    template <>
+    struct Reflect<std::tm> {
+        static constexpr bool value = true;
+
+        using type       = std::string;
+        using const_type = std::string;
+
+        static const_type of(const std::tm &tm) {
+            return cpx::tm_to_string(tm);
+        }
+
+        static auto of(std::tm &tm) {
+            struct Hook {
+                std::tm    &tm;
+                std::string str = {};
+
+                operator type &() {
+                    return str;
+                }
+
+                ~Hook() {
+                    tm = cpx::tm_from_string(str);
+                }
+            };
+
+            Hook h{tm};
+            return h;
+        }
+    };
+
+    template <>
+    struct Reflect<std::timespec> {
+        static constexpr bool value = true;
+
+        using type       = std::string;
+        using const_type = std::string;
+
+        static const_type of(const std::timespec &ts) {
+            return cpx::ts_to_string(ts);
+        }
+
+        static auto of(std::timespec &ts) {
+            struct Hook {
+                std::timespec &ts;
+                std::string    str = {};
+
+                operator type &() {
+                    return str;
+                }
+
+                ~Hook() {
+                    ts = cpx::ts_from_string(str);
+                }
+            };
+
+            Hook h{ts};
+            return h;
+        }
+    };
 } // namespace cpx
-
-template <>
-struct cpx::Reflect<const std::tm> {
-    static constexpr bool value = true;
-
-    using type = std::string;
-
-    const std::tm &p;
-
-    constexpr Reflect(const std::tm &p)
-        : p(p) {}
-
-    operator type() const {
-        return cpx::tm_to_string(p);
-    }
-};
-
-template <>
-struct cpx::Reflect<std::tm> {
-    static constexpr bool value = true;
-
-    using type = std::string;
-
-    std::tm    &p;
-    std::string str;
-
-    Reflect(std::tm &p)
-        : p(p) {}
-
-    operator type &() {
-        return str;
-    }
-
-    ~Reflect() {
-        p = cpx::tm_from_string(str);
-    }
-};
-
 #endif

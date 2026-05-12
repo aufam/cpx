@@ -28,24 +28,26 @@
 #endif
 
 template <typename T, typename TI>
-struct fmt::formatter<cpx::TagInfoFor<T, TI>, char, std::enable_if_t<fmt::is_formattable<T, char>::value>> : fmt::formatter<T> {
+struct fmt::formatter<cpx::TagInfoFor<T, TI>, char, std::enable_if_t<fmt::is_formattable<std::decay_t<T>, char>::value>>
+    : fmt::formatter<std::decay_t<T>> {
     fmt::context::iterator format(const cpx::TagInfoFor<T, TI> &v, fmt::context &c) const {
         if (auto &ti = v.ti; ti.key != "") {
             fmt::context::iterator out = c.out();
             out                        = fmt::format_to(out, "{}=", ti.key);
         }
-        return fmt::formatter<T>::format(v.value, c);
+        return fmt::formatter<std::decay_t<T>>::format(v.value, c);
     }
 };
 
 template <typename T>
-struct fmt::formatter<cpx::Tag<T>, char, std::enable_if_t<fmt::is_formattable<T, char>::value>> : fmt::formatter<T> {
+struct fmt::formatter<cpx::Tag<T>, char, std::enable_if_t<fmt::is_formattable<std::decay_t<T>, char>::value>>
+    : fmt::formatter<std::decay_t<T>> {
     fmt::context::iterator format(const cpx::Tag<T> &v, fmt::context &c) const {
         if (cpx::TagInfo ti = cpx::get_tag_info(v, "fmt"); ti.key != "") {
             fmt::context::iterator out = c.out();
             out                        = fmt::format_to(out, "{}=", ti.key);
         }
-        return fmt::formatter<T>::format(v.get_value(), c);
+        return fmt::formatter<std::decay_t<T>>::format(v.get_value(), c);
     }
 };
 
@@ -80,20 +82,33 @@ struct fmt::formatter<std::variant<T...>, char, std::enable_if_t<(fmt::is_format
     }
 };
 
+template <>
+struct fmt::formatter<std::timespec> : fmt::formatter<std::tm> {
+    fmt::context::iterator format(const std::timespec &ts, fmt::context &c) const {
+        std::tm tm;
+#if defined(_WIN32)
+        _gmtime64_s(&tm, &ts.tv_sec);
+#else
+        ::gmtime_r(&ts.tv_sec, &tm);
+#endif
+
+        auto out = fmt::formatter<std::tm>::format(tm, c);
+        out      = fmt::format_to(out, ".{:09}", ts.tv_nsec);
+        return out;
+    }
+};
+
 template <typename T>
-struct fmt::formatter<T, char, std::enable_if_t<cpx::has_reflect_v<const T> && !std::is_same_v<T, std::tm>>>
-    : fmt::formatter<cpx::reflect_t<const T>> {
+struct fmt::formatter<T, char, std::enable_if_t<cpx::has_reflect_v<T> && !cpx::is_time_v<T>>>
+    : fmt::formatter<typename cpx::Reflect<T>::const_type> {
     fmt::context::iterator format(const T &v, fmt::context &c) const {
-        cpx::Reflect<const T>   r(v);
-        cpx::reflect_t<const T> tpl = r;
-        return fmt::formatter<cpx::reflect_t<const T>>::format(tpl, c);
+        return fmt::formatter<typename cpx::Reflect<T>::const_type>::format(cpx::Reflect<T>::of(v), c);
     }
 };
 
 #ifdef BOOST_PFR_HPP
 template <typename S>
-struct fmt::
-    formatter<S, char, std::enable_if_t<std::is_aggregate_v<S> && !std::is_same_v<S, std::tm> && !cpx::has_reflect_v<const S>>> {
+struct fmt::formatter<S, char, std::enable_if_t<std::is_aggregate_v<S> && !cpx::has_reflect_v<S> && !cpx::is_time_v<S>>> {
     constexpr auto parse(fmt::format_parse_context &ctx) {
         return ctx.begin();
     }
@@ -111,8 +126,7 @@ struct fmt::
 
 #ifdef NEARGYE_MAGIC_ENUM_HPP
 template <typename S>
-struct fmt::formatter<S, char, std::enable_if_t<std::is_enum_v<S> && !cpx::has_reflect_v<const S>>>
-    : fmt::formatter<std::string_view> {
+struct fmt::formatter<S, char, std::enable_if_t<std::is_enum_v<S> && !cpx::has_reflect_v<S>>> : fmt::formatter<std::string_view> {
     fmt::context::iterator format(S v, fmt::context &c) const {
         fmt::context::iterator out = c.out();
         return fmt::format_to(out, "{}", magic_enum::enum_name(v));

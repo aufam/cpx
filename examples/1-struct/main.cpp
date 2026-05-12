@@ -36,20 +36,22 @@ struct Bar {
 };
 
 template <>
-struct cpx::Reflect<const Foo> : cpx::Reflect<const Foo, &Foo::a> {
-    static constexpr cpx::TagInfo a = cpx::TagInfoBuilder("a");
+struct cpx::Reflect<Foo> : cpx::Fields<&Foo::a> {
+    static constexpr cpx::TagInfo a = "a";
 
-    using Reflect<const Foo, &Foo::a>::Reflect;
+    static const_type of(const Foo &p) {
+        return std::make_tuple(cpx::tag_tie(p.a, a));
+    }
 
-    operator type() const {
+    static type of(Foo &p) {
         return std::make_tuple(cpx::tag_tie(p.a, a));
     }
 };
 
 constexpr bool asfsd  = cpx::serde::is_serializable_v<yyjson_mut_val, Foo>;
 constexpr bool asfsd2 = cpx::has_reflect_v<Bar>;
-using afsf            = typename cpx::reflect_t<const Foo>;
-constexpr bool asfsd3 = fmt::is_formattable<const Foo>::value;
+constexpr bool asfsd3 = fmt::is_formattable<Foo>::value;
+constexpr bool asfsd4 = fmt::is_formattable<std::timespec>::value;
 
 int main() {
     Data data; // .dummy is expected to be undefined
@@ -78,8 +80,13 @@ int main() {
 
     cpx::toml::marzer_toml::parse(tdoc, data);
     fmt::println("data = {}", data);
-    fmt::println("=== toml ===\n{}", cpx::toml::marzer_toml::dump(data));
+    fmt::println("toml = {:?}", cpx::toml::marzer_toml::dump(data));
 
     const Foo foo(10);
     fmt::println("foo = {}", cpx::json::yy_json::dump(foo));
+    fmt::println("foo = {}", foo);
+
+    fmt::println("now = {}", cpx::ts_to_string(cpx::ts_now()));
+    fmt::println("now = {:%Y-%m-%dT%H:%M:%SZ}", cpx::tm_now());
+    fmt::println("now = {:%Y-%m-%dT%H:%M:%S}", cpx::ts_now());
 }

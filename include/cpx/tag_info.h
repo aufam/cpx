@@ -27,9 +27,67 @@ namespace cpx {
         bool packed = true;
 
         constexpr TagInfo() = default;
+
+        constexpr TagInfo(const char *str)
+            : TagInfo(std::string_view(str)) {}
+
+        constexpr TagInfo(std::string_view sv) {
+            bool first = true;
+
+            while (!sv.empty()) {
+                size_t           next = sv.find(',');
+                std::string_view part = sv.substr(0, next);
+                constexpr char   ws[] = " \t\n\r\f\v";
+
+                size_t start = part.find_first_not_of(ws);
+                size_t end   = part.find_last_not_of(ws);
+
+                part = start == std::string_view::npos ? std::string_view{} : part.substr(start, end - start + 1);
+
+                if (first) {
+                    first = false;
+                    key   = part;
+                    for (size_t i = 0; i < part.length(); ++i)
+                        if (part[i] >= '0' && part[i] <= '9')
+                            field_number = field_number * 10 + (part[i] - '0');
+                        else
+                            break;
+                } else if (part == "fixed")
+                    fixed = true;
+                else if (part == "zigzag")
+                    zigzag = true;
+                else if (part == "packed=false")
+                    packed = false;
+                else if (std::string_view f = "field_number="; part.size() >= f.size() && part.compare(0, f.size(), f) == 0) {
+                    std::string_view s = part.substr(f.size());
+                    for (size_t i = 0; i < s.length(); ++i)
+                        if (s[i] >= '0' && s[i] <= '9')
+                            field_number = field_number * 10 + (s[i] - '0');
+                        else
+                            break;
+                } else if (std::string_view e = "env="; part.size() >= e.size() && part.compare(0, e.size(), e) == 0)
+                    env = part.substr(e.size());
+                else if (part == "skipmissing")
+                    skipmissing = true;
+                else if (part == "omitempty")
+                    omitempty = true;
+                else if (part == "noserde")
+                    noserde = true;
+                else if (part == "positional")
+                    positional = true;
+                else if (std::string_view h = "help="; part.size() >= h.size() && part.compare(0, h.size(), h) == 0)
+                    help = part.substr(h.size());
+
+                if (next == std::string_view::npos)
+                    break;
+                sv.remove_prefix(next + 1);
+            }
+        }
+
+        void operator=(std::string_view) = delete;
     };
 
-    template <typename T, typename TI = const TagInfo &>
+    template <typename T, typename TI>
     struct TagInfoFor {
         T  value;
         TI ti;
@@ -114,67 +172,21 @@ namespace cpx {
     };
 
     template <typename T>
-    constexpr TagInfo get_tag_info(const T &field, std::string_view tag, char separator = ',') {
-        TagInfo ti    = {};
-        bool    first = true;
-
+    constexpr TagInfo get_tag_info(const T &field, std::string_view tag) {
         std::string_view sv;
         if constexpr (is_tagged_v<T>)
             sv = field.get_tag(tag);
 
-        while (!sv.empty()) {
-            size_t           next = sv.find(separator);
-            std::string_view part = sv.substr(0, next);
-            constexpr char   ws[] = " \t\n\r\f\v";
-
-            size_t start = part.find_first_not_of(ws);
-            size_t end   = part.find_last_not_of(ws);
-
-            part = start == std::string_view::npos ? std::string_view{} : part.substr(start, end - start + 1);
-
-            if (first) {
-                first  = false;
-                ti.key = part;
-                for (size_t i = 0; i < part.length(); ++i)
-                    if (sv[i] >= '0' && sv[i] <= '9')
-                        ti.field_number = ti.field_number * 10 + (part[i] - '0');
-                    else
-                        break;
-            } else if (part == "fixed")
-                ti.fixed = true;
-            else if (part == "zigzag")
-                ti.zigzag = true;
-            else if (part == "packed=false")
-                ti.packed = false;
-            else if (std::string_view e = "env="; part.size() >= e.size() && part.compare(0, e.size(), e) == 0)
-                ti.env = part.substr(e.size());
-            else if (part == "skipmissing")
-                ti.skipmissing = true;
-            else if (part == "omitempty")
-                ti.omitempty = true;
-            else if (part == "noserde")
-                ti.noserde = true;
-            else if (part == "positional")
-                ti.positional = true;
-            else if (std::string_view h = "help="; part.size() >= h.size() && part.compare(0, h.size(), h) == 0)
-                ti.help = part.substr(h.size());
-
-            if (next == std::string_view::npos)
-                break;
-            sv.remove_prefix(next + 1);
-        }
-
-        return ti;
+        return {sv};
     }
 
     template <typename... T>
-    constexpr TagInfoTuple<sizeof...(T)>
-    get_tag_info_from_tuple(const std::tuple<T...> &fields, std::string_view tag, char separator = ',') {
+    constexpr TagInfoTuple<sizeof...(T)> get_tag_info_from_tuple(const std::tuple<T...> &fields, std::string_view tag) {
         TagInfoTuple<sizeof...(T)> ts       = {};
         bool                       is_array = sizeof...(T) > 0;
 
         tuple_for_each(fields, [&](const auto &field, size_t i) {
-            if (const TagInfo &t = ts.ts[i] = get_tag_info(field, tag, separator); t.key != "")
+            if (const TagInfo &t = ts.ts[i] = get_tag_info(field, tag); t.key != "")
                 is_array &= t.positional;
         });
 
@@ -193,18 +205,6 @@ namespace cpx::detail {
     template <typename T>
     inline constexpr bool is_tag_info_for_v = is_tag_info_for<T>::value;
 
-    template <typename T>
-    struct is_value_and_tag_info : std::false_type {};
-
-    template <typename T>
-    struct is_value_and_tag_info<std::tuple<T, TagInfo>> : std::true_type {};
-
-    template <typename T>
-    struct is_value_and_tag_info<std::tuple<T, const TagInfo &>> : std::true_type {};
-
-    template <typename T>
-    inline constexpr bool is_value_and_tag_info_v = is_value_and_tag_info<T>::value;
-
 
     template <typename T>
     decltype(auto) get_underlying_value(T &value) {
@@ -212,8 +212,6 @@ namespace cpx::detail {
             return value.get_value();
         else if constexpr (is_tag_info_for_v<std::decay_t<decltype(value)>>)
             return value.value;
-        else if constexpr (is_value_and_tag_info_v<std::decay_t<decltype(value)>>)
-            return std::get<0>(value);
         else
             return value;
     }
