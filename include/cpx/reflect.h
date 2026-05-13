@@ -45,19 +45,15 @@ namespace cpx {
     };
 
     template <typename T>
-    struct Reflect : std::false_type {};
+    struct Reflect : std::false_type {
+        using const_type = type;
+    };
 
     template <typename T>
     struct has_reflect : std::bool_constant<Reflect<T>::value> {};
 
     template <typename T>
     inline constexpr bool has_reflect_v = has_reflect<T>::value;
-
-    template <typename T>
-    using reflect_t = typename Reflect<T>::type;
-
-    template <typename T>
-    using reflect_const_t = typename Reflect<T>::const_type;
 
     template <>
     struct Reflect<std::tm> {

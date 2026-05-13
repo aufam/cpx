@@ -5,11 +5,11 @@
 #include <cpx/serde/serialize.h>
 #include <cpx/serde/deserialize.h>
 #include <cpx/serde/error.h>
+#include <cpx/time.h>
 #include <array>
 #include <variant>
 #include <tuple>
 #include <unordered_map>
-#include <ctime>
 
 #ifndef TOML11_TOML_HPP
 #    include <toml.hpp>
@@ -560,18 +560,47 @@ namespace cpx::serde {
     // std::tm
     template <>
     struct Serialize<__toml11::value, std::tm> {
-        __toml11::value from(const std::tm &tm) const {
-            __toml11::offset_datetime dt;
+        __toml11::value from(const std::tm &tm, long long nanos = 0) const {
+            __toml11::offset_datetime dt = {};
+            if (tm.tm_mday > 0) {
+                dt.date.year  = (int16_t)(tm.tm_year + 1900);
+                dt.date.month = tm.tm_mon + 1;
+                dt.date.day   = tm.tm_mday;
+            }
 
-            dt.date.year  = (int16_t)(tm.tm_year + 1900);
-            dt.date.month = tm.tm_mon + 1;
-            dt.date.day   = tm.tm_mday;
+            dt.time.hour       = tm.tm_hour;
+            dt.time.minute     = tm.tm_min;
+            dt.time.second     = tm.tm_sec;
+            dt.time.nanosecond = nanos;
 
-            dt.time.hour   = tm.tm_hour;
-            dt.time.minute = tm.tm_min;
-            dt.time.second = tm.tm_sec;
-
+            if (tm.tm_mday <= 0) {
+                return dt.time;
+            }
             return dt;
+        }
+    };
+
+    template <>
+    struct Serialize<__toml11::value, std::timespec> {
+        __toml11::value from(const std::timespec &ts) const {
+            constexpr auto ten_years = 24l * 3600 * 365;
+
+            time_t    seconds     = ts.tv_sec;
+            long long nanoseconds = ts.tv_nsec;
+            seconds += nanoseconds / 1'000'000'000;
+            nanoseconds %= 1'000'000'000;
+            if (nanoseconds < 0) {
+                nanoseconds += 1'000'000'000;
+                --seconds;
+            }
+
+            if (seconds > ten_years || seconds < 0) {
+                time_t  t  = ts.tv_sec;
+                std::tm tm = *std::gmtime(&t);
+                return Serialize<__toml11::value, std::tm>{}.from(tm, ts.tv_nsec);
+            }
+
+            return Serialize<__toml11::value, std::string>{}.from(cpx::ts_to_string(ts));
         }
     };
 
@@ -579,17 +608,30 @@ namespace cpx::serde {
     struct Deserialize<__toml11::value, std::tm> {
         const __toml11::value &node;
 
-        void into(std::tm &v) const {
-            if (auto val = &node.as_offset_datetime(std::nothrow); node.is_local_datetime()) {
-                to_tm(val->time, v);
+        void into(std::tm &v, long *nanos = nullptr) const {
+            if (auto val = &node.as_offset_datetime(std::nothrow); node.is_offset_datetime()) {
+                to_tm(val->time, v, nanos);
                 to_tm(val->date, v);
-                apply_offset(val->offset, v);
+                std::time_t t = std::mktime(&v);
+                t -= static_cast<std::time_t>(val->offset.hour * 60 + val->offset.minute - local_utc_offset_minutes(t)) * 60;
+                v = *std::gmtime(&t);
+            } else if (auto val = &node.as_local_datetime(std::nothrow); node.is_local_datetime()) {
+                to_tm(val->time, v, nanos);
+                to_tm(val->date, v);
+                std::time_t t = std::mktime(&v);
+                v             = *std::gmtime(&t);
             } else if (auto val = &node.as_local_time(std::nothrow); node.is_local_time())
-                to_tm(*val, v);
+                to_tm(*val, v, nanos);
             else if (auto val = &node.as_local_date(std::nothrow); node.is_local_date())
                 to_tm(*val, v);
             else
                 throw type_mismatch_error("time", ::cpx::toml::toruniina_toml::detail::type(node));
+        }
+
+        static int local_utc_offset_minutes(std::time_t t) {
+            std::tm gmt   = *std::gmtime(&t);
+            std::tm local = *std::localtime(&t);
+            return static_cast<int>(std::difftime(std::mktime(&local), std::mktime(&gmt)) / 60);
         }
 
         static void to_tm(const __toml11::local_date &d, std::tm &tm) {
@@ -598,29 +640,51 @@ namespace cpx::serde {
             tm.tm_mday = d.day;
         }
 
-        static void to_tm(const __toml11::local_time &t, std::tm &tm) {
+        static void to_tm(const __toml11::local_time &t, std::tm &tm, long *nanos) {
             tm.tm_hour = t.hour;
             tm.tm_min  = t.minute;
             tm.tm_sec  = t.second;
+            if (nanos)
+                *nanos = t.millisecond * 1000000 + t.microsecond * 1000 + t.nanosecond;
         }
+    };
 
-        static void apply_offset(const __toml11::time_offset &o, std::tm &tm) {
-            tm.tm_hour = (tm.tm_hour - o.hour + 24) % 24; // Handle negative offsets
-            tm.tm_min  = tm.tm_min - o.minute;
+    template <>
+    struct Deserialize<__toml11::value, std::timespec> {
+        const __toml11::value &node;
 
-            if (tm.tm_min < 0) {
-                tm.tm_min += 60;
-                tm.tm_hour = (tm.tm_hour - 1 + 24) % 24;
-            } else if (tm.tm_min >= 60) {
-                tm.tm_min -= 60;
-                tm.tm_hour = (tm.tm_hour + 1) % 24;
+        void into(std::timespec &v) const {
+            if (auto val = &node.as_string(std::nothrow); node.is_string()) {
+                v = cpx::ts_from_string(*val);
+            } else {
+                std::tm tm = {};
+                Deserialize<__toml11::value, std::tm>{node}.into(tm, &v.tv_nsec);
+                v.tv_sec = timegm(&tm);
             }
+        }
+    };
+
+    // generic reflection
+    template <typename T>
+    struct Serialize<__toml11::value, T, std::enable_if_t<cpx::toml::has_reflect_v<T>>> {
+        __toml11::value from(const T &v) const {
+            return Serialize<__toml11::value, cpx::toml::const_reflect_t<T>>{}.from(cpx::toml::reflect_of(v));
+        }
+    };
+
+    template <typename T>
+    struct Deserialize<__toml11::value, T, std::enable_if_t<cpx::toml::has_reflect_v<T>>> {
+        const __toml11::value &node;
+
+        void into(T &v) const {
+            decltype(auto) r = cpx::toml::reflect_of(v);
+            cpx::serde::Deserialize<__toml11::value, cpx::toml::reflect_t<T>>{node}.into(r);
         }
     };
 
 #ifdef BOOST_PFR_HPP
     template <typename S>
-    struct Serialize<__toml11::value, S, std::enable_if_t<std::is_aggregate_v<S> && !std::is_same_v<S, std::tm>>> {
+    struct Serialize<__toml11::value, S, std::enable_if_t<std::is_aggregate_v<S> && !cpx::toml::has_reflect_v<S>>> {
         __toml11::value from(const S &v) const {
             auto tpl = boost::pfr::structure_tie(v);
             return Serialize<__toml11::value, decltype(tpl)>{}.from(tpl);
@@ -628,7 +692,7 @@ namespace cpx::serde {
     };
 
     template <typename S>
-    struct Deserialize<__toml11::value, S, std::enable_if_t<std::is_aggregate_v<S> && !std::is_same_v<S, std::tm>>> {
+    struct Deserialize<__toml11::value, S, std::enable_if_t<std::is_aggregate_v<S> && !cpx::toml::has_reflect_v<S>>> {
         const __toml11::value &node;
 
         void into(S &v) const {
@@ -641,14 +705,14 @@ namespace cpx::serde {
 #ifdef NEARGYE_MAGIC_ENUM_HPP
     // enum
     template <typename S>
-    struct Serialize<__toml11::value, S, std::enable_if_t<std::is_enum_v<S>>> {
+    struct Serialize<__toml11::value, S, std::enable_if_t<std::is_enum_v<S> && !cpx::toml::has_reflect_v<S>>> {
         __toml11::value from(const S &v) const {
             return Serialize<__toml11::value, std::string_view>{}.from(magic_enum::enum_name(v));
         }
     };
 
     template <typename S>
-    struct Deserialize<__toml11::value, S, std::enable_if_t<std::is_enum_v<S>>> {
+    struct Deserialize<__toml11::value, S, std::enable_if_t<std::is_enum_v<S> && !cpx::toml::has_reflect_v<S>>> {
         const __toml11::value &node;
 
         void into(S &v) const {

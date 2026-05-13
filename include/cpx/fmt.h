@@ -93,7 +93,7 @@ struct fmt::formatter<std::timespec> : fmt::formatter<std::tm> {
 #endif
 
         auto out = fmt::formatter<std::tm>::format(tm, c);
-        out      = fmt::format_to(out, ".{:09}", ts.tv_nsec);
+        out      = fmt::format_to(out, ".{:03}", ts.tv_nsec / 1000000);
         return out;
     }
 };

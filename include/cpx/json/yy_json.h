@@ -584,30 +584,28 @@ namespace cpx::serde {
 
     // generic reflection
     template <typename T>
-    struct Serialize<yyjson_mut_val, T, std::enable_if_t<cpx::has_reflect_v<T>>> {
-        using R = cpx::Reflect<T>;
+    struct Serialize<yyjson_mut_val, T, std::enable_if_t<cpx::json::has_reflect_v<T>>> {
         yyjson_mut_doc *doc;
 
         yyjson_mut_val *from(const T &v) const {
-            return Serialize<yyjson_mut_val, typename R::const_type>{doc}.from(R::of(v));
+            return Serialize<yyjson_mut_val, cpx::json::const_reflect_t<T>>{doc}.from(cpx::json::reflect_of(v));
         }
     };
 
     template <typename T>
-    struct Deserialize<yyjson_val, T, std::enable_if_t<cpx::has_reflect_v<T>>> {
-        using R = cpx::Reflect<T>;
+    struct Deserialize<yyjson_val, T, std::enable_if_t<cpx::json::has_reflect_v<T>>> {
         yyjson_val *val;
 
         void into(T &v) {
-            decltype(auto) r = R::of(v);
-            cpx::serde::Deserialize<yyjson_val, typename R::type>{val}.into(r);
+            decltype(auto) r = cpx::json::reflect_of(v);
+            cpx::serde::Deserialize<yyjson_val, cpx::json::reflect_t<T>>{val}.into(r);
         }
     };
 
 #ifdef BOOST_PFR_HPP
     // aggregate struct
     template <typename S>
-    struct Serialize<yyjson_mut_val, S, std::enable_if_t<std::is_aggregate_v<S> && !cpx::has_reflect_v<S>>> {
+    struct Serialize<yyjson_mut_val, S, std::enable_if_t<std::is_aggregate_v<S> && !cpx::json::has_reflect_v<S>>> {
         yyjson_mut_doc *doc;
 
         yyjson_mut_val *from(const S &v) const {
@@ -617,7 +615,7 @@ namespace cpx::serde {
     };
 
     template <typename S>
-    struct Deserialize<yyjson_val, S, std::enable_if_t<std::is_aggregate_v<S> && !cpx::has_reflect_v<S>>> {
+    struct Deserialize<yyjson_val, S, std::enable_if_t<std::is_aggregate_v<S> && !cpx::json::has_reflect_v<S>>> {
         yyjson_val *val;
 
         void into(S &v) {
@@ -630,7 +628,7 @@ namespace cpx::serde {
 #ifdef NEARGYE_MAGIC_ENUM_HPP
     // enum
     template <typename S>
-    struct Serialize<yyjson_mut_val, S, std::enable_if_t<std::is_enum_v<S> && !cpx::has_reflect_v<S>>> {
+    struct Serialize<yyjson_mut_val, S, std::enable_if_t<std::is_enum_v<S> && !cpx::json::has_reflect_v<S>>> {
         yyjson_mut_doc *doc;
 
         yyjson_mut_val *from(const S &v) const {
@@ -639,7 +637,7 @@ namespace cpx::serde {
     };
 
     template <typename S>
-    struct Deserialize<yyjson_val, S, std::enable_if_t<std::is_enum_v<S> && !cpx::has_reflect_v<S>>> {
+    struct Deserialize<yyjson_val, S, std::enable_if_t<std::is_enum_v<S> && !cpx::json::has_reflect_v<S>>> {
         yyjson_val *val;
 
         void into(S &v) {

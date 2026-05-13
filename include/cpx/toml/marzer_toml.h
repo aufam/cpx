@@ -6,6 +6,7 @@
 #include <cpx/serde/deserialize.h>
 #include <cpx/serde/error.h>
 #include <array>
+#include <cstddef>
 #include <variant>
 #include <tuple>
 #include <unordered_map>
@@ -566,16 +567,22 @@ namespace cpx::serde {
     template <>
     struct Serialize<__tomlpp::node, std::tm> {
         std::unique_ptr<__tomlpp::node> from(const std::tm &tm) const {
-            __tomlpp::date_time dt;
+            __tomlpp::date_time dt = {};
 
-            dt.date.year  = tm.tm_year + 1900;
-            dt.date.month = tm.tm_mon + 1;
-            dt.date.day   = tm.tm_mday;
+            if (tm.tm_mday > 0) {
+                dt.date.year  = tm.tm_year + 1900;
+                dt.date.month = tm.tm_mon + 1;
+                dt.date.day   = tm.tm_mday;
+            }
 
             dt.time.hour   = tm.tm_hour;
             dt.time.minute = tm.tm_min;
             dt.time.second = tm.tm_sec;
+            dt.offset      = __tomlpp::time_offset{};
 
+            if (tm.tm_mday <= 0) {
+                return std::make_unique<__tomlpp::value<__tomlpp::time>>(dt.time);
+            }
             return std::make_unique<__tomlpp::value<__tomlpp::date_time>>(dt);
         }
     };
@@ -585,17 +592,27 @@ namespace cpx::serde {
         const __tomlpp::node *node;
 
         void into(std::tm &v) const {
-            if (!node)
+            if (!node) {
                 throw type_mismatch_error("time", "null");
-            else if (auto val = node->as_time())
-                to_tm(val->get(), v);
-            else if (auto val = node->as_date())
-                to_tm(val->get(), v);
-            else if (auto val = node->as_date_time()) {
+            } else if (auto val = node->as_date_time()) {
                 to_tm(val->get().time, v);
                 to_tm(val->get().date, v);
+                std::time_t t = std::mktime(&v);
+                if (auto &off = val->get().offset; off.has_value())
+                    t -= static_cast<std::time_t>(off->minutes - local_utc_offset_minutes(t)) * 60;
+                v = *std::gmtime(&t);
+            } else if (auto val = node->as_date()) {
+                to_tm(val->get(), v);
+            } else if (auto val = node->as_time()) {
+                to_tm(val->get(), v);
             } else
                 throw type_mismatch_error("time", std::string(__tomlpp::impl::node_type_friendly_names[(int)node->type()]));
+        }
+
+        static int local_utc_offset_minutes(std::time_t t) {
+            std::tm gmt   = *std::gmtime(&t);
+            std::tm local = *std::localtime(&t);
+            return static_cast<int>(std::difftime(std::mktime(&local), std::mktime(&gmt)) / 60);
         }
 
         static void to_tm(const __tomlpp::date &d, std::tm &tm) {
@@ -611,9 +628,27 @@ namespace cpx::serde {
         }
     };
 
+    // generic reflection
+    template <typename T>
+    struct Serialize<__tomlpp::node, T, std::enable_if_t<cpx::toml::has_reflect_v<T>>> {
+        std::unique_ptr<__tomlpp::node> from(const T &v) const {
+            return Serialize<__tomlpp::node, cpx::toml::const_reflect_t<T>>{}.from(cpx::toml::reflect_of(v));
+        }
+    };
+
+    template <typename T>
+    struct Deserialize<__tomlpp::node, T, std::enable_if_t<cpx::toml::has_reflect_v<T>>> {
+        const __tomlpp::node *node;
+
+        void into(T &v) const {
+            decltype(auto) r = cpx::toml::reflect_of(v);
+            cpx::serde::Deserialize<__tomlpp::node, cpx::toml::reflect_t<T>>{node}.into(r);
+        }
+    };
+
 #ifdef BOOST_PFR_HPP
     template <typename S>
-    struct Serialize<__tomlpp::node, S, std::enable_if_t<std::is_aggregate_v<S> && !std::is_same_v<S, std::tm>>> {
+    struct Serialize<__tomlpp::node, S, std::enable_if_t<std::is_aggregate_v<S> && !cpx::toml::has_reflect_v<S>>> {
         std::unique_ptr<__tomlpp::node> from(const S &v) const {
             auto tpl = boost::pfr::structure_tie(v);
             return Serialize<__tomlpp::node, decltype(tpl)>{}.from(tpl);
@@ -621,7 +656,7 @@ namespace cpx::serde {
     };
 
     template <typename S>
-    struct Deserialize<__tomlpp::node, S, std::enable_if_t<std::is_aggregate_v<S> && !std::is_same_v<S, std::tm>>> {
+    struct Deserialize<__tomlpp::node, S, std::enable_if_t<std::is_aggregate_v<S> && !cpx::toml::has_reflect_v<S>>> {
         const __tomlpp::node *node;
 
         void into(S &v) const {
@@ -634,14 +669,14 @@ namespace cpx::serde {
 #ifdef NEARGYE_MAGIC_ENUM_HPP
     // enum
     template <typename S>
-    struct Serialize<__tomlpp::node, S, std::enable_if_t<std::is_enum_v<S>>> {
+    struct Serialize<__tomlpp::node, S, std::enable_if_t<std::is_enum_v<S> && !cpx::toml::has_reflect_v<S>>> {
         std::unique_ptr<__tomlpp::node> from(const S &v) const {
             return Serialize<__tomlpp::node, std::string_view>{}.from(magic_enum::enum_name(v));
         }
     };
 
     template <typename S>
-    struct Deserialize<__tomlpp::node, S, std::enable_if_t<std::is_enum_v<S>>> {
+    struct Deserialize<__tomlpp::node, S, std::enable_if_t<std::is_enum_v<S> && !cpx::toml::has_reflect_v<S>>> {
         const __tomlpp::node *node;
 
         void into(S &v) const {
