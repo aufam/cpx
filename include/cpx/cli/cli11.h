@@ -4,21 +4,10 @@
 #include <cpx/cli/cli.h>
 #include <cpx/serde/deserialize.h>
 #include <cpx/serde/error.h>
-
-#include <CLI/CLI.hpp>
+#include <cpx/extend.h>
 #include <variant>
 
-#ifndef BOOST_PFR_HPP
-#    if __has_include(<boost/pfr.hpp>)
-#        include <boost/pfr.hpp>
-#    endif
-#endif
-
-#ifndef NEARGYE_MAGIC_ENUM_HPP
-#    if __has_include(<magic_enum/magic_enum.hpp>)
-#        include <magic_enum/magic_enum.hpp>
-#    endif
-#endif
+#include <CLI/CLI.hpp>
 
 namespace cpx::cli::cli11 {
     using Parse = ::cpx::serde::Parse<CLI::App, std::pair<int, char **>>;
@@ -60,10 +49,12 @@ namespace cpx::cli::cli11::detail {
 
     class DeserializeDispatcher {
     public:
-        explicit DeserializeDispatcher(CLI::App &app)
-            : app(app) {}
+        explicit DeserializeDispatcher(CLI::App &app, bool is_root = false)
+            : app(app)
+            , is_root(is_root) {}
 
         CLI::App   &app;
+        bool        is_root;
         std::string option_name;
         std::string help_string;
         std::string env;
@@ -79,12 +70,22 @@ namespace cpx::cli::cli11::detail {
         virtual void into(T &v) const = 0;
 
         DeserializeDispatcherFor<T> &configure(const TagInfo &ti) {
-            option_name =
-                cpx::cli::cli11::detail::convert_flag_format(ti.key, ti.positional, is_tuple_v<T> || std::is_aggregate_v<T>);
+            option_name = cpx::cli::cli11::detail::convert_flag_format(
+                ti.key, ti.positional, is_tuple_v<T> || is_tuple_v<cpx::cli::reflect_t<T>>
+            );
             help_string = std::string(ti.help);
             positional  = ti.positional;
             required    = !ti.skipmissing;
             env         = std::string(ti.env);
+            return *this;
+        }
+
+        DeserializeDispatcherFor<T> &configure(const DeserializeDispatcher &other) {
+            option_name = other.option_name;
+            help_string = other.help_string;
+            positional  = other.positional;
+            required    = other.required;
+            env         = other.env;
             return *this;
         }
     };
@@ -99,23 +100,13 @@ namespace cpx::serde {
         mutable char            **argv;
         std::vector<std::string> *parsed_subcommands = nullptr;
 
-        template <typename... Ts>
-        void into(std::tuple<Ts...> &tpl) const {
-            CLI::App app{app_desc, argv[0]};
-            tuple_for_each(tpl, [&](auto &v, size_t) {
-                auto &val    = detail::get_underlying_value(v);
-                using Tagged = std::decay_t<decltype(v)>;
-                using T      = std::decay_t<decltype(val)>;
+        template <typename T>
+        void into(T &tpl) const {
+            auto       app     = CLI::App(app_desc, argv[0]);
+            const bool is_root = true;
 
-                if constexpr (is_tagged_v<Tagged> && is_deserializable_v<CLI::App, T>) {
-                    TagInfo ti = cpx::cli::get_tag_info(v);
-                    if (ti.key.empty())
-                        return;
-
-                    Deserialize<CLI::App, T> d(app);
-                    d.configure(ti).into(val);
-                }
-            });
+            Deserialize<CLI::App, T> d(app, is_root);
+            d.into(tpl);
 
             argv = app.ensure_utf8(argv);
 #ifdef _WIN32
@@ -129,44 +120,19 @@ namespace cpx::serde {
 
             if (parsed_subcommands)
                 for (auto *sub : app.get_subcommands())
-                    // if (sub->parsed())
                     parsed_subcommands->push_back(sub->get_name());
         }
 
         template <typename... Ts>
         std::string help(std::tuple<Ts...> &tpl) const {
-            CLI::App app{app_desc, argv[0]};
-            tuple_for_each(tpl, [&](auto &v, size_t) {
-                auto &val    = detail::get_underlying_value(v);
-                using Tagged = std::decay_t<decltype(v)>;
-                using T      = std::decay_t<decltype(val)>;
+            auto       app     = CLI::App(app_desc, argv[0]);
+            const bool is_root = true;
 
-                if constexpr (is_tagged_v<Tagged> && is_deserializable_v<CLI::App, T>) {
-                    TagInfo ti = cpx::cli::get_tag_info(v);
-                    if (ti.key.empty())
-                        return;
-
-                    Deserialize<CLI::App, T> d(app);
-                    d.configure(ti).into(val);
-                }
-            });
+            Deserialize<CLI::App, std::tuple<Ts...>> d(app, is_root);
+            d.into(tpl);
 
             return app.help();
         }
-
-#ifdef BOOST_PFR_HPP
-        template <typename S>
-        std::enable_if_t<std::is_aggregate_v<S>> into(S &v) const {
-            auto tpl = boost::pfr::structure_tie(v);
-            into(tpl);
-        }
-
-        template <typename S>
-        std::enable_if_t<std::is_aggregate_v<S>, std::string> help(S &v) const {
-            auto tpl = boost::pfr::structure_tie(v);
-            return help(tpl);
-        }
-#endif
     };
 
     template <>
@@ -254,8 +220,7 @@ namespace cpx::serde {
                                     v = std::move(element);
                             }
                         }(),
-                        ...
-                    );
+                        ...);
                     if (!done)
                         throw type_mismatch_error("variant", "unknown"); // TODO
                 },
@@ -276,54 +241,40 @@ namespace cpx::serde {
         using cli::cli11::detail::DeserializeDispatcherFor<std::tuple<Ts...>>::DeserializeDispatcherFor;
 
         void into(std::tuple<Ts...> &tpl) const override {
-            CLI::App *sub = this->app.add_subcommand(this->option_name, this->help_string);
+            CLI::App *sub = nullptr;
+            if (!this->is_root)
+                sub = this->app.add_subcommand(this->option_name, this->help_string);
 
-            tuple_for_each(tpl, [&](auto &v, size_t) {
-                auto &val    = detail::get_underlying_value(v);
-                using Tagged = std::decay_t<decltype(v)>;
-                using T      = std::decay_t<decltype(val)>;
+            tuple_for_each(tpl, [&](auto &item, size_t) {
+                const cpx::TagInfo &t         = cpx::cli::get_tag_info(item);
+                auto               &v         = detail::get_underlying_value(item);
+                using T                       = std::decay_t<decltype(v)>;
+                constexpr bool deserializable = cpx::serde::is_deserializable_v<CLI::App, T>;
 
-                if constexpr (is_tagged_v<Tagged> && is_deserializable_v<CLI::App, T>) {
-                    TagInfo ti = cpx::cli::get_tag_info(v);
-                    if (ti.key.empty())
-                        return;
+                if (!deserializable || t.key == "")
+                    return;
 
-                    Deserialize<CLI::App, T> d(*sub);
-                    d.configure(ti).into(val);
+                if constexpr (deserializable) {
+                    Deserialize<CLI::App, T> d(sub ? *sub : this->app);
+                    d.configure(t).into(v);
                 }
             });
         }
     };
 
-#ifdef BOOST_PFR_HPP
-    template <typename S>
-    struct Deserialize<CLI::App, S, std::enable_if_t<std::is_aggregate_v<S>>>
-        : public cli::cli11::detail::DeserializeDispatcherFor<S> {
-        using cli::cli11::detail::DeserializeDispatcherFor<S>::DeserializeDispatcherFor;
+    template <typename T>
+    struct Deserialize<CLI::App, T, std::enable_if_t<cpx::cli::has_reflect_v<T>>>
+        : public cli::cli11::detail::DeserializeDispatcherFor<T> {
+        using cli::cli11::detail::DeserializeDispatcherFor<T>::DeserializeDispatcherFor;
 
-        void into(S &v) const override {
-            CLI::App *sub = this->app.add_subcommand(this->option_name, this->help_string);
+        void into(T &v) const override {
+            Deserialize<CLI::App, cpx::cli::reflect_t<T>> d(this->app);
 
-            auto tpl = boost::pfr::structure_tie(v);
-
-            tuple_for_each(tpl, [&](auto &v, size_t) {
-                auto &val    = detail::get_underlying_value(v);
-                using Tagged = std::decay_t<decltype(v)>;
-                using T      = std::decay_t<decltype(val)>;
-
-                if constexpr (is_tagged_v<Tagged> && is_deserializable_v<CLI::App, T>) {
-                    TagInfo ti = cpx::cli::get_tag_info(v);
-                    if (ti.key.empty())
-                        return;
-
-                    Deserialize<CLI::App, T> d(*sub);
-                    d.configure(ti).into(val);
-                }
-            });
+            decltype(auto) r = cpx::cli::reflect_of(v);
+            d.configure(*this).into(r);
         }
     };
 
-#endif
 
 #ifdef NEARGYE_MAGIC_ENUM_HPP
     template <typename S>
@@ -385,30 +336,27 @@ namespace cpx::serde {
         }
     };
 
-    // TODO
-    // template <typename S>
-    // struct Deserialize<CLI::App, std::vector<S>, std::enable_if_t<std::is_enum_v<S>>>
-    //     : public cli::cli11::detail::DeserializeDispatcherFor<std::vector<S>> {
-    //     using cli::cli11::detail::DeserializeDispatcherFor<std::vector<S>>::DeserializeDispatcherFor;
-    //
-    //     void into(std::vector<S> &v) const override {
-    //         CLI::Option *opt = Deserialize<CLI::App, S>::template generic_into<Deserialize<CLI::App,
-    //         S>::Method::EmplaceBack>(
-    //             v, this->app, this->option_name, this->help_string
-    //         );
-    //         opt->expected(0, magic_enum::enum_names<S>().size());
-    //
-    //         if (this->required)
-    //             opt->required(this->required);
-    //         else if (!v.empty()) {
-    //             // std::vector<std::string> enum_names;
-    //             // for (auto &e : v) {
-    //             //     enum_names.push_back(std::string(magic_enum::enum_name(e)));
-    //             // }
-    //             // opt->default_val(enum_names);
-    //         }
-    //     }
-    // };
+    template <typename S>
+    struct Deserialize<CLI::App, std::vector<S>, std::enable_if_t<std::is_enum_v<S>>>
+        : public cli::cli11::detail::DeserializeDispatcherFor<std::vector<S>> {
+        using cli::cli11::detail::DeserializeDispatcherFor<std::vector<S>>::DeserializeDispatcherFor;
+
+        void into(std::vector<S> &v) const override {
+            CLI::Option *opt = Deserialize<CLI::App, S>::template generic_into<Deserialize<CLI::App, S>::Method::EmplaceBack>(
+                v, this->app, this->option_name, this->help_string
+            );
+            opt->expected(0, magic_enum::enum_names<S>().size());
+
+            if (this->required)
+                opt->required(this->required);
+            else if (!v.empty()) {
+                std::vector<std::string> enum_names;
+                for (auto &e : v)
+                    enum_names.push_back(std::string(magic_enum::enum_name(e)));
+                opt->default_val(enum_names);
+            }
+        }
+    };
 #endif
 } // namespace cpx::serde
 

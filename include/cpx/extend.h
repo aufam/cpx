@@ -64,7 +64,7 @@ namespace cpx {
                 return boost::pfr::structure_tie(value);
             else
 #endif
-                return std::apply([](auto &...items) { return std::tuple_cat(std::tie(items)...); }, value);
+                return std::apply([](auto &...items) { return std::tie(items...); }, value);
         }
 
         constexpr auto as_tuple() & {
@@ -73,7 +73,7 @@ namespace cpx {
                 return boost::pfr::structure_tie(value);
             else
 #endif
-                return std::apply([](auto &...items) { return std::tuple_cat(std::tie(items)...); }, value);
+                return std::apply([](auto &...items) { return std::tie(items...); }, value);
         }
     };
 

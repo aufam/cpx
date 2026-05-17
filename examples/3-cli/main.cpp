@@ -5,7 +5,7 @@ template <typename T>
 using Tag = cpx::Tag<T>;
 
 struct App {
-    Tag<std::string> my_name = "fmt:`name`    opt:`n|name,    help=Name to greet, env=NAME`";
+    Tag<std::string> my_name = "fmt:`name`    opt:`n|name,    help=Name to greet, env=USER`";
     Tag<bool>        verbose = "fmt:`verbose` opt:`v|verbose, help=Enable verbose output`";
 
     enum LogLevel { Debug, Info, Warn };

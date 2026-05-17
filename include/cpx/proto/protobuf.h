@@ -1,12 +1,13 @@
-// TODO: omit zero values
+// TODO: read into fixed size string
+// TODO; parse/dump from/into stream
 
 #ifndef CPX_PROTO_PROTOBUF_H
 #define CPX_PROTO_PROTOBUF_H
 
-#include <cpx/reflect.h>
 #include <cpx/serde/serialize.h>
 #include <cpx/serde/deserialize.h>
-#include <cpx/serde/error.h>
+#include <cpx/reflect.h>
+#include <cpx/extend.h>
 #include <array>
 #include <tuple>
 #include <string>
@@ -25,22 +26,45 @@
 #    include <google/protobuf/wire_format_lite.h>
 #endif
 
-#ifndef BOOST_PFR_HPP
-#    if __has_include(<boost/pfr.hpp>)
-#        include <boost/pfr.hpp>
-#    endif
-#endif
-
-
 namespace cpx::proto::protobuf {
+    template <typename T>
+    struct Reflect : std::false_type {
+        using const_type = type;
+    };
+
+    template <typename T>
+    struct has_reflect
+        : std::bool_constant<(Reflect<T>::value || cpx::has_reflect_v<T>) && !cpx::is_time_v<T> && !std::is_enum_v<T>> {};
+
+    template <typename T>
+    inline constexpr bool has_reflect_v = has_reflect<T>::value;
+
+    template <typename T>
+    using reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::type, cpx::reflect_t<T>>;
+
+    template <typename T>
+    using const_reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::const_type, cpx::const_reflect_t<T>>;
+
+    template <typename T>
+    constexpr decltype(auto) reflect_of(T &&v) {
+        if constexpr (Reflect<std::decay_t<T>>::value)
+            return Reflect<std::decay_t<T>>::of(std::forward<T>(v));
+        else
+            return cpx::reflect_of(std::forward<T>(v));
+    }
+
+
     template <typename From>
-    using Serialize = ::cpx::serde::Serialize<google::protobuf::io::CodedOutputStream, From>;
+    using Serialize = cpx::serde::Serialize<google::protobuf::io::CodedOutputStream, From>;
 
     template <typename To>
-    using Deserialize = ::cpx::serde::Deserialize<google::protobuf::io::CodedInputStream, To>;
+    using Deserialize = cpx::serde::Deserialize<google::protobuf::io::CodedInputStream, To>;
 
-    using Dump  = ::cpx::serde::Dump<google::protobuf::io::CodedOutputStream, std::string>;
-    using Parse = ::cpx::serde::Parse<google::protobuf::io::CodedInputStream, std::string>;
+    template <typename To>
+    using Dump = cpx::serde::Dump<google::protobuf::io::CodedOutputStream, To>;
+
+    template <typename From>
+    using Parse = cpx::serde::Parse<google::protobuf::io::CodedInputStream, std::string>;
 
     template <typename T>
     [[nodiscard]]
@@ -53,14 +77,12 @@ namespace cpx::proto::protobuf {
     [[nodiscard]]
     T parse(const std::string &str);
 
-    using TagInfo = ::cpx::TagInfo;
-
     template <typename T>
-    constexpr TagInfo get_tag_info(const T &field) {
-        if constexpr (::cpx::detail::is_tag_info_for_v<T>)
+    constexpr cpx::TagInfo get_tag_info(const T &field) {
+        if constexpr (cpx::detail::is_tag_info_for_v<T>)
             return field.ti;
         else
-            return ::cpx::get_tag_info(field, "protobuf");
+            return cpx::get_tag_info(field, "protobuf");
     }
 } // namespace cpx::proto::protobuf
 
@@ -135,17 +157,10 @@ namespace cpx::proto::protobuf::detail {
 
 
     template <typename T>
-    struct is_message : cpx::is_tuple<typename cpx::Reflect<T>::type> {};
+    struct is_message : cpx::is_tuple<cpx::proto::protobuf::reflect_t<T>> {};
 
     template <typename... Ts>
     struct is_message<std::tuple<Ts...>> : std::true_type {};
-
-
-    template <typename T>
-    struct is_std_array : std::false_type {};
-
-    template <typename T, size_t N>
-    struct is_std_array<std::array<T, N>> : std::true_type {};
 
 
     class DeserializeDispatcher {
@@ -156,11 +171,27 @@ namespace cpx::proto::protobuf::detail {
         bool                                                 fixed     = false;
         bool                                                 zigzag    = false;
         bool                                                 packed    = true;
+        bool                                                 is_root   = false;
 
         explicit DeserializeDispatcher(google::protobuf::io::CodedInputStream &doc) noexcept
             : doc(doc) {}
 
         virtual ~DeserializeDispatcher() = default;
+
+        DeserializeDispatcher &inherit(DeserializeDispatcher &other) {
+            this->is_root   = other.is_root;
+            this->wire_type = other.wire_type;
+            this->len       = other.len;
+            this->fixed     = other.fixed;
+            this->zigzag    = other.zigzag;
+            this->packed    = other.packed;
+            return *this;
+        }
+
+        DeserializeDispatcher &set_root(bool root = true) {
+            this->is_root = root;
+            return *this;
+        }
 
         DeserializeDispatcher &set_wire_type(google::protobuf::internal::WireFormatLite::WireType wire_type) {
             this->wire_type = wire_type;
@@ -201,6 +232,7 @@ namespace cpx::proto::protobuf::detail {
     public:
         using DeserializeDispatcher::DeserializeDispatcher;
 
+        // TODO
         DeserializeDispatcherFor(google::protobuf::io::CodedInputStream &doc, T &val) noexcept
             : proto::protobuf::detail::DeserializeDispatcher(doc)
             , val(&val) {}
@@ -214,169 +246,43 @@ namespace cpx::proto::protobuf::detail {
             read();
         }
     };
+
+    template <typename T>
+    std::string to_message(const T &v);
+
+    template <typename T>
+    std::string read_message(DeserializeDispatcherFor<T> &d);
 } // namespace cpx::proto::protobuf::detail
 
 namespace cpx::serde {
     template <>
     struct Dump<google::protobuf::io::CodedOutputStream, std::string> {
-        template <typename S>
-        std::enable_if_t<cpx::is_tuple_v<S>, std::string> from(const S &tpl) const {
+        template <typename T>
+        std::string from(const T &v) const {
             std::string                              buffer;
             google::protobuf::io::StringOutputStream os(&buffer);
             google::protobuf::io::CodedOutputStream  doc(&os);
-
-            tuple_for_each(tpl, [&](const auto &v, size_t) {
-                const proto::protobuf::TagInfo ti  = proto::protobuf::get_tag_info(v);
-                const auto                    &val = detail::get_underlying_value(v);
-                using Tagged                       = std::decay_t<decltype(v)>;
-                using T                            = std::decay_t<decltype(val)>;
-
-                if constexpr ((is_tagged_v<Tagged> || cpx::detail::is_tag_info_for_v<Tagged>) &&
-                              is_serializable_v<google::protobuf::io::CodedOutputStream, T>)
-                    Serialize<google::protobuf::io::CodedOutputStream, T>{doc}.from(val, ti);
-            });
-
+            Serialize<google::protobuf::io::CodedOutputStream, T>{doc}.from(v);
             return buffer;
         }
-
-        // TODO: map?
-
-        template <typename T>
-        std::enable_if_t<proto::protobuf::detail::is_message<T>::value && !cpx::is_tuple_v<T>, std::string>
-        from(const T &msg) const {
-            using R = cpx::Reflect<T>;
-            return from(R::of(msg));
-        }
-
-#ifdef BOOST_PFR_HPP
-        template <typename S>
-        std::enable_if_t<
-            std::is_aggregate_v<S> && !proto::protobuf::detail::is_message<S>::value && !cpx::is_time_v<S>,
-            std::string>
-        from(const S &v) const {
-            auto tpl = boost::pfr::structure_tie(v);
-            return from(tpl);
-        }
-#endif
     };
 
     template <>
     struct Parse<google::protobuf::io::CodedInputStream, std::string> {
         const std::string &buffer;
 
-        template <typename... Ts>
-        void into(std::tuple<Ts...> &tpl) const {
-            google::protobuf::io::ArrayInputStream ais(buffer.data(), (int)buffer.size());
-            google::protobuf::io::CodedInputStream doc(&ais);
-
-            std::array<std::unique_ptr<proto::protobuf::detail::DeserializeDispatcher>, sizeof...(Ts)> des = {};
-            std::array<proto::protobuf::TagInfo, sizeof...(Ts)>                                        tis = {};
-
-            tuple_for_each(tpl, [&](auto &v, size_t i) {
-                auto &val    = detail::get_underlying_value(v);
-                using Tagged = std::decay_t<decltype(v)>;
-                using T      = std::decay_t<decltype(val)>;
-
-                if constexpr ((is_tagged_v<Tagged> || cpx::detail::is_tag_info_for_v<Tagged>) &&
-                              is_deserializable_v<google::protobuf::io::CodedInputStream, T>) {
-                    tis[i] = proto::protobuf::get_tag_info(v);
-                    des[i] = std::unique_ptr<proto::protobuf::detail::DeserializeDispatcher>(
-                        new serde::Deserialize<google::protobuf::io::CodedInputStream, T>(doc, val)
-                    );
-                }
-            });
-
-            auto get_index = [&](int field_number) {
-                size_t i = 0;
-                for (; i < tis.size(); i++)
-                    if (tis[i].field_number == field_number)
-                        break;
-                return i;
-            };
-
-            while (const uint32_t tag = doc.ReadTag()) {
-                const uint32_t field_number = tag >> 3;
-                const auto     wire_type    = static_cast<google::protobuf::internal::WireFormatLite::WireType>(tag & 0x07);
-                const size_t   index        = get_index(field_number);
-
-                try {
-                    if (index >= sizeof...(Ts) || !des[index]) {
-                        if (!google::protobuf::internal::WireFormatLite::SkipField(&doc, tag))
-                            throw serde::error("cannot skip field");
-                        continue;
-                    }
-
-                    auto &ser = *des[index];
-                    ser.set_wire_type(wire_type)
-                        .set_fixed(tis[index].fixed)
-                        .set_zigzag(tis[index].zigzag)
-                        .set_packed(tis[index].packed)
-                        .read_len()
-                        .read();
-                } catch (serde::error &e) {
-                    if (index >= sizeof...(Ts))
-                        e.add_context(std::to_string(field_number));
-                    else
-                        e.add_context(tis[index].key);
-                    throw;
-                }
-            }
-            if (!doc.ConsumedEntireMessage())
-                throw serde::error("message not fully consumed");
-        }
-
-        template <typename K, typename T, typename H, typename P, typename A>
-        void into(std::unordered_map<K, T, H, P, A> &map) const {
-            google::protobuf::io::ArrayInputStream ais(buffer.data(), (int)buffer.size());
-            google::protobuf::io::CodedInputStream doc(&ais);
-
-            serde::Deserialize<google::protobuf::io::CodedInputStream, K> sk(doc);
-            serde::Deserialize<google::protobuf::io::CodedInputStream, T> sv(doc);
-
-            while (const uint32_t tag = doc.ReadTag()) {
-                const uint32_t field_number = tag >> 3;
-                const auto     wire_type    = static_cast<google::protobuf::internal::WireFormatLite::WireType>(tag & 0x07);
-
-                K k;
-                T v;
-                try {
-                    if (field_number == 1) {
-                        sk.set_wire_type(wire_type).set_fixed(false).set_zigzag(false).set_packed(true).read_len();
-                        sk.into(k);
-                    } else if (field_number == 2) {
-                        sv.set_wire_type(wire_type).set_fixed(false).set_zigzag(false).set_packed(true).read_len();
-                        sv.into(v);
-                    } else {
-                        if (!google::protobuf::internal::WireFormatLite::SkipField(&doc, tag))
-                            throw serde::error("cannot skip field");
-                        continue;
-                    }
-                } catch (serde::error &e) {
-                    e.add_context(std::to_string(field_number));
-                    throw;
-                }
-                map.emplace(std::move(k), std::move(v));
-            }
-            if (!doc.ConsumedEntireMessage())
-                throw serde::error("message not fully consumed");
-        }
-
         template <typename T>
-        std::enable_if_t<proto::protobuf::detail::is_message<T>::value && !cpx::is_tuple_v<T>> into(T &msg) const {
-            using R = cpx::Reflect<T>;
+        void into(T &v) const {
+            google::protobuf::io::ArrayInputStream ais(buffer.data(), (int)buffer.size());
+            google::protobuf::io::CodedInputStream doc(&ais);
 
-            decltype(auto) hook = R::of(msg);
-            return into(hook);
-        }
+            Deserialize<google::protobuf::io::CodedInputStream, T> des(doc);
+            des.set_root().set_len(buffer.size());
+            des.into(v);
 
-#ifdef BOOST_PFR_HPP
-        template <typename S>
-        std::enable_if_t<std::is_aggregate_v<S> && !proto::protobuf::detail::is_message<S>::value && !cpx::is_time_v<S>>
-        into(S &v) const {
-            auto tpl = boost::pfr::structure_tie(v);
-            into(tpl);
+            if (!doc.ConsumedEntireMessage())
+                throw serde::error("message not fully consumed");
         }
-#endif
     };
 
     // numeric
@@ -390,9 +296,10 @@ namespace cpx::serde {
         mutable bool                             zigzag   = false;
         mutable bool                             omitzero = true;
 
-        void from(T v, const proto::protobuf::TagInfo &ti) const {
+        void from(T v, const cpx::TagInfo &ti) const {
             if (omitzero && v == T())
                 return;
+
             auto tag = google::protobuf::internal::WireFormatLite::MakeTag(
                 ti.field_number,
                 std::is_same_v<T, double>       ? google::protobuf::internal::WireFormatLite::WIRETYPE_FIXED64
@@ -420,11 +327,13 @@ namespace cpx::serde {
                         this->doc.WriteLittleEndian32(static_cast<uint32_t>(v));
                 } else if (zigzag) {
                     if constexpr (sizeof(T) == 8)
-                        this->doc.WriteVarint64(google::protobuf::internal::WireFormatLite::ZigZagEncode64(static_cast<int64_t>(v)
-                        ));
+                        this->doc.WriteVarint64(
+                            google::protobuf::internal::WireFormatLite::ZigZagEncode64(static_cast<int64_t>(v))
+                        );
                     else
-                        this->doc.WriteVarint32(google::protobuf::internal::WireFormatLite::ZigZagEncode32(static_cast<int32_t>(v)
-                        ));
+                        this->doc.WriteVarint32(
+                            google::protobuf::internal::WireFormatLite::ZigZagEncode32(static_cast<int32_t>(v))
+                        );
                 } else {
                     if constexpr (sizeof(T) == 8)
                         this->doc.WriteVarint64(static_cast<uint64_t>(v));
@@ -442,35 +351,39 @@ namespace cpx::serde {
         using proto::protobuf::detail::DeserializeDispatcherFor<T>::DeserializeDispatcherFor;
         ~Deserialize() override = default;
 
-        void read() override {
-            if (this->wire_type == google::protobuf::internal::WireFormatLite::WIRETYPE_FIXED32) {
-                uint32_t bits;
-                if (!this->doc.ReadLittleEndian32(&bits))
-                    throw serde::error("failed to decode int");
-                if constexpr (std::is_same_v<T, double> || std::is_same_v<T, float>) {
-                    *this->val = (T)google::protobuf::internal::WireFormatLite::DecodeFloat(bits);
-                } else {
-                    if (this->zigzag)
-                        *this->val = static_cast<T>(google::protobuf::internal::WireFormatLite::ZigZagDecode32(bits));
-                    else
-                        *this->val = static_cast<T>(bits);
-                }
+        void read32() {
+            uint32_t bits;
+            if (!this->doc.ReadLittleEndian32(&bits))
+                throw serde::error("failed to decode int");
+            if constexpr (std::is_same_v<T, double> || std::is_same_v<T, float>) {
+                *this->val = (T)google::protobuf::internal::WireFormatLite::DecodeFloat(bits);
             } else {
-                uint64_t bits;
-                if (!(this->wire_type == google::protobuf::internal::WireFormatLite::WIRETYPE_FIXED64
-                          ? this->doc.ReadLittleEndian64(&bits)
-                          : this->doc.ReadVarint64(&bits)))
-                    throw serde::error("failed to decode int");
-
-                if constexpr (std::is_same_v<T, double> || std::is_same_v<T, float>) {
-                    *this->val = (T)google::protobuf::internal::WireFormatLite::DecodeDouble(bits);
-                } else {
-                    if (this->zigzag)
-                        *this->val = static_cast<T>(google::protobuf::internal::WireFormatLite::ZigZagDecode64(bits));
-                    else
-                        *this->val = static_cast<T>(bits);
-                }
+                if (this->zigzag)
+                    *this->val = static_cast<T>(google::protobuf::internal::WireFormatLite::ZigZagDecode32(bits));
+                else
+                    *this->val = static_cast<T>(bits);
             }
+        }
+
+        void read64() {
+            uint64_t bits;
+            if (!(this->wire_type == google::protobuf::internal::WireFormatLite::WIRETYPE_FIXED64
+                      ? this->doc.ReadLittleEndian64(&bits)
+                      : this->doc.ReadVarint64(&bits)))
+                throw serde::error("failed to decode int");
+
+            if constexpr (std::is_same_v<T, double> || std::is_same_v<T, float>) {
+                *this->val = (T)google::protobuf::internal::WireFormatLite::DecodeDouble(bits);
+            } else {
+                if (this->zigzag)
+                    *this->val = static_cast<T>(google::protobuf::internal::WireFormatLite::ZigZagDecode64(bits));
+                else
+                    *this->val = static_cast<T>(bits);
+            }
+        }
+
+        void read() override {
+            this->wire_type == google::protobuf::internal::WireFormatLite::WIRETYPE_FIXED32 ? read32() : read64();
         }
     };
 
@@ -479,7 +392,12 @@ namespace cpx::serde {
     struct Serialize<google::protobuf::io::CodedOutputStream, T, std::enable_if_t<proto::protobuf::detail::is_bytes<T>::value>> {
         google::protobuf::io::CodedOutputStream &doc;
 
-        void from(const T &v, const proto::protobuf::TagInfo &ti) const {
+        mutable bool omitempty = true;
+
+        void from(const T &v, const cpx::TagInfo &ti) const {
+            if (omitempty && v.empty())
+                return;
+
             auto tag = google::protobuf::internal::WireFormatLite::MakeTag(
                 ti.field_number, google::protobuf::internal::WireFormatLite::WIRETYPE_LENGTH_DELIMITED
             );
@@ -501,8 +419,8 @@ namespace cpx::serde {
         ~Deserialize() override = default;
 
         void read() override {
-            if (this->wire_type != google::protobuf::internal::WireFormatLite::WIRETYPE_LENGTH_DELIMITED)
-                throw serde::error("failed to deserialize");
+            if (!this->is_root && this->wire_type != google::protobuf::internal::WireFormatLite::WIRETYPE_LENGTH_DELIMITED)
+                throw serde::error("failed to deserialize bytes");
 
             bool ok = false;
             if constexpr (std::is_same_v<T, std::string>) {
@@ -515,7 +433,7 @@ namespace cpx::serde {
             }
 
             if (!ok)
-                throw serde::error("failed to deserialize");
+                throw serde::error("failed to deserialize bytes");
         }
     };
 
@@ -527,7 +445,7 @@ namespace cpx::serde {
         std::enable_if_t<proto::protobuf::detail::is_repeated_numeric<T>::value>> {
         google::protobuf::io::CodedOutputStream &doc;
 
-        void from(const T &arr, const proto::protobuf::TagInfo &ti) const {
+        void from(const T &arr, const cpx::TagInfo &ti) const {
             if (!ti.packed) {
                 auto ser     = Serialize<google::protobuf::io::CodedOutputStream, typename T::value_type>{this->doc};
                 ser.omitzero = false;
@@ -544,7 +462,7 @@ namespace cpx::serde {
             Serialize<google::protobuf::io::CodedOutputStream, std::string>{this->doc}.from(buffer);
         }
 
-        std::string create_packed_buffer(const T &arr, const proto::protobuf::TagInfo &ti = {}) const {
+        std::string create_packed_buffer(const T &arr, const cpx::TagInfo &ti = {}) const {
             std::string                              buffer;
             google::protobuf::io::StringOutputStream os(&buffer);
             google::protobuf::io::CodedOutputStream  doc(&os);
@@ -582,7 +500,7 @@ namespace cpx::serde {
             des.set_wire_type(this->wire_type).set_fixed(this->fixed).set_zigzag(this->zigzag);
 
             T &arr = *this->val;
-            if constexpr (proto::protobuf::detail::is_std_array<T>::value) {
+            if constexpr (cpx::detail::is_std_array<T>::value) {
                 des.into(arr[i++]);
             } else {
                 typename T::value_type val;
@@ -592,10 +510,12 @@ namespace cpx::serde {
         }
 
         void read_packed() {
-            Deserialize<google::protobuf::io::CodedInputStream, std::string> ser(this->doc);
-            ser.set_wire_type(this->wire_type).set_len(this->len);
             std::string buffer;
-            ser.into(buffer);
+            {
+                Deserialize<google::protobuf::io::CodedInputStream, std::string> des(this->doc);
+                des.inherit(*this);
+                des.into(buffer);
+            }
 
             google::protobuf::io::ArrayInputStream ais(buffer.data(), (int)buffer.size());
             google::protobuf::io::CodedInputStream doc(&ais);
@@ -603,16 +523,17 @@ namespace cpx::serde {
 
             Deserialize<google::protobuf::io::CodedInputStream, typename T::value_type> des(doc);
 
-            bool fixed =
+            const bool fixed =
                 std::is_same_v<typename T::value_type, double> || std::is_same_v<typename T::value_type, float> || this->fixed;
 
-            auto wire_type = !fixed                                ? google::protobuf::internal::WireFormatLite::WIRETYPE_VARINT
-                             : sizeof(typename T::value_type) == 8 ? google::protobuf::internal::WireFormatLite::WIRETYPE_FIXED64
-                                                                   : google::protobuf::internal::WireFormatLite::WIRETYPE_FIXED32;
-            des.set_wire_type(wire_type).set_fixed(fixed).set_zigzag(this->zigzag);
+            const auto wire_type = !fixed ? google::protobuf::internal::WireFormatLite::WIRETYPE_VARINT
+                                   : sizeof(typename T::value_type) == 8
+                                       ? google::protobuf::internal::WireFormatLite::WIRETYPE_FIXED64
+                                       : google::protobuf::internal::WireFormatLite::WIRETYPE_FIXED32;
 
+            des.set_wire_type(wire_type).set_fixed(fixed).set_zigzag(this->zigzag);
             for (T &arr = *this->val; doc.BytesUntilLimit();) {
-                if constexpr (proto::protobuf::detail::is_std_array<T>::value) {
+                if constexpr (cpx::detail::is_std_array<T>::value) {
                     des.into(arr.at(i++));
                 } else {
                     typename T::value_type val;
@@ -631,7 +552,7 @@ namespace cpx::serde {
         std::enable_if_t<is_serializable_v<google::protobuf::io::CodedOutputStream, T>>> {
         google::protobuf::io::CodedOutputStream &doc;
 
-        void from(const std::optional<T> &v, const proto::protobuf::TagInfo &ti) const {
+        void from(const std::optional<T> &v, const cpx::TagInfo &ti) const {
             if (v.has_value())
                 Serialize<google::protobuf::io::CodedOutputStream, T>{doc}.from(*v, ti);
         }
@@ -653,16 +574,17 @@ namespace cpx::serde {
         ~Deserialize() override = default;
 
         void read() override {
+            if (this->is_root && this->len == 0) {
+                *this->val = std::nullopt;
+                return;
+            }
+
             if (!this->val->has_value())
                 *this->val = T{};
 
-            Deserialize<google::protobuf::io::CodedInputStream, T> ser(this->doc);
-            ser.set_wire_type(this->wire_type)
-                .set_fixed(this->fixed)
-                .set_zigzag(this->zigzag)
-                .set_packed(this->packed)
-                .set_len(this->len);
-            ser.into(this->val->value());
+            Deserialize<google::protobuf::io::CodedInputStream, T> des(this->doc);
+            des.inherit(*this);
+            des.into(this->val->value());
         }
     };
 
@@ -674,14 +596,17 @@ namespace cpx::serde {
         std::enable_if_t<proto::protobuf::detail::is_repeated_serializable<T>::value>> {
         google::protobuf::io::CodedOutputStream &doc;
 
-        void from(const T &arr, const proto::protobuf::TagInfo &ti) const {
-            for (const auto &v : arr)
-                Serialize<google::protobuf::io::CodedOutputStream, std::decay_t<decltype(v)>>{doc}.from(v, ti);
+        void from(const T &arr, const cpx::TagInfo &ti) const {
+            for (const auto &v : arr) {
+                Serialize<google::protobuf::io::CodedOutputStream, std::decay_t<decltype(v)>> ser{doc};
+                if constexpr (proto::protobuf::detail::is_bytes<std::decay_t<decltype(v)>>::value)
+                    ser.omitempty = false;
+                ser.from(v, ti);
+            }
         }
 
-        void from(const T &arr) const {
-            for (const auto &v : arr)
-                Serialize<google::protobuf::io::CodedOutputStream, std::decay_t<decltype(v)>>{doc}.from(v);
+        void from(const T &) const {
+            throw std::runtime_error("should not be here");
         }
     };
 
@@ -698,100 +623,147 @@ namespace cpx::serde {
         size_t i = 0;
 
         void read() override {
-            Deserialize<google::protobuf::io::CodedInputStream, typename T::value_type> ser(this->doc);
-            ser.set_wire_type(this->wire_type)
-                .set_fixed(this->fixed)
-                .set_zigzag(this->zigzag)
-                .set_packed(this->packed)
-                .set_len(this->len);
+            Deserialize<google::protobuf::io::CodedInputStream, typename T::value_type> des(this->doc);
+            des.inherit(*this);
 
             T &arr = *this->val;
-            if constexpr (proto::protobuf::detail::is_std_array<T>::value) {
-                ser.into(arr.at(i++));
+            if constexpr (cpx::detail::is_std_array<T>::value) {
+                des.into(arr.at(i++));
             } else {
                 arr.emplace_back();
-                ser.into(arr.back());
+                des.into(arr.back());
             }
         }
     };
 
-    // message
-    template <typename T>
-    struct Serialize<
-        google::protobuf::io::CodedOutputStream,
-        T,
-        std::enable_if_t<proto::protobuf::detail::is_message<T>::value>> {
+    // tuple
+    template <typename... Ts>
+    struct Serialize<google::protobuf::io::CodedOutputStream, std::tuple<Ts...>> {
         google::protobuf::io::CodedOutputStream &doc;
 
-        void from(const T &tpl, const proto::protobuf::TagInfo &ti) {
-            std::string buffer = Dump<google::protobuf::io::CodedOutputStream, std::string>{}.from(tpl);
+        void from(const std::tuple<Ts...> &tpl, const cpx::TagInfo &ti) {
+            std::string buffer = cpx::proto::protobuf::detail::to_message(tpl);
             Serialize<google::protobuf::io::CodedOutputStream, std::string>{this->doc}.from(buffer, ti);
         }
 
-        void from(const T &tpl) {
-            std::string buffer = Dump<google::protobuf::io::CodedOutputStream, std::string>{}.from(tpl);
-            Serialize<google::protobuf::io::CodedOutputStream, std::string>{this->doc}.from(buffer);
+        void from(const std::tuple<Ts...> &tpl) {
+            auto flattened = flatten(tpl);
+            tuple_for_each(flattened, [&](const auto &v, size_t) {
+                const cpx::TagInfo ti  = proto::protobuf::get_tag_info(v);
+                const auto        &val = detail::get_underlying_value(v);
+                using T                = std::decay_t<decltype(val)>;
+
+                if (ti.field_number > 0)
+                    Serialize<google::protobuf::io::CodedOutputStream, T>{doc}.from(val, ti);
+            });
+        }
+    };
+
+    template <typename... Ts>
+    struct Deserialize<google::protobuf::io::CodedInputStream, std::tuple<Ts...>>
+        : public proto::protobuf::detail::DeserializeDispatcherFor<std::tuple<Ts...>> {
+
+        using proto::protobuf::detail::DeserializeDispatcherFor<std::tuple<Ts...>>::DeserializeDispatcherFor;
+        ~Deserialize() override = default;
+
+        void read() override {
+            if (this->is_root)
+                return _read(this->doc);
+
+            std::string                            buffer = cpx::proto::protobuf::detail::read_message(*this);
+            google::protobuf::io::ArrayInputStream ais(buffer.data(), (int)buffer.size());
+            google::protobuf::io::CodedInputStream doc(&ais);
+            return _read(doc);
+        }
+
+        void _read(google::protobuf::io::CodedInputStream &doc) {
+            auto             flattened = flatten(*this->val);
+            constexpr size_t size      = std::tuple_size_v<decltype(flattened)>;
+
+            std::array<std::unique_ptr<proto::protobuf::detail::DeserializeDispatcher>, size> des = {};
+            std::array<cpx::TagInfo, size>                                                    tis = {};
+
+            tuple_for_each(flattened, [&](auto &v, size_t i) {
+                auto &val        = detail::get_underlying_value(v);
+                using T          = std::decay_t<decltype(val)>;
+                cpx::TagInfo &ti = tis[i] = proto::protobuf::get_tag_info(v);
+                if (ti.field_number > 0)
+                    des[i] = std::make_unique<cpx::serde::Deserialize<google::protobuf::io::CodedInputStream, T>>(doc, val);
+            });
+
+            auto get_index = [&](int field_number) {
+                size_t i = 0;
+                for (; i < tis.size(); i++)
+                    if (tis[i].field_number == field_number)
+                        break;
+                return i;
+            };
+
+            while (const uint32_t tag = doc.ReadTag()) {
+                const uint32_t field_number = tag >> 3;
+                const auto     wire_type    = static_cast<google::protobuf::internal::WireFormatLite::WireType>(tag & 0x07);
+                const size_t   index        = get_index(field_number);
+
+                try {
+                    if (index >= sizeof...(Ts) || !des[index]) {
+                        if (!google::protobuf::internal::WireFormatLite::SkipField(&doc, tag))
+                            throw serde::error("cannot skip field");
+                        continue;
+                    }
+
+                    auto &ser = *des[index];
+                    ser.set_wire_type(wire_type)
+                        .set_fixed(tis[index].fixed)
+                        .set_zigzag(tis[index].zigzag)
+                        .set_packed(tis[index].packed)
+                        .read_len()
+                        .read();
+                } catch (serde::error &e) {
+                    if (index >= sizeof...(Ts))
+                        e.add_context(std::to_string(field_number));
+                    else
+                        e.add_context(tis[index].key);
+                    throw;
+                }
+            }
+        }
+    };
+
+    // reflect
+    template <typename T>
+    struct Serialize<google::protobuf::io::CodedOutputStream, T, std::enable_if_t<cpx::proto::protobuf::has_reflect_v<T>>> {
+        google::protobuf::io::CodedOutputStream &doc;
+
+        void from(const T &v, const cpx::TagInfo &ti) {
+            return Serialize<google::protobuf::io::CodedOutputStream, cpx::proto::protobuf::const_reflect_t<T>>{doc}.from(
+                cpx::proto::protobuf::reflect_of(v), ti
+            );
+        }
+
+        void from(const T &v) {
+            return Serialize<google::protobuf::io::CodedOutputStream, cpx::proto::protobuf::const_reflect_t<T>>{doc}.from(
+                cpx::proto::protobuf::reflect_of(v)
+            );
         }
     };
 
     template <typename T>
-    struct Deserialize<google::protobuf::io::CodedInputStream, T, std::enable_if_t<proto::protobuf::detail::is_message<T>::value>>
+    struct Deserialize<google::protobuf::io::CodedInputStream, T, std::enable_if_t<cpx::proto::protobuf::has_reflect_v<T>>>
         : public proto::protobuf::detail::DeserializeDispatcherFor<T> {
 
         using proto::protobuf::detail::DeserializeDispatcherFor<T>::DeserializeDispatcherFor;
         ~Deserialize() override = default;
 
         void read() override {
-            Deserialize<google::protobuf::io::CodedInputStream, std::string> ser(this->doc);
-            ser.set_wire_type(this->wire_type).set_len(this->len);
-            std::string buffer;
-            ser.into(buffer);
-            Parse<google::protobuf::io::CodedInputStream, std::string>{buffer}.into(*this->val);
+            decltype(auto) proxy = cpx::proto::protobuf::reflect_of(*this->val);
+
+            Deserialize<google::protobuf::io::CodedInputStream, cpx::proto::protobuf::reflect_t<T>> des(this->doc);
+            des.inherit(*this);
+            des.into(proxy);
         }
     };
 
-#ifdef BOOST_PFR_HPP
-    template <typename S>
-    struct Serialize<
-        google::protobuf::io::CodedOutputStream,
-        S,
-        std::enable_if_t<
-            std::is_aggregate_v<S> && !proto::protobuf::detail::is_repeated<S>::value &&
-            !proto::protobuf::detail::is_message<S>::value>> {
-        google::protobuf::io::CodedOutputStream &doc;
-
-        void from(const S &v, const proto::protobuf::TagInfo &ti) {
-            std::string buffer = Dump<google::protobuf::io::CodedOutputStream, std::string>{}.from(v);
-            Serialize<google::protobuf::io::CodedOutputStream, std::string>{this->doc}.from(buffer, ti);
-        }
-
-        void from(const S &v) {
-            std::string buffer = Dump<google::protobuf::io::CodedOutputStream, std::string>{}.from(v);
-            Serialize<google::protobuf::io::CodedOutputStream, std::string>{this->doc}.from(buffer);
-        }
-    };
-
-    template <typename S>
-    struct Deserialize<
-        google::protobuf::io::CodedInputStream,
-        S,
-        std::enable_if_t<
-            std::is_aggregate_v<S> && !proto::protobuf::detail::is_repeated<S>::value &&
-            !proto::protobuf::detail::is_message<S>::value>> : public proto::protobuf::detail::DeserializeDispatcherFor<S> {
-
-        using proto::protobuf::detail::DeserializeDispatcherFor<S>::DeserializeDispatcherFor;
-        ~Deserialize() override = default;
-
-        void read() override {
-            Deserialize<google::protobuf::io::CodedInputStream, std::string> ser(this->doc);
-            ser.set_wire_type(this->wire_type).set_len(this->len);
-            std::string buffer;
-            ser.into(buffer);
-            Parse<google::protobuf::io::CodedInputStream, std::string>{buffer}.into(*this->val);
-        }
-    };
-#endif
-
+    // map
     template <typename K, typename T, typename H, typename P, typename A>
     struct Serialize<
         google::protobuf::io::CodedOutputStream,
@@ -801,21 +773,15 @@ namespace cpx::serde {
             is_serializable_v<google::protobuf::io::CodedOutputStream, T>>> {
         google::protobuf::io::CodedOutputStream &doc;
 
-        void from(const std::unordered_map<K, T, H, P, A> &v, const proto::protobuf::TagInfo &ti) {
-            std::string buffer;
-            {
-                google::protobuf::io::StringOutputStream os(&buffer);
-                google::protobuf::io::CodedOutputStream  doc(&os);
-                Serialize<google::protobuf::io::CodedOutputStream, std::unordered_map<K, T, H, P, A>>{doc}.from(v);
-            }
+        void from(const std::unordered_map<K, T, H, P, A> &v, const cpx::TagInfo &ti) {
+            std::string buffer = cpx::proto::protobuf::detail::to_message(v);
             Serialize<google::protobuf::io::CodedOutputStream, std::string>{this->doc}.from(buffer, ti);
         }
 
         void from(const std::unordered_map<K, T, H, P, A> &map) {
-            proto::protobuf::TagInfo tk = cpx::TagInfoBuilder("1").field_number(1), tv = cpx::TagInfoBuilder("2").field_number(2);
             for (auto &[k, v] : map) {
-                Serialize<google::protobuf::io::CodedOutputStream, K>{this->doc}.from(k, tk);
-                Serialize<google::protobuf::io::CodedOutputStream, T>{this->doc}.from(v, tv);
+                Serialize<google::protobuf::io::CodedOutputStream, K>{this->doc}.from(k, "1");
+                Serialize<google::protobuf::io::CodedOutputStream, T>{this->doc}.from(v, "2");
             }
         }
     };
@@ -833,12 +799,132 @@ namespace cpx::serde {
         ~Deserialize() override = default;
 
         void read() override {
-            Deserialize<google::protobuf::io::CodedInputStream, std::string> ser(this->doc);
-            ser.set_wire_type(this->wire_type).set_len(this->len);
-            std::string buffer;
-            ser.into(buffer);
+            if (this->is_root)
+                return _read(this->doc);
 
-            Parse<google::protobuf::io::CodedInputStream, std::string>{buffer}.into(*this->val);
+            std::string                            buffer = cpx::proto::protobuf::detail::read_message(*this);
+            google::protobuf::io::ArrayInputStream ais(buffer.data(), (int)buffer.size());
+            google::protobuf::io::CodedInputStream doc(&ais);
+            return _read(doc);
+        }
+
+        void _read(google::protobuf::io::CodedInputStream &doc) {
+            serde::Deserialize<google::protobuf::io::CodedInputStream, K> dk(doc);
+            serde::Deserialize<google::protobuf::io::CodedInputStream, T> dv(doc);
+
+            while (const uint32_t tag = doc.ReadTag()) {
+                const uint32_t field_number = tag >> 3;
+                const auto     wire_type    = static_cast<google::protobuf::internal::WireFormatLite::WireType>(tag & 0x07);
+
+                K k;
+                T v;
+                try {
+                    if (field_number == 1) {
+                        dk.set_wire_type(wire_type).set_fixed(false).set_zigzag(false).set_packed(true).read_len();
+                        dk.into(k);
+                    } else if (field_number == 2) {
+                        dv.set_wire_type(wire_type).set_fixed(false).set_zigzag(false).set_packed(true).read_len();
+                        dv.into(v);
+                    } else {
+                        if (!google::protobuf::internal::WireFormatLite::SkipField(&doc, tag))
+                            throw serde::error("cannot skip field");
+                        continue;
+                    }
+                } catch (serde::error &e) {
+                    e.add_context(std::to_string(field_number));
+                    throw;
+                }
+                this->val->emplace(std::move(k), std::move(v));
+            }
+        }
+    };
+
+    // time
+    template <>
+    struct Serialize<google::protobuf::io::CodedOutputStream, std::timespec> {
+        google::protobuf::io::CodedOutputStream &doc;
+
+        void from(const std::timespec &v, const cpx::TagInfo &ti) {
+            std::string buffer = cpx::proto::protobuf::detail::to_message(v);
+            Serialize<google::protobuf::io::CodedOutputStream, std::string>{this->doc}.from(buffer, ti);
+        }
+
+        void from(const std::timespec &v) {
+            Serialize<google::protobuf::io::CodedOutputStream, time_t>{this->doc}.from(v.tv_sec, "1");
+            Serialize<google::protobuf::io::CodedOutputStream, time_t>{this->doc}.from(v.tv_nsec, "2");
+        }
+    };
+
+    template <>
+    struct Deserialize<google::protobuf::io::CodedOutputStream, std::timespec>
+        : public proto::protobuf::detail::DeserializeDispatcherFor<std::timespec> {
+
+        using proto::protobuf::detail::DeserializeDispatcherFor<timespec>::DeserializeDispatcherFor;
+        ~Deserialize() override = default;
+
+        void read() override {
+            if (this->is_root)
+                return _read(this->doc);
+
+            std::string                            buffer = cpx::proto::protobuf::detail::read_message(*this);
+            google::protobuf::io::ArrayInputStream ais(buffer.data(), (int)buffer.size());
+            google::protobuf::io::CodedInputStream doc(&ais);
+            return _read(doc);
+        }
+
+        void _read(google::protobuf::io::CodedInputStream &doc) {
+            const cpx::TagInfo tag_sec  = "1";
+            const cpx::TagInfo tag_nsec = "2";
+            auto tpl = std::make_tuple(cpx::tag_tie(this->val->tv_sec, tag_sec), cpx::tag_tie(this->val->tv_nsec, tag_nsec));
+
+            Deserialize<google::protobuf::io::CodedInputStream, decltype(tpl)> des(doc);
+            des.set_root();
+            des.into(tpl);
+        }
+    };
+
+    template <>
+    struct Serialize<google::protobuf::io::CodedOutputStream, std::tm> {
+        google::protobuf::io::CodedOutputStream &doc;
+
+        void from(const std::tm &v, const cpx::TagInfo &ti) {
+            std::string buffer = cpx::proto::protobuf::detail::to_message(v);
+            Serialize<google::protobuf::io::CodedOutputStream, std::string>{this->doc}.from(buffer, ti);
+        }
+
+        void from(const std::tm &v) {
+            std::tm tm  = v;
+            auto    sec = timegm(&tm);
+            Serialize<google::protobuf::io::CodedOutputStream, time_t>{this->doc}.from(sec, "1");
+        }
+    };
+
+    template <>
+    struct Deserialize<google::protobuf::io::CodedOutputStream, std::tm>
+        : public proto::protobuf::detail::DeserializeDispatcherFor<std::tm> {
+
+        using proto::protobuf::detail::DeserializeDispatcherFor<tm>::DeserializeDispatcherFor;
+        ~Deserialize() override = default;
+
+        void read() override {
+            if (this->is_root)
+                return _read(this->doc);
+
+            std::string                            buffer = cpx::proto::protobuf::detail::read_message(*this);
+            google::protobuf::io::ArrayInputStream ais(buffer.data(), (int)buffer.size());
+            google::protobuf::io::CodedInputStream doc(&ais);
+            return _read(doc);
+        }
+
+        void _read(google::protobuf::io::CodedInputStream &doc) {
+            time_t             time    = timegm(this->val);
+            const cpx::TagInfo tag_sec = "1";
+            auto               tpl     = std::make_tuple(cpx::tag_tie(time, tag_sec));
+
+            Deserialize<google::protobuf::io::CodedInputStream, decltype(tpl)> des(doc);
+            des.set_root();
+            des.into(tpl);
+            *this->val = *std::gmtime(&time);
         }
     };
 } // namespace cpx::serde
@@ -847,20 +933,43 @@ namespace cpx::proto::protobuf {
     template <typename T>
     [[nodiscard]]
     std::string dump(const T &val) {
-        return Dump{}.from(val);
+        return Dump<std::string>{}.from(val);
     }
 
     template <typename T>
     void parse(const std::string &str, T &val) {
-        Parse{str}.into(val);
+        Parse<std::string>{str}.into(val);
     }
 
     template <typename T>
     [[nodiscard]]
     T parse(const std::string &str) {
         T val;
-        Parse{str}.into(val);
+        Parse<std::string>{str}.into(val);
         return val;
     }
 } // namespace cpx::proto::protobuf
+
+namespace cpx::proto::protobuf::detail {
+    template <typename T>
+    std::string to_message(const T &v) {
+        std::string buffer;
+        {
+            google::protobuf::io::StringOutputStream os(&buffer);
+            google::protobuf::io::CodedOutputStream  doc(&os);
+            cpx::serde::Serialize<google::protobuf::io::CodedOutputStream, T>{doc}.from(v);
+        }
+
+        return buffer;
+    }
+
+    template <typename T>
+    std::string read_message(DeserializeDispatcherFor<T> &d) {
+        auto buffer = std::string();
+        auto des    = cpx::serde::Deserialize<google::protobuf::io::CodedInputStream, std::string>(d.doc);
+        des.inherit(d);
+        des.into(buffer);
+        return buffer;
+    }
+} // namespace cpx::proto::protobuf::detail
 #endif

@@ -4,29 +4,15 @@
 #include <cpx/yaml/yaml.h>
 #include <cpx/serde/serialize.h>
 #include <cpx/serde/deserialize.h>
-#include <cpx/serde/error.h>
-#include <cpx/time.h>
+#include <cpx/reflect.h>
+#include <cpx/extend.h>
 #include <array>
 #include <variant>
 #include <tuple>
-#include <unordered_map>
-#include <ctime>
 
 
 #ifndef YAML_H_62B23520_7C8E_11DE_8A39_0800200C9A66
 #    include <yaml-cpp/yaml.h>
-#endif
-
-#ifndef BOOST_PFR_HPP
-#    if __has_include(<boost/pfr.hpp>)
-#        include <boost/pfr.hpp>
-#    endif
-#endif
-
-#ifndef NEARGYE_MAGIC_ENUM_HPP
-#    if __has_include(<magic_enum/magic_enum.hpp>)
-#        include <magic_enum/magic_enum.hpp>
-#    endif
 #endif
 
 namespace __yaml_cpp = ::YAML;
@@ -361,20 +347,28 @@ namespace cpx::serde {
     template <typename... Ts>
     struct Serialize<__yaml_cpp::Node, std::tuple<Ts...>> {
         __yaml_cpp::Node from(const std::tuple<Ts...> &tpl) {
-            const TagInfoTuple<sizeof...(Ts)>         ti     = cpx::yaml::get_tag_info_from_tuple(tpl);
-            const std::array<TagInfo, sizeof...(Ts)> &ts     = ti.ts;
-            const bool                                is_obj = ti.is_obj;
+            auto flatten          = cpx::flatten(tpl);
+            using Tpl             = decltype(flatten);
+            constexpr bool is_map = cpx::detail::tuple_has_any_tagged_type_v<Tpl>;
 
-            __yaml_cpp::Node node(is_obj ? __yaml_cpp::NodeType::Map : __yaml_cpp::NodeType::Sequence);
+            __yaml_cpp::Node node(is_map ? __yaml_cpp::NodeType::Map : __yaml_cpp::NodeType::Sequence);
 
-            tuple_for_each(tpl, [&](const auto &item, const size_t i) {
-                const TagInfo &t = ts[i];
-                const auto    &v = detail::get_underlying_value(item);
-                using T          = std::decay_t<decltype(v)>;
+            size_t idx = 0;
+            tuple_for_each(tpl, [&](auto &item, const size_t) {
+                const cpx::TagInfo &t       = cpx::yaml::get_tag_info(item);
+                auto               &v       = cpx::detail::get_underlying_value(item);
+                using T                     = std::decay_t<decltype(v)>;
+                constexpr bool serializable = cpx::serde::is_serializable_v<__yaml_cpp::Node, T>;
 
-                if (!is_serializable_v<__yaml_cpp::Node, T> || (is_obj && t.key == "") ||
-                    (t.omitempty && detail::is_empty_value(v)))
+                if (!serializable || (is_map && t.key == ""))
                     return;
+
+                size_t i = idx++;
+                if (t.omitempty && cpx::detail::is_empty_value(v)) {
+                    if constexpr (!is_map)
+                        node.push_back(__yaml_cpp::Node(__yaml_cpp::NodeType::Null));
+                    return;
+                }
 
                 __yaml_cpp::Node val;
                 try {
@@ -388,13 +382,13 @@ namespace cpx::serde {
                             val = Serialize<__yaml_cpp::Node, T>{}.from(v);
                     }
                 } catch (error &e) {
-                    if (is_obj)
+                    if (is_map)
                         e.add_context(t.key);
                     else
                         e.add_context(i);
                     throw;
                 }
-                if (is_obj)
+                if (is_map)
                     node[t.key] = val;
                 else
                     node.push_back(val);
@@ -409,28 +403,31 @@ namespace cpx::serde {
         const __yaml_cpp::Node &node;
 
         void into(std::tuple<Ts...> &tpl) const {
-            const TagInfoTuple<sizeof...(Ts)>         ti     = cpx::yaml::get_tag_info_from_tuple(tpl);
-            const std::array<TagInfo, sizeof...(Ts)> &ts     = ti.ts;
-            const bool                                is_obj = ti.is_obj;
+            auto flattened        = flatten(tpl);
+            using Tpl             = decltype(flattened);
+            constexpr bool is_map = cpx::detail::tuple_has_any_tagged_type_v<Tpl>;
 
-            if (!is_obj && !node.IsSequence())
+            if (!is_map && !node.IsSequence())
                 throw type_mismatch_error("array", ::cpx::yaml::jbeder_yaml::detail::type(node));
-            if (is_obj && !node.IsMap())
+            if (is_map && !node.IsMap())
                 throw type_mismatch_error("map", ::cpx::yaml::jbeder_yaml::detail::type(node));
             const auto &arr = node;
-            const auto &tbl = node;
+            const auto &map = node;
 
-            tuple_for_each(tpl, [&](auto &item, const size_t i) {
-                const TagInfo &t = ts[i];
-                auto          &v = detail::get_underlying_value(item);
-                using T          = std::decay_t<decltype(v)>;
+            size_t idx = 0;
+            tuple_for_each(tpl, [&](auto &item, const size_t) {
+                const cpx::TagInfo &t         = cpx::yaml::get_tag_info(item);
+                auto               &v         = detail::get_underlying_value(item);
+                using T                       = std::decay_t<decltype(v)>;
+                constexpr bool deserializable = cpx::serde::is_deserializable_v<__yaml_cpp::Node, T>;
 
-                if (is_obj && t.key == "")
+                if (!deserializable || (is_map && t.key == ""))
                     return;
 
+                const size_t     i = idx++;
                 __yaml_cpp::Node val;
-                if (is_obj) {
-                    if (auto it = tbl[t.key]; it.IsDefined())
+                if (is_map) {
+                    if (auto it = map[t.key]; it.IsDefined())
                         val = it;
                 } else {
                     if (i < arr.size())
@@ -446,11 +443,11 @@ namespace cpx::serde {
                         else
                             throw error("field with tag `noserde` can only be deserialized into std::string");
                     else {
-                        if constexpr (is_deserializable_v<__yaml_cpp::Node, T>)
+                        if constexpr (deserializable)
                             Deserialize<__yaml_cpp::Node, T>{val}.into(v);
                     }
                 } catch (error &e) {
-                    if (is_obj)
+                    if (is_map)
                         e.add_context(t.key);
                     else
                         e.add_context(i);
@@ -489,8 +486,7 @@ namespace cpx::serde {
                         type_names += e.expected_type + '|';
                     }
                 }(),
-                ...
-            );
+                ...);
             if (!done) {
                 type_names.pop_back();
                 throw type_mismatch_error(type_names, ::cpx::yaml::jbeder_yaml::detail::type(node));
@@ -538,75 +534,23 @@ namespace cpx::serde {
         }
     };
 
-    // std::tm
-    template <>
-    struct Serialize<__yaml_cpp::Node, std::tm> {
-        __yaml_cpp::Node from(const std::tm &tm) const {
-            return __yaml_cpp::Node(::cpx::tm_to_string(tm));
+    // generic reflection
+    template <typename T>
+    struct Serialize<__yaml_cpp::Node, T, std::enable_if_t<cpx::yaml::has_reflect_v<T>>> {
+        __yaml_cpp::Node from(const T &v) const {
+            return Serialize<__yaml_cpp::Node, cpx::yaml::const_reflect_t<T>>{}.from(cpx::yaml::reflect_of(v));
         }
     };
 
-    template <>
-    struct Deserialize<__yaml_cpp::Node, std::tm> {
+    template <typename T>
+    struct Deserialize<__yaml_cpp::Node, T, std::enable_if_t<cpx::yaml::has_reflect_v<T>>> {
         const __yaml_cpp::Node &node;
 
-        void into(std::tm &v) const {
-            std::string str;
-            Deserialize<__yaml_cpp::Node, std::string>{node}.into(str);
-            v = ::cpx::tm_from_string(str);
+        void into(T &v) const {
+            decltype(auto) r = cpx::yaml::reflect_of(v);
+            Deserialize<__yaml_cpp::Node, cpx::yaml::reflect_t<T>>{node}.into(r);
         }
     };
-
-#ifdef BOOST_PFR_HPP
-    template <typename S>
-    struct Serialize<__yaml_cpp::Node, S, std::enable_if_t<std::is_aggregate_v<S> && !std::is_same_v<S, std::tm>>> {
-        __yaml_cpp::Node from(const S &v) const {
-            auto tpl = boost::pfr::structure_tie(v);
-            return Serialize<__yaml_cpp::Node, decltype(tpl)>{}.from(tpl);
-        }
-    };
-
-    template <typename S>
-    struct Deserialize<__yaml_cpp::Node, S, std::enable_if_t<std::is_aggregate_v<S> && !std::is_same_v<S, std::tm>>> {
-        const __yaml_cpp::Node &node;
-
-        void into(S &v) const {
-            auto tpl = boost::pfr::structure_tie(v);
-            Deserialize<__yaml_cpp::Node, decltype(tpl)>{node}.into(tpl);
-        }
-    };
-#endif
-
-#ifdef NEARGYE_MAGIC_ENUM_HPP
-    // enum
-    template <typename S>
-    struct Serialize<__yaml_cpp::Node, S, std::enable_if_t<std::is_enum_v<S>>> {
-        __yaml_cpp::Node from(const S &v) const {
-            return Serialize<__yaml_cpp::Node, std::string_view>{}.from(magic_enum::enum_name(v));
-        }
-    };
-
-    template <typename S>
-    struct Deserialize<__yaml_cpp::Node, S, std::enable_if_t<std::is_enum_v<S>>> {
-        const __yaml_cpp::Node &node;
-
-        void into(S &v) const {
-            auto str = std::string();
-            Deserialize<__yaml_cpp::Node, std::string>{node}.into(str);
-
-            auto e = magic_enum::enum_cast<S>(str);
-            if (!e.has_value()) {
-                std::string what = "invalid value `" + str + "`, expected one of {";
-                for (std::string_view name : magic_enum::enum_names<S>()) {
-                    what += std::string(name) + ",";
-                }
-                what += "}";
-                throw error(std::move(what));
-            }
-            v = *e;
-        }
-    };
-#endif
 } // namespace cpx::serde
 
 namespace cpx::yaml::jbeder_yaml {

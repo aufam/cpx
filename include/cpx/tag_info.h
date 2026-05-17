@@ -4,7 +4,6 @@
 #include <cpx/tag.h>
 #include <cpx/optional.h>
 #include <cpx/tuple.h>
-#include <array>
 
 namespace cpx {
     struct TagInfo {
@@ -84,6 +83,7 @@ namespace cpx {
             }
         }
 
+        void operator=(const char *)     = delete;
         void operator=(std::string_view) = delete;
     };
 
@@ -165,12 +165,6 @@ namespace cpx {
         }
     };
 
-    template <size_t N>
-    struct TagInfoTuple {
-        std::array<TagInfo, N> ts     = {};
-        bool                   is_obj = true;
-    };
-
     template <typename T>
     constexpr TagInfo get_tag_info(const T &field, std::string_view tag) {
         std::string_view sv;
@@ -178,20 +172,6 @@ namespace cpx {
             sv = field.get_tag(tag);
 
         return {sv};
-    }
-
-    template <typename... T>
-    constexpr TagInfoTuple<sizeof...(T)> get_tag_info_from_tuple(const std::tuple<T...> &fields, std::string_view tag) {
-        TagInfoTuple<sizeof...(T)> ts       = {};
-        bool                       is_array = sizeof...(T) > 0;
-
-        tuple_for_each(fields, [&](const auto &field, size_t i) {
-            if (const TagInfo &t = ts.ts[i] = get_tag_info(field, tag); t.key != "")
-                is_array &= t.positional;
-        });
-
-        ts.is_obj = !is_array;
-        return ts;
     }
 } // namespace cpx
 
@@ -204,6 +184,25 @@ namespace cpx::detail {
 
     template <typename T>
     inline constexpr bool is_tag_info_for_v = is_tag_info_for<T>::value;
+
+
+    template <typename T>
+    struct tuple_has_any_tagged_type : std::false_type {};
+
+    template <typename T, typename... Ts>
+    struct tuple_has_any_tagged_type<std::tuple<T, Ts...>>
+        : std::bool_constant<
+              is_tag_info_for_v<std::decay_t<T>> || is_tagged_v<std::decay_t<T>> ||
+              ((is_tag_info_for_v<std::decay_t<Ts>> || is_tagged_v<std::decay_t<Ts>>) || ...)> {};
+
+    template <typename T, typename... Ts>
+    struct tuple_has_any_tagged_type<const std::tuple<T, Ts...>>
+        : std::bool_constant<
+              is_tag_info_for_v<std::decay_t<T>> || is_tagged_v<std::decay_t<T>> ||
+              ((is_tag_info_for_v<std::decay_t<Ts>> || is_tagged_v<std::decay_t<Ts>>) || ...)> {};
+
+    template <typename T>
+    inline constexpr bool tuple_has_any_tagged_type_v = tuple_has_any_tagged_type<T>::value;
 
 
     template <typename T>

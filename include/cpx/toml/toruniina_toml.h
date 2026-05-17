@@ -4,27 +4,14 @@
 #include <cpx/toml/toml.h>
 #include <cpx/serde/serialize.h>
 #include <cpx/serde/deserialize.h>
-#include <cpx/serde/error.h>
-#include <cpx/time.h>
+#include <cpx/reflect.h>
+#include <cpx/extend.h>
 #include <array>
 #include <variant>
 #include <tuple>
-#include <unordered_map>
 
 #ifndef TOML11_TOML_HPP
 #    include <toml.hpp>
-#endif
-
-#ifndef BOOST_PFR_HPP
-#    if __has_include(<boost/pfr.hpp>)
-#        include <boost/pfr.hpp>
-#    endif
-#endif
-
-#ifndef NEARGYE_MAGIC_ENUM_HPP
-#    if __has_include(<magic_enum/magic_enum.hpp>)
-#        include <magic_enum/magic_enum.hpp>
-#    endif
 #endif
 
 namespace __toml11 = ::toml;
@@ -315,6 +302,7 @@ namespace cpx::serde {
     struct Serialize<__toml11::value, std::array<T, N>, std::enable_if_t<is_serializable_v<__toml11::value, T>>> {
         __toml11::value from(const std::array<T, N> &v) const {
             __toml11::value arr = __toml11::array();
+            arr.as_array(std::nothrow).reserve(N);
             for (auto &item : v)
                 arr.push_back(Serialize<__toml11::value, T>{}.from(item));
             return arr;
@@ -348,6 +336,7 @@ namespace cpx::serde {
     struct Serialize<__toml11::value, std::vector<T, A>, std::enable_if_t<is_serializable_v<__toml11::value, T>>> {
         __toml11::value from(const std::vector<T, A> &v) const {
             __toml11::value arr = __toml11::array();
+            arr.as_array(std::nothrow).reserve(v.size());
             for (auto &item : v)
                 arr.push_back(Serialize<__toml11::value, T>{}.from(item));
             return arr;
@@ -381,19 +370,23 @@ namespace cpx::serde {
     template <typename... Ts>
     struct Serialize<__toml11::value, std::tuple<Ts...>> {
         __toml11::value from(const std::tuple<Ts...> &tpl) {
-            const TagInfoTuple<sizeof...(Ts)>         ti     = cpx::toml::get_tag_info_from_tuple(tpl);
-            const std::array<TagInfo, sizeof...(Ts)> &ts     = ti.ts;
-            const bool                                is_obj = ti.is_obj;
+            auto flatten           = cpx::flatten(tpl);
+            using Tpl              = decltype(flatten);
+            constexpr bool  is_tbl = cpx::detail::tuple_has_any_tagged_type_v<Tpl>;
+            __toml11::value node   = is_tbl ? __toml11::value(__toml11::table()) : __toml11::value(__toml11::array());
 
-            __toml11::value node = is_obj ? __toml11::value(__toml11::table()) : __toml11::value(__toml11::array());
+            size_t idx = 0;
+            tuple_for_each(tpl, [&](auto &item, const size_t) {
+                const cpx::TagInfo &t       = cpx::toml::get_tag_info(item);
+                auto               &v       = cpx::detail::get_underlying_value(item);
+                using T                     = std::decay_t<decltype(v)>;
+                constexpr bool serializable = cpx::serde::is_serializable_v<__toml11::value, T>;
 
-            tuple_for_each(tpl, [&](const auto &item, const size_t i) {
-                const TagInfo &t = ts[i];
-                const auto    &v = detail::get_underlying_value(item);
-                using T          = std::decay_t<decltype(v)>;
+                if (!serializable || (is_tbl && t.key == ""))
+                    return;
 
-                if (!is_serializable_v<__toml11::value, T> || (is_obj && t.key == "") ||
-                    (t.omitempty && detail::is_empty_value(v)))
+                size_t i = idx++;
+                if (t.omitempty && detail::is_empty_value(v) && is_tbl)
                     return;
 
                 __toml11::value val;
@@ -404,17 +397,17 @@ namespace cpx::serde {
                         else
                             throw error("field with tag `noserde` can only be serialized from std::string");
                     else {
-                        if constexpr (is_serializable_v<__toml11::value, T>)
+                        if constexpr (serializable)
                             val = Serialize<__toml11::value, T>{}.from(v);
                     }
                 } catch (error &e) {
-                    if (is_obj)
+                    if (is_tbl)
                         e.add_context(t.key);
                     else
                         e.add_context(i);
                     throw;
                 }
-                if (is_obj)
+                if (is_tbl)
                     node.as_table(std::nothrow)[std::string(t.key)] = std::move(val);
                 else
                     node.as_array(std::nothrow).push_back(std::move(val));
@@ -429,28 +422,31 @@ namespace cpx::serde {
         const __toml11::value &node;
 
         void into(std::tuple<Ts...> &tpl) const {
-            const TagInfoTuple<sizeof...(Ts)>         ti     = cpx::toml::get_tag_info_from_tuple(tpl);
-            const std::array<TagInfo, sizeof...(Ts)> &ts     = ti.ts;
-            const bool                                is_obj = ti.is_obj;
+            auto flattened        = flatten(tpl);
+            using Tpl             = decltype(flattened);
+            constexpr bool is_tbl = cpx::detail::tuple_has_any_tagged_type_v<Tpl>;
 
-            if (!is_obj && !node.is_array())
+            if (!is_tbl && !node.is_array())
                 throw type_mismatch_error("array", ::cpx::toml::toruniina_toml::detail::type(node));
-            if (is_obj && !node.is_table())
+            if (is_tbl && !node.is_table())
                 throw type_mismatch_error("table", ::cpx::toml::toruniina_toml::detail::type(node));
             const __toml11::array *arr = &node.as_array(std::nothrow);
             const __toml11::table *tbl = &node.as_table(std::nothrow);
 
-            tuple_for_each(tpl, [&](auto &item, const size_t i) {
-                const TagInfo &t = ts[i];
-                auto          &v = detail::get_underlying_value(item);
-                using T          = std::decay_t<decltype(v)>;
+            size_t idx = 0;
+            tuple_for_each(tpl, [&](auto &item, const size_t) {
+                const cpx::TagInfo &t         = cpx::toml::get_tag_info(item);
+                auto               &v         = detail::get_underlying_value(item);
+                using T                       = std::decay_t<decltype(v)>;
+                constexpr bool deserializable = cpx::serde::is_deserializable_v<__toml11::value, T>;
 
-                if (is_obj && t.key == "")
+                if (!deserializable || (is_tbl && t.key == ""))
                     return;
 
+                const size_t           i = idx++;
                 const __toml11::value  empty;
                 const __toml11::value *val = &empty;
-                if (is_obj) {
+                if (is_tbl) {
                     if (auto it = tbl->find(std::string(t.key)); it != tbl->end())
                         val = &it->second;
                 } else {
@@ -471,7 +467,7 @@ namespace cpx::serde {
                             Deserialize<__toml11::value, T>{*val}.into(v);
                     }
                 } catch (error &e) {
-                    if (is_obj)
+                    if (is_tbl)
                         e.add_context(t.key);
                     else
                         e.add_context(i);
@@ -510,8 +506,7 @@ namespace cpx::serde {
                         type_names += e.expected_type + '|';
                     }
                 }(),
-                ...
-            );
+                ...);
             if (!done) {
                 type_names.pop_back();
                 throw type_mismatch_error(type_names, ::cpx::toml::toruniina_toml::detail::type(node));
@@ -681,57 +676,6 @@ namespace cpx::serde {
             cpx::serde::Deserialize<__toml11::value, cpx::toml::reflect_t<T>>{node}.into(r);
         }
     };
-
-#ifdef BOOST_PFR_HPP
-    template <typename S>
-    struct Serialize<__toml11::value, S, std::enable_if_t<std::is_aggregate_v<S> && !cpx::toml::has_reflect_v<S>>> {
-        __toml11::value from(const S &v) const {
-            auto tpl = boost::pfr::structure_tie(v);
-            return Serialize<__toml11::value, decltype(tpl)>{}.from(tpl);
-        }
-    };
-
-    template <typename S>
-    struct Deserialize<__toml11::value, S, std::enable_if_t<std::is_aggregate_v<S> && !cpx::toml::has_reflect_v<S>>> {
-        const __toml11::value &node;
-
-        void into(S &v) const {
-            auto tpl = boost::pfr::structure_tie(v);
-            Deserialize<__toml11::value, decltype(tpl)>{node}.into(tpl);
-        }
-    };
-#endif
-
-#ifdef NEARGYE_MAGIC_ENUM_HPP
-    // enum
-    template <typename S>
-    struct Serialize<__toml11::value, S, std::enable_if_t<std::is_enum_v<S> && !cpx::toml::has_reflect_v<S>>> {
-        __toml11::value from(const S &v) const {
-            return Serialize<__toml11::value, std::string_view>{}.from(magic_enum::enum_name(v));
-        }
-    };
-
-    template <typename S>
-    struct Deserialize<__toml11::value, S, std::enable_if_t<std::is_enum_v<S> && !cpx::toml::has_reflect_v<S>>> {
-        const __toml11::value &node;
-
-        void into(S &v) const {
-            auto str = std::string();
-            Deserialize<__toml11::value, std::string>{node}.into(str);
-
-            auto e = magic_enum::enum_cast<S>(str);
-            if (!e.has_value()) {
-                std::string what = "invalid value `" + str + "`, expected one of {";
-                for (std::string_view name : magic_enum::enum_names<S>()) {
-                    what += std::string(name) + ",";
-                }
-                what += "}";
-                throw error(std::move(what));
-            }
-            v = *e;
-        }
-    };
-#endif
 } // namespace cpx::serde
 
 namespace cpx::toml::toruniina_toml {

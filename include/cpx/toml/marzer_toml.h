@@ -4,28 +4,14 @@
 #include <cpx/toml/toml.h>
 #include <cpx/serde/serialize.h>
 #include <cpx/serde/deserialize.h>
-#include <cpx/serde/error.h>
+#include <cpx/reflect.h>
+#include <cpx/extend.h>
 #include <array>
-#include <cstddef>
 #include <variant>
 #include <tuple>
-#include <unordered_map>
-#include <ctime>
 
 #ifndef TOMLPLUSPLUS_HPP
 #    include <toml++/toml.h>
-#endif
-
-#ifndef BOOST_PFR_HPP
-#    if __has_include(<boost/pfr.hpp>)
-#        include <boost/pfr.hpp>
-#    endif
-#endif
-
-#ifndef NEARGYE_MAGIC_ENUM_HPP
-#    if __has_include(<magic_enum/magic_enum.hpp>)
-#        include <magic_enum/magic_enum.hpp>
-#    endif
 #endif
 
 namespace __tomlpp = ::toml;
@@ -80,9 +66,9 @@ namespace cpx::serde {
         template <typename T>
         __tomlpp::table from(const T &v) const {
             auto val = Serialize<__tomlpp::node, T>{}.from(v);
-            if (__tomlpp::table *tbl = val->as_table()) {
+            if (__tomlpp::table *tbl = val->as_table())
                 return std::move(*tbl);
-            } else
+            else
                 throw type_mismatch_error("table", std::string(__tomlpp::impl::node_type_friendly_names[(int)val->type()]));
         }
     };
@@ -308,6 +294,7 @@ namespace cpx::serde {
     struct Serialize<__tomlpp::node, std::array<T, N>, std::enable_if_t<is_serializable_v<__tomlpp::node, T>>> {
         std::unique_ptr<__tomlpp::node> from(const std::array<T, N> &v) const {
             auto arr = std::make_unique<__tomlpp::array>();
+            arr->reserve(N);
             for (auto &item : v)
                 arr->push_back(std::move(*Serialize<__tomlpp::node, T>{}.from(item)));
             return arr;
@@ -344,6 +331,7 @@ namespace cpx::serde {
     struct Serialize<__tomlpp::node, std::vector<T, A>, std::enable_if_t<is_serializable_v<__tomlpp::node, T>>> {
         std::unique_ptr<__tomlpp::node> from(const std::vector<T, A> &v) const {
             auto arr = std::make_unique<__tomlpp::array>();
+            arr->reserve(v.size());
             for (auto &item : v)
                 arr->push_back(std::move(*Serialize<__tomlpp::node, T>{}.from(item)));
             return arr;
@@ -380,20 +368,25 @@ namespace cpx::serde {
     template <typename... Ts>
     struct Serialize<__tomlpp::node, std::tuple<Ts...>> {
         std::unique_ptr<__tomlpp::node> from(const std::tuple<Ts...> &tpl) {
-            const TagInfoTuple<sizeof...(Ts)>         ti     = cpx::toml::get_tag_info_from_tuple(tpl);
-            const std::array<TagInfo, sizeof...(Ts)> &ts     = ti.ts;
-            const bool                                is_obj = ti.is_obj;
+            auto flatten          = cpx::flatten(tpl);
+            using Tpl             = decltype(flatten);
+            constexpr bool is_tbl = cpx::detail::tuple_has_any_tagged_type_v<Tpl>;
 
-            std::unique_ptr<__tomlpp::node> node = is_obj ? std::unique_ptr<__tomlpp::node>(new __tomlpp::table)
+            std::unique_ptr<__tomlpp::node> node = is_tbl ? std::unique_ptr<__tomlpp::node>(new __tomlpp::table)
                                                           : std::unique_ptr<__tomlpp::node>(new __tomlpp::array);
 
-            tuple_for_each(tpl, [&](const auto &item, const size_t i) {
-                const TagInfo &t = ts[i];
-                const auto    &v = detail::get_underlying_value(item);
-                using T          = std::decay_t<decltype(v)>;
+            size_t idx = 0;
+            tuple_for_each(tpl, [&](auto &item, const size_t) {
+                const cpx::TagInfo &t       = cpx::toml::get_tag_info(item);
+                auto               &v       = cpx::detail::get_underlying_value(item);
+                using T                     = std::decay_t<decltype(v)>;
+                constexpr bool serializable = cpx::serde::is_serializable_v<__tomlpp::node, T>;
 
-                if (!is_serializable_v<__tomlpp::node, T> || (is_obj && t.key == "") ||
-                    (t.omitempty && detail::is_empty_value(v)))
+                if (!serializable || (is_tbl && t.key == ""))
+                    return;
+
+                size_t i = idx++;
+                if (t.omitempty && detail::is_empty_value(v) && is_tbl)
                     return;
 
                 std::unique_ptr<__tomlpp::node> val;
@@ -408,13 +401,13 @@ namespace cpx::serde {
                             val = Serialize<__tomlpp::node, T>{}.from(v);
                     }
                 } catch (error &e) {
-                    if (is_obj)
+                    if (is_tbl)
                         e.add_context(t.key);
                     else
                         e.add_context(i);
                     throw;
                 }
-                if (is_obj)
+                if (is_tbl)
                     node->as_table()->insert_or_assign(t.key, std::move(*val));
                 else
                     node->as_array()->push_back(std::move(*val));
@@ -432,26 +425,29 @@ namespace cpx::serde {
             if (!node)
                 throw type_mismatch_error("table|array", "null");
 
-            const TagInfoTuple<sizeof...(Ts)>         ti     = cpx::toml::get_tag_info_from_tuple(tpl);
-            const std::array<TagInfo, sizeof...(Ts)> &ts     = ti.ts;
-            const bool                                is_obj = ti.is_obj;
+            auto flattened        = flatten(tpl);
+            using Tpl             = decltype(flattened);
+            constexpr bool is_tbl = cpx::detail::tuple_has_any_tagged_type_v<Tpl>;
 
             auto arr = node->as_array();
             auto tbl = node->as_table();
-            if (!is_obj && !arr)
+            if (!is_tbl && !arr)
                 throw type_mismatch_error("array", std::string(__tomlpp::impl::node_type_friendly_names[(int)node->type()]));
-            if (is_obj && !tbl)
+            if (is_tbl && !tbl)
                 throw type_mismatch_error("table", std::string(__tomlpp::impl::node_type_friendly_names[(int)node->type()]));
 
-            tuple_for_each(tpl, [&](auto &item, const size_t i) {
-                const TagInfo &t = ts[i];
-                auto          &v = detail::get_underlying_value(item);
-                using T          = std::decay_t<decltype(v)>;
+            size_t idx = 0;
+            tuple_for_each(tpl, [&](auto &item, const size_t) {
+                const cpx::TagInfo &t         = cpx::toml::get_tag_info(item);
+                auto               &v         = detail::get_underlying_value(item);
+                using T                       = std::decay_t<decltype(v)>;
+                constexpr bool deserializable = cpx::serde::is_deserializable_v<__tomlpp::node, T>;
 
-                if (is_obj && t.key == "")
+                if (!deserializable || (is_tbl && t.key == ""))
                     return;
 
-                const __tomlpp::node *val = is_obj ? tbl->get(t.key) : arr->get(i);
+                const size_t          i   = idx++;
+                const __tomlpp::node *val = is_tbl ? tbl->get(t.key) : arr->get(i);
                 if (!val && t.skipmissing)
                     return;
 
@@ -466,7 +462,7 @@ namespace cpx::serde {
                             Deserialize<__tomlpp::node, T>{val}.into(v);
                     }
                 } catch (error &e) {
-                    if (is_obj)
+                    if (is_tbl)
                         e.add_context(t.key);
                     else
                         e.add_context(i);
@@ -512,8 +508,7 @@ namespace cpx::serde {
                         type_names += e.expected_type + '|';
                     }
                 }(),
-                ...
-            );
+                ...);
             if (!done) {
                 type_names.pop_back();
                 throw type_mismatch_error(type_names, std::string(__tomlpp::impl::node_type_friendly_names[(int)node->type()]));
@@ -566,7 +561,7 @@ namespace cpx::serde {
     // std::tm
     template <>
     struct Serialize<__tomlpp::node, std::tm> {
-        std::unique_ptr<__tomlpp::node> from(const std::tm &tm) const {
+        std::unique_ptr<__tomlpp::node> from(const std::tm &tm, long nanos) const {
             __tomlpp::date_time dt = {};
 
             if (tm.tm_mday > 0) {
@@ -575,10 +570,11 @@ namespace cpx::serde {
                 dt.date.day   = tm.tm_mday;
             }
 
-            dt.time.hour   = tm.tm_hour;
-            dt.time.minute = tm.tm_min;
-            dt.time.second = tm.tm_sec;
-            dt.offset      = __tomlpp::time_offset{};
+            dt.time.hour       = tm.tm_hour;
+            dt.time.minute     = tm.tm_min;
+            dt.time.second     = tm.tm_sec;
+            dt.time.nanosecond = nanos;
+            dt.offset          = __tomlpp::time_offset{};
 
             if (tm.tm_mday <= 0) {
                 return std::make_unique<__tomlpp::value<__tomlpp::time>>(dt.time);
@@ -591,11 +587,11 @@ namespace cpx::serde {
     struct Deserialize<__tomlpp::node, std::tm> {
         const __tomlpp::node *node;
 
-        void into(std::tm &v) const {
+        void into(std::tm &v, long *nanos = nullptr) const {
             if (!node) {
                 throw type_mismatch_error("time", "null");
             } else if (auto val = node->as_date_time()) {
-                to_tm(val->get().time, v);
+                to_tm(val->get().time, v, nanos);
                 to_tm(val->get().date, v);
                 std::time_t t = std::mktime(&v);
                 if (auto &off = val->get().offset; off.has_value())
@@ -604,7 +600,7 @@ namespace cpx::serde {
             } else if (auto val = node->as_date()) {
                 to_tm(val->get(), v);
             } else if (auto val = node->as_time()) {
-                to_tm(val->get(), v);
+                to_tm(val->get(), v, nanos);
             } else
                 throw type_mismatch_error("time", std::string(__tomlpp::impl::node_type_friendly_names[(int)node->type()]));
         }
@@ -621,10 +617,12 @@ namespace cpx::serde {
             tm.tm_mday = d.day;
         }
 
-        static void to_tm(const __tomlpp::time &t, std::tm &tm) {
+        static void to_tm(const __tomlpp::time &t, std::tm &tm, long *nanos) {
             tm.tm_hour = t.hour;
             tm.tm_min  = t.minute;
             tm.tm_sec  = t.second;
+            if (nanos)
+                *nanos = t.nanosecond;
         }
     };
 
@@ -645,57 +643,6 @@ namespace cpx::serde {
             cpx::serde::Deserialize<__tomlpp::node, cpx::toml::reflect_t<T>>{node}.into(r);
         }
     };
-
-#ifdef BOOST_PFR_HPP
-    template <typename S>
-    struct Serialize<__tomlpp::node, S, std::enable_if_t<std::is_aggregate_v<S> && !cpx::toml::has_reflect_v<S>>> {
-        std::unique_ptr<__tomlpp::node> from(const S &v) const {
-            auto tpl = boost::pfr::structure_tie(v);
-            return Serialize<__tomlpp::node, decltype(tpl)>{}.from(tpl);
-        }
-    };
-
-    template <typename S>
-    struct Deserialize<__tomlpp::node, S, std::enable_if_t<std::is_aggregate_v<S> && !cpx::toml::has_reflect_v<S>>> {
-        const __tomlpp::node *node;
-
-        void into(S &v) const {
-            auto tpl = boost::pfr::structure_tie(v);
-            Deserialize<__tomlpp::node, decltype(tpl)>{node}.into(tpl);
-        }
-    };
-#endif
-
-#ifdef NEARGYE_MAGIC_ENUM_HPP
-    // enum
-    template <typename S>
-    struct Serialize<__tomlpp::node, S, std::enable_if_t<std::is_enum_v<S> && !cpx::toml::has_reflect_v<S>>> {
-        std::unique_ptr<__tomlpp::node> from(const S &v) const {
-            return Serialize<__tomlpp::node, std::string_view>{}.from(magic_enum::enum_name(v));
-        }
-    };
-
-    template <typename S>
-    struct Deserialize<__tomlpp::node, S, std::enable_if_t<std::is_enum_v<S> && !cpx::toml::has_reflect_v<S>>> {
-        const __tomlpp::node *node;
-
-        void into(S &v) const {
-            auto str = std::string();
-            Deserialize<__tomlpp::node, std::string>{node}.into(str);
-
-            auto e = magic_enum::enum_cast<S>(str);
-            if (!e.has_value()) {
-                std::string what = "invalid value `" + str + "`, expected one of {";
-                for (std::string_view name : magic_enum::enum_names<S>()) {
-                    what += std::string(name) + ",";
-                }
-                what += "}";
-                throw error(std::move(what));
-            }
-            v = *e;
-        }
-    };
-#endif
 } // namespace cpx::serde
 
 namespace cpx::toml::marzer_toml {

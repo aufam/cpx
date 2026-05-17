@@ -4,27 +4,43 @@
 #include <cpx/json/json.h>
 #include <cpx/serde/serialize.h>
 #include <cpx/serde/deserialize.h>
-#include <cpx/serde/error.h>
 #include <cpx/reflect.h>
+#include <cpx/extend.h>
 #include <variant>
 
 #ifndef INCLUDE_NLOHMANN_JSON_HPP_
 #    include <nlohmann/json.hpp>
 #endif
 
-#ifndef BOOST_PFR_HPP
-#    if __has_include(<boost/pfr.hpp>)
-#        include <boost/pfr.hpp>
-#    endif
-#endif
-
-#ifndef NEARGYE_MAGIC_ENUM_HPP
-#    if __has_include(<magic_enum/magic_enum.hpp>)
-#        include <magic_enum/magic_enum.hpp>
-#    endif
-#endif
-
 namespace cpx::json::nlohmann_json {
+    template <typename T>
+    struct Reflect : std::false_type {
+        using const_type = type;
+    };
+
+    template <typename T>
+    struct has_reflect
+        : std::bool_constant<(Reflect<T>::value || cpx::json::has_reflect_v<T>) && !std::is_same_v<T, nlohmann::json::value_t>> {
+    };
+
+    template <typename T>
+    inline constexpr bool has_reflect_v = has_reflect<T>::value;
+
+    template <typename T>
+    using reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::type, cpx::json::reflect_t<T>>;
+
+    template <typename T>
+    using const_reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::const_type, cpx::json::const_reflect_t<T>>;
+
+    template <typename T>
+    constexpr decltype(auto) reflect_of(T &&v) {
+        if constexpr (Reflect<std::decay_t<T>>::value)
+            return Reflect<std::decay_t<T>>::of(std::forward<T>(v));
+        else
+            return cpx::json::reflect_of(std::forward<T>(v));
+    }
+
+
     template <typename From>
     using Serialize = ::cpx::serde::Serialize<nlohmann::json, From>;
 
@@ -39,6 +55,9 @@ namespace cpx::json::nlohmann_json {
 
     template <typename T>
     std::string dump(const T &val, int indent = -1, char indent_char = ' ', bool ensure_ascii = false);
+
+    template <typename T>
+    nlohmann::json dump_to_stream(const T &val, int indent = -1, char indent_char = ' ', bool ensure_ascii = false);
 
     template <typename T>
     T parse(const std::string &str, bool ignore_comments = false);
@@ -83,26 +102,63 @@ namespace nlohmann {
         }
     };
 
+    // variant
+    template <typename... T>
+    struct adl_serializer<
+        std::variant<T...>,
+        std::enable_if_t<
+            ((std::is_convertible_v<T, nlohmann::json> && cpx::serde::is_deserializable_v<nlohmann::json, T>) && ...)>> {
+
+        static void to_json(json &j, const std::variant<T...> &v) {
+            std::visit([&](const auto &var) { j = var; }, v);
+        }
+
+        static void from_json(const json &j, std::variant<T...> &v) {
+            bool        done = false;
+            std::string type_names;
+            (
+                [&]() {
+                    try {
+                        if (!done) {
+                            auto element = T{};
+                            cpx::serde::Deserialize<nlohmann::json, T>{j}.into(element);
+                            v    = std::move(element);
+                            done = true;
+                        }
+                    } catch (cpx::serde::type_mismatch_error &e) {
+                        type_names += e.expected_type + '|';
+                    }
+                }(),
+                ...);
+            if (!done) {
+                type_names.pop_back();
+                throw cpx::serde::type_mismatch_error(type_names, j.type_name());
+            }
+        }
+    };
+
     // tuple
     template <typename... Ts>
     struct adl_serializer<std::tuple<Ts...>> {
         static void to_json(json &j, const std::tuple<Ts...> &tpl) {
-            const cpx::TagInfoTuple<sizeof...(Ts)>         ts     = cpx::json::get_tag_info_from_tuple(tpl);
-            const std::array<cpx::TagInfo, sizeof...(Ts)> &ti     = ts.ts;
-            const bool                                     is_obj = ts.is_obj;
+            auto flattened        = flatten(tpl);
+            using Tpl             = decltype(flattened);
+            constexpr bool is_obj = cpx::detail::tuple_has_any_tagged_type_v<Tpl>;
 
-            if (is_obj)
-                j = nlohmann::json::object();
-            else
-                j = nlohmann::json::array();
+            j = is_obj ? nlohmann::json::object() : nlohmann::json::array();
 
-            cpx::tuple_for_each(tpl, [&](const auto &item, const size_t i) {
-                const cpx::TagInfo &t       = ti[i];
+            size_t idx = 0;
+            cpx::tuple_for_each(tpl, [&](const auto &item, const size_t) {
+                const cpx::TagInfo &t       = cpx::json::get_tag_info(item);
                 const auto         &v       = cpx::detail::get_underlying_value(item);
                 using T                     = std::decay_t<decltype(v)>;
                 constexpr bool serializable = cpx::serde::is_serializable_v<nlohmann::json, T>;
 
-                if (!serializable || (is_obj && t.key == "") || (t.omitempty && cpx::detail::is_empty_value(v)))
+                if (!serializable || (is_obj && t.key == ""))
+                    return;
+
+                size_t i = idx++;
+                if (t.omitempty && cpx::detail::is_empty_value(v))
                     return;
 
                 auto &val = is_obj ? j[t.key] : j[i];
@@ -131,27 +187,18 @@ namespace nlohmann {
         }
 
         static void from_json(const json &j, std::tuple<Ts...> &tpl) {
-            from_json_tpl(j, tpl);
-        }
-
-        static void from_json(const json &j, const std::tuple<Ts...> &tpl) {
-            from_json_tpl(j, tpl);
-        }
-
-    private:
-        template <typename Tpl>
-        static void from_json_tpl(const json &j, Tpl &tpl) {
-            const cpx::TagInfoTuple<sizeof...(Ts)>         ts     = cpx::json::get_tag_info_from_tuple(tpl);
-            const std::array<cpx::TagInfo, sizeof...(Ts)> &ti     = ts.ts;
-            const bool                                     is_obj = ts.is_obj;
+            auto flattened        = flatten(tpl);
+            using Tpl             = decltype(flattened);
+            constexpr bool is_obj = cpx::detail::tuple_has_any_tagged_type_v<Tpl>;
 
             if (is_obj && !j.is_object())
                 throw cpx::serde::type_mismatch_error("object", j.type_name());
             if (!is_obj && !j.is_array())
                 throw cpx::serde::type_mismatch_error("array", j.type_name());
 
-            cpx::tuple_for_each(tpl, [&](auto &item, const size_t i) {
-                const cpx::TagInfo &t         = ti[i];
+            size_t pos = 0;
+            cpx::tuple_for_each(tpl, [&](auto &item, const size_t) {
+                const cpx::TagInfo &t         = cpx::json::get_tag_info(item);
                 auto               &v         = cpx::detail::get_underlying_value(item);
                 using T                       = std::decay_t<decltype(v)>;
                 constexpr bool deserializable = cpx::serde::is_deserializable_v<nlohmann::json, T>;
@@ -159,10 +206,11 @@ namespace nlohmann {
                 if (!deserializable || (is_obj && t.key == ""))
                     return;
 
+                size_t                idx = pos++;
                 const nlohmann::json *ptr = nullptr;
                 try {
                     try {
-                        ptr = is_obj ? &j.at(t.key) : &j.at(i);
+                        ptr = is_obj ? &j.at(t.key) : &j.at(idx);
                     } catch (nlohmann::json::exception &e) {
                         if (t.skipmissing)
                             return;
@@ -186,99 +234,27 @@ namespace nlohmann {
                     if (is_obj)
                         e.add_context(t.key);
                     else
-                        e.add_context(i);
+                        e.add_context(idx);
                     throw;
                 }
             });
         }
     };
 
-    // variant
-    template <typename... T>
-    struct adl_serializer<
-        std::variant<T...>,
-        std::enable_if_t<
-            ((std::is_convertible_v<T, nlohmann::json> && cpx::serde::is_deserializable_v<nlohmann::json, T>) && ...)>> {
-
-        static void to_json(json &j, const std::variant<T...> &v) {
-            std::visit([&](const auto &var) { j = var; }, v);
-        }
-
-        static void from_json(const json &j, std::variant<T...> &v) {
-            bool        done = false;
-            std::string type_names;
-            (
-                [&]() {
-                    try {
-                        if (!done) {
-                            auto element = T{};
-                            cpx::serde::Deserialize<nlohmann::json, T>{j}.into(element);
-                            v    = std::move(element);
-                            done = true;
-                        }
-                    } catch (cpx::serde::type_mismatch_error &e) {
-                        type_names += e.expected_type + '|';
-                    }
-                }(),
-                ...
-            );
-            if (!done) {
-                type_names.pop_back();
-                throw cpx::serde::type_mismatch_error(type_names, j.type_name());
-            }
-        }
-    };
-
+    // reflection
     template <typename T>
-    struct adl_serializer<T, std::enable_if_t<cpx::has_reflect_v<T>>> {
-        using R = cpx::Reflect<T>;
-
+    struct adl_serializer<T, std::enable_if_t<cpx::json::nlohmann_json::has_reflect_v<T>>> {
         static void to_json(nlohmann::json &j, const T &v) {
-            j = cpx::serde::Serialize<nlohmann::json, typename R::const_type>{}.from(R::of(v));
+            j = cpx::serde::Serialize<nlohmann::json, cpx::json::nlohmann_json::const_reflect_t<T>>{}.from(
+                cpx::json::nlohmann_json::reflect_of(v)
+            );
         }
 
         static void from_json(const nlohmann::json &j, T &v) {
-            decltype(auto) hook = R::of(v);
-            cpx::serde::Deserialize<nlohmann::json, typename R::type>{j}.into(hook);
+            decltype(auto) proxy = cpx::json::nlohmann_json::reflect_of(v);
+            cpx::serde::Deserialize<nlohmann::json, cpx::json::nlohmann_json::reflect_t<T>>{j}.into(proxy);
         }
     };
-
-#ifdef BOOST_PFR_HPP
-    template <typename S>
-    struct adl_serializer<S, std::enable_if_t<std::is_aggregate_v<S> && !cpx::has_reflect_v<S>>> {
-        static void from_json(const json &j, S &v) {
-            auto tpl = boost::pfr::structure_tie(v);
-            j.get_to(tpl);
-        }
-
-        static void to_json(json &j, const S &v) {
-            j = boost::pfr::structure_tie(v);
-        }
-    };
-#endif
-
-#ifdef NEARGYE_MAGIC_ENUM_HPP
-    template <typename S>
-    struct adl_serializer<S, std::enable_if_t<std::is_enum_v<S> && !cpx::has_reflect_v<S>>> {
-        static void from_json(const json &j, S &v) {
-            auto str = j.get<std::string>();
-            auto e   = magic_enum::enum_cast<S>(str);
-            if (!e.has_value()) {
-                std::string what = "invalid value `" + str + "`, expected one of {";
-                for (std::string_view name : magic_enum::enum_names<S>()) {
-                    what += std::string(name) + ",";
-                }
-                what += "}";
-                throw cpx::serde::error(what);
-            }
-            v = *e;
-        }
-
-        static void to_json(json &j, const S &v) {
-            j = magic_enum::enum_name(v);
-        }
-    };
-#endif
 } // namespace nlohmann
 
 namespace cpx::serde {
