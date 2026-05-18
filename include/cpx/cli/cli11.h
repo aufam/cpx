@@ -10,13 +10,13 @@
 #include <CLI/CLI.hpp>
 
 namespace cpx::cli::cli11 {
-    using Parse = ::cpx::serde::Parse<CLI::App, std::pair<int, char **>>;
+    using Parse = cpx::serde::Parse<CLI::App, std::pair<int, char **>>;
 
     template <typename To>
-    using Deserialize = ::cpx::serde::Deserialize<CLI::App, To>;
+    using Deserialize = cpx::serde::Deserialize<CLI::App, To>;
 
     template <typename To>
-    using is_deserializable = ::cpx::serde::is_deserializable<CLI::App, To>;
+    using is_deserializable = cpx::serde::is_deserializable<CLI::App, To>;
 
     template <typename T>
     void parse(const std::string &app_desc, int argc, char **argv, T &v);
@@ -47,6 +47,16 @@ namespace cpx::cli::cli11::detail {
             return "-" + std::string(input.substr(0, 1)) + ",--" + std::string(input.substr(2));
     }
 
+    template <typename T>
+    struct is_primitive_type
+        : std::bool_constant<(std::is_arithmetic_v<T> || std::is_same_v<T, std::string>) && !std::is_same_v<T, bool>> {};
+
+    template <typename T>
+    struct is_string_reflect : std::bool_constant<
+                                   cpx::cli::has_reflect_v<T> && std::is_same_v<cpx::cli::reflect_t<T>, std::string> &&
+                                   (std::is_same_v<cpx::cli::const_reflect_t<T>, std::string> ||
+                                    std::is_same_v<cpx::cli::const_reflect_t<T>, std::string_view>)> {};
+
     class DeserializeDispatcher {
     public:
         explicit DeserializeDispatcher(CLI::App &app, bool is_root = false)
@@ -70,8 +80,9 @@ namespace cpx::cli::cli11::detail {
         virtual void into(T &v) const = 0;
 
         DeserializeDispatcherFor<T> &configure(const TagInfo &ti) {
-            option_name = cpx::cli::cli11::detail::
-                convert_flag_format(ti.key, ti.positional, is_tuple_v<T> || is_tuple_v<cpx::cli::reflect_t<T>>);
+            option_name = cpx::cli::cli11::detail::convert_flag_format(
+                ti.key, ti.positional, is_tuple_v<T> || is_tuple_v<cpx::cli::reflect_t<T>>
+            );
             help_string = std::string(ti.help);
             positional  = ti.positional;
             required    = !ti.skipmissing;
@@ -123,13 +134,13 @@ namespace cpx::serde {
                     parsed_subcommands->push_back(sub->get_name());
         }
 
-        template <typename... Ts>
-        std::string help(std::tuple<Ts...> &tpl) const {
+        template <typename T>
+        std::string help(T &v) const {
             auto       app     = CLI::App(app_desc, argv[0]);
             const bool is_root = true;
 
-            Deserialize<CLI::App, std::tuple<Ts...>> d(app, is_root);
-            d.into(tpl);
+            Deserialize<CLI::App, T> d(app, is_root);
+            d.into(v);
 
             return app.help();
         }
@@ -145,10 +156,7 @@ namespace cpx::serde {
     };
 
     template <typename T>
-    struct Deserialize<
-        CLI::App,
-        T,
-        std::enable_if_t<(std::is_arithmetic_v<T> || std::is_same_v<T, std::string>) && !std::is_same_v<T, bool>>>
+    struct Deserialize<CLI::App, T, std::enable_if_t<cpx::cli::cli11::detail::is_primitive_type<T>::value>>
         : public cli::cli11::detail::DeserializeDispatcherFor<T> {
         using cli::cli11::detail::DeserializeDispatcherFor<T>::DeserializeDispatcherFor;
 
@@ -164,10 +172,7 @@ namespace cpx::serde {
     };
 
     template <typename T>
-    struct Deserialize<
-        CLI::App,
-        std::vector<T>,
-        std::enable_if_t<(std::is_arithmetic_v<T> || std::is_same_v<T, std::string>) && !std::is_same_v<T, bool>>>
+    struct Deserialize<CLI::App, std::vector<T>, std::enable_if_t<cpx::cli::cli11::detail::is_primitive_type<T>::value>>
         : public cli::cli11::detail::DeserializeDispatcherFor<std::vector<T>> {
         using cli::cli11::detail::DeserializeDispatcherFor<std::vector<T>>::DeserializeDispatcherFor;
 
@@ -181,10 +186,7 @@ namespace cpx::serde {
     };
 
     template <typename T>
-    struct Deserialize<
-        CLI::App,
-        std::optional<T>,
-        std::enable_if_t<(std::is_arithmetic_v<T> || std::is_same_v<T, std::string>) && !std::is_same_v<T, bool>>>
+    struct Deserialize<CLI::App, std::optional<T>, std::enable_if_t<cpx::cli::cli11::detail::is_primitive_type<T>::value>>
         : public cli::cli11::detail::DeserializeDispatcherFor<std::optional<T>> {
         using cli::cli11::detail::DeserializeDispatcherFor<std::optional<T>>::DeserializeDispatcherFor;
 
@@ -202,7 +204,7 @@ namespace cpx::serde {
     struct Deserialize<
         CLI::App,
         std::variant<T...>,
-        std::enable_if_t<(((std::is_arithmetic_v<T> || std::is_same_v<T, std::string>) && !std::is_same_v<T, bool>) && ...)>>
+        std::enable_if_t<(cpx::cli::cli11::detail::is_primitive_type<T>::value && ...)>>
         : public cli::cli11::detail::DeserializeDispatcherFor<std::variant<T...>> {
         using cli::cli11::detail::DeserializeDispatcherFor<std::variant<T...>>::DeserializeDispatcherFor;
 
@@ -220,8 +222,7 @@ namespace cpx::serde {
                                     v = std::move(element);
                             }
                         }(),
-                        ...
-                    );
+                        ...);
                     if (!done)
                         throw type_mismatch_error("variant", "unknown"); // TODO
                 },
@@ -241,14 +242,17 @@ namespace cpx::serde {
     struct Deserialize<CLI::App, std::tuple<Ts...>> : public cli::cli11::detail::DeserializeDispatcherFor<std::tuple<Ts...>> {
         using cli::cli11::detail::DeserializeDispatcherFor<std::tuple<Ts...>>::DeserializeDispatcherFor;
 
-        void into(std::tuple<Ts...> &tpl) const override {
+        void into(std::tuple<Ts...> &tpl, std::function<void()> cb = nullptr) const override {
             CLI::App *sub = nullptr;
-            if (!this->is_root)
+            if (!this->is_root) {
                 sub = this->app.add_subcommand(this->option_name, this->help_string);
+                if (cb)
+                    sub->callback(std::move(cb));
+            }
 
-            tuple_for_each(tpl, [&](auto &item, size_t) {
+            cpx::tuple_for_each(cpx::flatten(tpl), [&](auto &item, size_t) {
                 const cpx::TagInfo &t         = cpx::cli::get_tag_info(item);
-                auto               &v         = detail::get_underlying_value(item);
+                auto               &v         = cpx::detail::get_underlying_value(item);
                 using T                       = std::decay_t<decltype(v)>;
                 constexpr bool deserializable = cpx::serde::is_deserializable_v<CLI::App, T>;
 
@@ -279,8 +283,23 @@ namespace cpx::serde {
     template <typename T>
     struct Deserialize<
         CLI::App,
-        T,
-        std::enable_if_t<cpx::cli::has_reflect_v<T> && std::is_same_v<cpx::cli::reflect_t<T>, std::string>>>
+        std::optional<T>,
+        std::enable_if_t<cpx::cli::has_reflect_v<T> && cpx::is_tuple_v<cpx::cli::reflect_t<T>>>>
+        : public cli::cli11::detail::DeserializeDispatcherFor<std::optional<T>> {
+        using cli::cli11::detail::DeserializeDispatcherFor<std::optional<T>>::DeserializeDispatcherFor;
+
+        void into(std::optional<T> &v) const override {
+            Deserialize<CLI::App, cpx::cli::reflect_t<T>> d(this->app);
+
+            auto val = std::make_shared<T>(); // TODO
+
+            decltype(auto) r = cpx::cli::reflect_of(*val);
+            d.configure(*this).into(r, [val, &v]() { v = *val; });
+        }
+    };
+
+    template <typename T>
+    struct Deserialize<CLI::App, T, std::enable_if_t<cpx::cli::cli11::detail::is_string_reflect<T>::value>>
         : public cli::cli11::detail::DeserializeDispatcherFor<T> {
         using cli::cli11::detail::DeserializeDispatcherFor<T>::DeserializeDispatcherFor;
 
@@ -313,10 +332,7 @@ namespace cpx::serde {
     };
 
     template <typename T>
-    struct Deserialize<
-        CLI::App,
-        std::optional<T>,
-        std::enable_if_t<cpx::cli::has_reflect_v<T> && std::is_same_v<cpx::cli::reflect_t<T>, std::string>>>
+    struct Deserialize<CLI::App, std::optional<T>, std::enable_if_t<cpx::cli::cli11::detail::is_string_reflect<T>::value>>
         : public cli::cli11::detail::DeserializeDispatcherFor<std::optional<T>> {
         using cli::cli11::detail::DeserializeDispatcherFor<std::optional<T>>::DeserializeDispatcherFor;
 
@@ -348,10 +364,7 @@ namespace cpx::serde {
     };
 
     template <typename T>
-    struct Deserialize<
-        CLI::App,
-        std::vector<T>,
-        std::enable_if_t<cpx::cli::has_reflect_v<T> && std::is_same_v<cpx::cli::reflect_t<T>, std::string>>>
+    struct Deserialize<CLI::App, std::vector<T>, std::enable_if_t<cpx::cli::cli11::detail::is_string_reflect<T>::value>>
         : public cli::cli11::detail::DeserializeDispatcherFor<std::vector<T>> {
         using cli::cli11::detail::DeserializeDispatcherFor<std::vector<T>>::DeserializeDispatcherFor;
 
