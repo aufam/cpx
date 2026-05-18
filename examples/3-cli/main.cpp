@@ -11,6 +11,8 @@ struct App {
     enum LogLevel { Debug, Info, Warn };
     Tag<LogLevel> log_level = {"fmt,opt:`log-level, skipmissing, help=Log level`", Info};
 
+    Tag<std::timespec> delay = "fmt,opt:`delay, skipmissing, help=specify delay`";
+
     struct Greet {};
     Tag<Greet> greet = "fmt,opt:`greet,help=Greet the name`";
 

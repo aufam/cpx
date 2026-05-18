@@ -70,9 +70,8 @@ namespace cpx::cli::cli11::detail {
         virtual void into(T &v) const = 0;
 
         DeserializeDispatcherFor<T> &configure(const TagInfo &ti) {
-            option_name = cpx::cli::cli11::detail::convert_flag_format(
-                ti.key, ti.positional, is_tuple_v<T> || is_tuple_v<cpx::cli::reflect_t<T>>
-            );
+            option_name = cpx::cli::cli11::detail::
+                convert_flag_format(ti.key, ti.positional, is_tuple_v<T> || is_tuple_v<cpx::cli::reflect_t<T>>);
             help_string = std::string(ti.help);
             positional  = ti.positional;
             required    = !ti.skipmissing;
@@ -81,6 +80,7 @@ namespace cpx::cli::cli11::detail {
         }
 
         DeserializeDispatcherFor<T> &configure(const DeserializeDispatcher &other) {
+            is_root     = other.is_root;
             option_name = other.option_name;
             help_string = other.help_string;
             positional  = other.positional;
@@ -220,7 +220,8 @@ namespace cpx::serde {
                                     v = std::move(element);
                             }
                         }(),
-                        ...);
+                        ...
+                    );
                     if (!done)
                         throw type_mismatch_error("variant", "unknown"); // TODO
                 },
@@ -263,7 +264,7 @@ namespace cpx::serde {
     };
 
     template <typename T>
-    struct Deserialize<CLI::App, T, std::enable_if_t<cpx::cli::has_reflect_v<T>>>
+    struct Deserialize<CLI::App, T, std::enable_if_t<cpx::cli::has_reflect_v<T> && cpx::is_tuple_v<cpx::cli::reflect_t<T>>>>
         : public cli::cli11::detail::DeserializeDispatcherFor<T> {
         using cli::cli11::detail::DeserializeDispatcherFor<T>::DeserializeDispatcherFor;
 
@@ -275,89 +276,118 @@ namespace cpx::serde {
         }
     };
 
+    template <typename T>
+    struct Deserialize<
+        CLI::App,
+        T,
+        std::enable_if_t<cpx::cli::has_reflect_v<T> && std::is_same_v<cpx::cli::reflect_t<T>, std::string>>>
+        : public cli::cli11::detail::DeserializeDispatcherFor<T> {
+        using cli::cli11::detail::DeserializeDispatcherFor<T>::DeserializeDispatcherFor;
 
-#ifdef NEARGYE_MAGIC_ENUM_HPP
-    template <typename S>
-    struct Deserialize<CLI::App, S, std::enable_if_t<std::is_enum_v<S>>>
-        : public cli::cli11::detail::DeserializeDispatcherFor<S> {
-        using cli::cli11::detail::DeserializeDispatcherFor<S>::DeserializeDispatcherFor;
-
-        void into(S &v) const override {
-            CLI::Option *opt = generic_into(v, this->app, this->option_name, this->help_string);
-            if (!this->env.empty())
-                opt->envname(this->env);
-            if (this->required)
-                opt->required(this->required);
-            else
-                opt->default_str(std::string(magic_enum::enum_name(v)));
-        }
-
-        enum class Method { Assign, Emplace, EmplaceBack };
-        template <Method m = Method::Assign, typename T>
-        static CLI::Option *generic_into(T &v, CLI::App &app, const std::string &option_name, const std::string &help_string) {
-            CLI::Option *opt = app.template add_option_function<std::string>(
-                option_name,
+        void into(T &v) const override {
+            CLI::Option *opt = this->app.template add_option_function<std::string>(
+                this->option_name,
                 [&v](const std::string &str) {
-                    auto e = magic_enum::enum_cast<S>(str);
-                    if constexpr (m == Method::Emplace)
-                        v.emplace(*e);
-                    else if constexpr (m == Method::EmplaceBack)
-                        v.emplace_back(*e);
-                    else
-                        v = *e;
+                    try {
+                        decltype(auto) proxy = cpx::cli::reflect_of(v);
+                        decltype(auto) p     = (std::string &)proxy;
+                        p                    = str;
+                    } catch (std::exception &e) {
+                        throw CLI::ParseError("Failed to parse " + str + ": " + e.what(), 1);
+                    }
+                    return true;
                 },
-                help_string
-            );
-
-            std::vector<std::string> enum_names;
-            for (auto &name : magic_enum::enum_names<S>()) {
-                enum_names.push_back(std::string(name));
-            }
-            opt->check(CLI::IsMember(enum_names));
-
-            return opt;
-        }
-    };
-
-    template <typename S>
-    struct Deserialize<CLI::App, std::optional<S>, std::enable_if_t<std::is_enum_v<S>>>
-        : public cli::cli11::detail::DeserializeDispatcherFor<std::optional<S>> {
-        using cli::cli11::detail::DeserializeDispatcherFor<std::optional<S>>::DeserializeDispatcherFor;
-
-        void into(std::optional<S> &v) const override {
-            CLI::Option *opt = Deserialize<CLI::App, S>::template generic_into<Deserialize<CLI::App, S>::Method::Emplace>(
-                v, this->app, this->option_name, this->help_string
+                this->help_string
             );
 
             if (!this->env.empty())
                 opt->envname(this->env);
-            if (v.has_value())
-                opt->default_str(std::string(magic_enum::enum_name(*v)));
+            if (this->required)
+                opt->required(this->required);
+            else {
+                const auto    &cv  = v;
+                decltype(auto) str = cpx::cli::reflect_of(cv);
+                opt->default_str(std::string(str));
+            }
         }
     };
 
-    template <typename S>
-    struct Deserialize<CLI::App, std::vector<S>, std::enable_if_t<std::is_enum_v<S>>>
-        : public cli::cli11::detail::DeserializeDispatcherFor<std::vector<S>> {
-        using cli::cli11::detail::DeserializeDispatcherFor<std::vector<S>>::DeserializeDispatcherFor;
+    template <typename T>
+    struct Deserialize<
+        CLI::App,
+        std::optional<T>,
+        std::enable_if_t<cpx::cli::has_reflect_v<T> && std::is_same_v<cpx::cli::reflect_t<T>, std::string>>>
+        : public cli::cli11::detail::DeserializeDispatcherFor<std::optional<T>> {
+        using cli::cli11::detail::DeserializeDispatcherFor<std::optional<T>>::DeserializeDispatcherFor;
 
-        void into(std::vector<S> &v) const override {
-            CLI::Option *opt = Deserialize<CLI::App, S>::template generic_into<Deserialize<CLI::App, S>::Method::EmplaceBack>(
-                v, this->app, this->option_name, this->help_string
+        void into(std::optional<T> &v) const override {
+            CLI::Option *opt = this->app.template add_option_function<std::string>(
+                this->option_name,
+                [&v](const std::string &str) {
+                    v = T{};
+                    try {
+                        decltype(auto) proxy = cpx::cli::reflect_of(v);
+                        decltype(auto) p     = (std::string &)proxy;
+                        p                    = str;
+                    } catch (std::exception &e) {
+                        throw CLI::ParseError("Failed to parse " + str + ": " + e.what(), 1);
+                    }
+                    return true;
+                },
+                this->help_string
             );
-            opt->expected(0, magic_enum::enum_names<S>().size());
 
-            if (this->required)
-                opt->required(this->required);
-            else if (!v.empty()) {
+            if (!this->env.empty())
+                opt->envname(this->env);
+            if (v.has_value()) {
+                const auto    &cv  = *v;
+                decltype(auto) str = cpx::cli::reflect_of(cv);
+                opt->default_str(std::string(str));
+            }
+        }
+    };
+
+    template <typename T>
+    struct Deserialize<
+        CLI::App,
+        std::vector<T>,
+        std::enable_if_t<cpx::cli::has_reflect_v<T> && std::is_same_v<cpx::cli::reflect_t<T>, std::string>>>
+        : public cli::cli11::detail::DeserializeDispatcherFor<std::vector<T>> {
+        using cli::cli11::detail::DeserializeDispatcherFor<std::vector<T>>::DeserializeDispatcherFor;
+
+        void into(std::vector<T> &v) const override {
+            CLI::Option *opt = this->app.template add_option_function<std::vector<std::string>>(
+                this->option_name,
+                [&v](const std::vector<std::string> &strs) {
+                    v.resize(strs.size());
+                    for (size_t i = 0; i < strs.size(); i++) {
+                        auto &dest = v[i];
+                        auto &src  = strs[i];
+                        try {
+                            decltype(auto) proxy = cpx::cli::reflect_of(dest);
+                            decltype(auto) p     = (std::string &)proxy;
+                            p                    = src;
+                        } catch (std::exception &e) {
+                            throw CLI::ParseError("Failed to parse " + src + ": " + e.what(), 1);
+                        }
+                    }
+                    return true;
+                },
+                this->help_string
+            );
+
+            if (!this->env.empty())
+                opt->envname(this->env);
+            if (!v.empty()) {
                 std::vector<std::string> enum_names;
-                for (auto &e : v)
-                    enum_names.push_back(std::string(magic_enum::enum_name(e)));
+                for (const auto &cv : v) {
+                    decltype(auto) str = cpx::cli::reflect_of(cv);
+                    enum_names.push_back(std::string(str));
+                }
                 opt->default_val(enum_names);
             }
         }
     };
-#endif
 } // namespace cpx::serde
 
 namespace cpx::cli::cli11 {

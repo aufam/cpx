@@ -92,10 +92,8 @@ struct fmt::formatter<std::variant<T...>, char, std::enable_if_t<(fmt::is_format
         fmt::context::iterator out = c.out();
         return std::visit(
             [&](const auto &var) {
-                if constexpr (
-                    std::is_same_v<std::decay_t<decltype(var)>, std::string> ||
-                    std::is_same_v<std::decay_t<decltype(var)>, std::string_view>
-                )
+                if constexpr (std::is_same_v<std::decay_t<decltype(var)>, std::string> ||
+                              std::is_same_v<std::decay_t<decltype(var)>, std::string_view>)
                     return fmt::format_to(out, "{:?}", var);
                 else
                     return fmt::format_to(out, "{}", var);
@@ -108,6 +106,13 @@ struct fmt::formatter<std::variant<T...>, char, std::enable_if_t<(fmt::is_format
 template <>
 struct fmt::formatter<std::timespec> : fmt::formatter<std::tm> {
     fmt::context::iterator format(const std::timespec &ts, fmt::context &c) const {
+        constexpr auto ten_years = 24l * 3600 * 365;
+
+        if (ts.tv_sec <= ten_years || ts.tv_sec >= 0) {
+            fmt::context::iterator out = c.out();
+            return fmt::format_to(out, "{}", cpx::ts_to_string(ts));
+        }
+
         std::tm tm;
 #if defined(_WIN32)
         _gmtime64_s(&tm, &ts.tv_sec);

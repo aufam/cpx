@@ -18,7 +18,7 @@ namespace cpx::cli {
     };
 
     template <typename T>
-    struct has_reflect : std::bool_constant<(Reflect<T>::value || cpx::has_reflect_v<T>) && !std::is_enum_v<T>> {};
+    struct has_reflect : std::bool_constant<Reflect<T>::value || cpx::has_reflect_v<T>> {};
 
     template <typename T>
     inline constexpr bool has_reflect_v = has_reflect<T>::value;

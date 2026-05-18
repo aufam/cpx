@@ -1,6 +1,3 @@
-// TODO: read into fixed size string
-// TODO; parse/dump from/into stream
-
 #ifndef CPX_PROTO_PROTOBUF_H
 #define CPX_PROTO_PROTOBUF_H
 
@@ -20,6 +17,10 @@
 
 #ifndef GOOGLE_PROTOBUF_IO_ZERO_COPY_STREAM_IMPL_LITE_H__
 #    include <google/protobuf/io/zero_copy_stream_impl_lite.h>
+#endif
+
+#ifndef GOOGLE_PROTOBUF_IO_ZERO_COPY_STREAM_IMPL_H__
+#    include <google/protobuf/io/zero_copy_stream_impl.h>
 #endif
 
 #ifndef GOOGLE_PROTOBUF_WIRE_FORMAT_LITE_H__
@@ -64,7 +65,7 @@ namespace cpx::proto::protobuf {
     using Dump = cpx::serde::Dump<google::protobuf::io::CodedOutputStream, To>;
 
     template <typename From>
-    using Parse = cpx::serde::Parse<google::protobuf::io::CodedInputStream, std::string>;
+    using Parse = cpx::serde::Parse<google::protobuf::io::CodedInputStream, From>;
 
     template <typename T>
     [[nodiscard]]
@@ -267,6 +268,44 @@ namespace cpx::serde {
         }
     };
 
+    template <size_t N>
+    struct Dump<google::protobuf::io::CodedOutputStream, std::array<uint8_t, N>> {
+        template <typename T>
+        std::array<uint8_t, N> from(const T &v) const {
+            std::array<uint8_t, N>                  buffer;
+            google::protobuf::io::ArrayOutputStream os(buffer.data(), (int)buffer.size());
+            google::protobuf::io::CodedOutputStream doc(&os);
+            Serialize<google::protobuf::io::CodedOutputStream, T>{doc}.from(v);
+            return buffer;
+        }
+    };
+
+    template <>
+    struct Dump<google::protobuf::io::CodedOutputStream, std::vector<uint8_t>> {
+        template <typename T>
+        std::vector<uint8_t> from(const T &v, size_t capacity) const {
+            std::vector<uint8_t>                    buffer(capacity);
+            google::protobuf::io::ArrayOutputStream os(buffer.data(), (int)buffer.size());
+            google::protobuf::io::CodedOutputStream doc(&os);
+            Serialize<google::protobuf::io::CodedOutputStream, T>{doc}.from(v);
+            buffer.resize(size_t(doc.ByteCount()));
+            return buffer;
+        }
+    };
+
+    template <>
+    struct Dump<google::protobuf::io::CodedOutputStream, std::ostream> {
+        std::ostream &stream;
+
+        template <typename T>
+        std::ostream &from(const T &v) const {
+            google::protobuf::io::OstreamOutputStream os(&stream);
+            google::protobuf::io::CodedOutputStream   doc(&os);
+            Serialize<google::protobuf::io::CodedOutputStream, T>{doc}.from(v);
+            return stream;
+        }
+    };
+
     template <>
     struct Parse<google::protobuf::io::CodedInputStream, std::string> {
         const std::string &buffer;
@@ -278,6 +317,24 @@ namespace cpx::serde {
 
             Deserialize<google::protobuf::io::CodedInputStream, T> des(doc);
             des.set_root().set_len(buffer.size());
+            des.into(v);
+
+            if (!doc.ConsumedEntireMessage())
+                throw serde::error("message not fully consumed");
+        }
+    };
+
+    template <>
+    struct Parse<google::protobuf::io::CodedInputStream, std::istream> {
+        std::istream &stream;
+
+        template <typename T>
+        void into(T &v) const {
+            google::protobuf::io::IstreamInputStream iis(&stream);
+            google::protobuf::io::CodedInputStream   doc(&iis);
+
+            Deserialize<google::protobuf::io::CodedInputStream, T> des(doc);
+            des.set_root();
             des.into(v);
 
             if (!doc.ConsumedEntireMessage())
@@ -327,13 +384,11 @@ namespace cpx::serde {
                         this->doc.WriteLittleEndian32(static_cast<uint32_t>(v));
                 } else if (zigzag) {
                     if constexpr (sizeof(T) == 8)
-                        this->doc.WriteVarint64(
-                            google::protobuf::internal::WireFormatLite::ZigZagEncode64(static_cast<int64_t>(v))
-                        );
+                        this->doc.WriteVarint64(google::protobuf::internal::WireFormatLite::ZigZagEncode64(static_cast<int64_t>(v)
+                        ));
                     else
-                        this->doc.WriteVarint32(
-                            google::protobuf::internal::WireFormatLite::ZigZagEncode32(static_cast<int32_t>(v))
-                        );
+                        this->doc.WriteVarint32(google::protobuf::internal::WireFormatLite::ZigZagEncode32(static_cast<int32_t>(v)
+                        ));
                 } else {
                     if constexpr (sizeof(T) == 8)
                         this->doc.WriteVarint64(static_cast<uint64_t>(v));
@@ -972,4 +1027,48 @@ namespace cpx::proto::protobuf::detail {
         return buffer;
     }
 } // namespace cpx::proto::protobuf::detail
+
+namespace cpx::proto::protobuf {
+    class OStream {
+        std::ostream &stream;
+
+    public:
+        explicit OStream(std::ostream &stream)
+            : stream(stream) {}
+
+        template <typename T>
+        std::ostream &operator<<(const T &v) const {
+            cpx::proto::protobuf::Dump<std::ostream>{stream}.from(v);
+            return stream;
+        }
+    };
+
+    class IStream {
+        std::istream &stream;
+
+    public:
+        explicit IStream(std::istream &stream)
+            : stream(stream) {}
+
+        template <typename T>
+        std::istream &operator>>(T &v) const {
+            cpx::proto::protobuf::Parse<std::istream>{stream}.into(v);
+            return stream;
+        }
+    };
+
+    inline constexpr class IO {
+    } io;
+} // namespace cpx::proto::protobuf
+
+namespace cpx::proto::protobuf::stream {
+    inline cpx::proto::protobuf::OStream operator<<(std::ostream &stream, const cpx::proto::protobuf::IO &) {
+        return OStream(stream);
+    }
+
+    inline cpx::proto::protobuf::IStream operator>>(std::istream &stream, const cpx::proto::protobuf::IO &) {
+        return IStream(stream);
+    }
+} // namespace cpx::proto::protobuf::stream
+
 #endif

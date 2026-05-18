@@ -1,6 +1,9 @@
 #include <cpx/proto/protobuf.h>
 #include <cpx/fmt.h>
 #include <cpx/reflect.h>
+#include <fstream>
+
+using namespace cpx::proto::protobuf::stream;
 
 template <typename T>
 using Tag = cpx::Tag<T>;
@@ -110,6 +113,18 @@ int main() {
     auto pp = cpx::proto::protobuf::parse<Person3>(buf);
     fmt::println("person = {}", pp);
 
-    auto e = cpx::proto::protobuf::parse<Person>("");
+    auto e = cpx::proto::protobuf::parse<Person3>("");
     fmt::println("empty = {}", e);
+
+    {
+        std::ofstream ofs("data.bin", std::ios::binary);
+        ofs << cpx::proto::protobuf::io << pp;
+    }
+
+    {
+        Person3       p;
+        std::ifstream ifs("data.bin", std::ios::binary);
+        ifs >> cpx::proto::protobuf::io >> p;
+        fmt::println("data.bin = {}", p);
+    }
 }
