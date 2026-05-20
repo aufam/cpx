@@ -80,9 +80,8 @@ namespace cpx::cli::cli11::detail {
         virtual void into(T &v) const = 0;
 
         DeserializeDispatcherFor<T> &configure(const TagInfo &ti) {
-            option_name = cpx::cli::cli11::detail::convert_flag_format(
-                ti.key, ti.positional, is_tuple_v<T> || is_tuple_v<cpx::cli::reflect_t<T>>
-            );
+            option_name = cpx::cli::cli11::detail::
+                convert_flag_format(ti.key, ti.positional, is_tuple_v<T> || is_tuple_v<cpx::cli::reflect_t<T>>);
             help_string = std::string(ti.help);
             positional  = ti.positional;
             required    = !ti.skipmissing;
@@ -222,7 +221,8 @@ namespace cpx::serde {
                                     v = std::move(element);
                             }
                         }(),
-                        ...);
+                        ...
+                    );
                     if (!done)
                         throw type_mismatch_error("variant", "unknown"); // TODO
                 },
@@ -242,7 +242,11 @@ namespace cpx::serde {
     struct Deserialize<CLI::App, std::tuple<Ts...>> : public cli::cli11::detail::DeserializeDispatcherFor<std::tuple<Ts...>> {
         using cli::cli11::detail::DeserializeDispatcherFor<std::tuple<Ts...>>::DeserializeDispatcherFor;
 
-        void into(std::tuple<Ts...> &tpl, std::function<void()> cb = nullptr) const override {
+        void into(std::tuple<Ts...> &tpl) const override {
+            into(tpl, nullptr);
+        }
+
+        void into(std::tuple<Ts...> &tpl, std::function<void()> cb) const {
             CLI::App *sub = nullptr;
             if (!this->is_root) {
                 sub = this->app.add_subcommand(this->option_name, this->help_string);
@@ -294,7 +298,17 @@ namespace cpx::serde {
             auto val = std::make_shared<T>(); // TODO
 
             decltype(auto) r = cpx::cli::reflect_of(*val);
-            d.configure(*this).into(r, [val, &v]() { v = *val; });
+            d.configure(*this);
+
+            std::string &name = d.option_name;
+            while (name.size() > 1) {
+                if (name.front() == '-')
+                    name = name.substr(1);
+                else
+                    break;
+            }
+
+            d.into(r, [val, &v]() { v = *val; });
         }
     };
 

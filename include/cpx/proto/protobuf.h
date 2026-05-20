@@ -233,7 +233,6 @@ namespace cpx::proto::protobuf::detail {
     public:
         using DeserializeDispatcher::DeserializeDispatcher;
 
-        // TODO
         DeserializeDispatcherFor(google::protobuf::io::CodedInputStream &doc, T &val) noexcept
             : proto::protobuf::detail::DeserializeDispatcher(doc)
             , val(&val) {}

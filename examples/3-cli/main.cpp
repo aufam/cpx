@@ -13,8 +13,12 @@ struct App {
 
     Tag<std::timespec> delay = "fmt,opt:`delay, skipmissing, help=specify delay`";
 
-    struct Greet {};
-    Tag<Greet> greet = "fmt,opt:`greet,help=Greet the name`";
+    struct Greet {
+        void greet(const std::string &name) {
+            fmt::println("Hello from greet {}", name);
+        }
+    };
+    Tag<std::optional<Greet>> greet = "fmt,opt:`greet,help=Greet the name`";
 
     struct Add {
         Tag<int> num1 = "fmt,opt:`num1,positional,help=First number`";
@@ -31,10 +35,11 @@ int main(int argc, char **argv) {
 
     if (subcommands.empty()) {
         fmt::println("{}: You are {}", app.log_level(), app.my_name());
-    } else if (const std::string &sub = subcommands.front(); sub == "greet") {
-        fmt::println("{}: Hello {}", app.log_level(), app.my_name());
-    } else if (sub == "add") {
+    } else if (const std::string &sub = subcommands.front(); sub == "add") {
         auto [a, b] = std::tuple(app.add().num1(), app.add().num2());
         fmt::println("{}: {} + {} = {}", app.log_level(), a, b, a + b);
     }
+
+    if (app.greet().has_value())
+        app.greet()->greet(app.my_name());
 }

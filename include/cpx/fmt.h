@@ -104,36 +104,61 @@ struct fmt::formatter<std::variant<T...>, char, std::enable_if_t<(fmt::is_format
 };
 
 template <>
-struct fmt::formatter<std::timespec> : fmt::formatter<std::tm> {
-    fmt::context::iterator format(const std::timespec &ts, fmt::context &c) const {
+struct fmt::formatter<std::timespec>
+    : fmt::formatter<std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds>> {
+
+    fmt::context::iterator format(const std::timespec &ts, fmt::context &ctx) const {
         constexpr auto ten_years = 24l * 3600 * 365;
 
-        if (ts.tv_sec <= ten_years || ts.tv_sec >= 0) {
-            fmt::context::iterator out = c.out();
+        if (ts.tv_sec <= ten_years && ts.tv_sec >= 0) {
+            auto out = ctx.out();
             return fmt::format_to(out, "{}", cpx::ts_to_string(ts));
         }
 
-        std::tm tm;
-#if defined(_WIN32)
-        _gmtime64_s(&tm, &ts.tv_sec);
-#else
-        ::gmtime_r(&ts.tv_sec, &tm);
-#endif
+        auto tp = std::chrono::system_clock::time_point{std::chrono::duration_cast<std::chrono::system_clock::duration>(
+            std::chrono::seconds(ts.tv_sec) + std::chrono::nanoseconds(ts.tv_nsec)
+        )};
 
-        // TODO: UTC?
-        auto out = fmt::formatter<std::tm>::format(tm, c);
-        out      = fmt::format_to(out, ".{:03}", ts.tv_nsec / 1000000);
-        return out;
+        auto tp_ms = std::chrono::floor<std::chrono::milliseconds>(tp);
+
+        return fmt::formatter<std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds>>::format(tp_ms, ctx);
     }
 };
 
 template <typename T>
-struct fmt::
-    formatter<T, char, std::enable_if_t<cpx::fmt::has_reflect_v<T> && fmt::is_formattable<cpx::fmt::const_reflect_t<T>>::value>>
-    : fmt::formatter<cpx::fmt::const_reflect_t<T>> {
+struct fmt::formatter<
+    T,
+    char,
+    std::enable_if_t<
+        cpx::fmt::has_reflect_v<T> && !cpx::is_tuple_v<cpx::fmt::const_reflect_t<T>> &&
+        fmt::is_formattable<cpx::fmt::const_reflect_t<T>>::value>> : fmt::formatter<cpx::fmt::const_reflect_t<T>> {
     fmt::context::iterator format(const T &v, fmt::context &c) const {
         return fmt::formatter<cpx::fmt::const_reflect_t<T>>::format(cpx::fmt::reflect_of(v), c);
     }
 };
 
+#ifdef BOOST_PFR_HPP
+template <typename T>
+struct fmt::formatter<
+    T,
+    char,
+    std::enable_if_t<
+        cpx::fmt::has_reflect_v<T> && cpx::is_tuple_v<cpx::fmt::const_reflect_t<T>> &&
+        !std::is_same_v<std::integral_constant<bool, false>, T> // TODO: why is this required
+        >> {
+
+    constexpr auto parse(fmt::format_parse_context &ctx) {
+        return ctx.begin();
+    }
+
+    fmt::context::iterator format(const T &v, fmt::context &c) const {
+        decltype(auto) tpl       = cpx::fmt::reflect_of(v);
+        const auto     flattened = cpx::flatten(tpl);
+
+        const auto formattable_tpl = std::apply([](auto &...tpl) { return cpx::tie_if<fmt::is_formattable>(tpl...); }, tpl);
+        fmt::context::iterator out = c.out();
+        return fmt::format_to(out, "{}", formattable_tpl);
+    }
+};
+#endif
 #endif
