@@ -79,7 +79,7 @@ namespace cpx::proto::protobuf {
     T parse(const std::string &str);
 
     template <typename T>
-    constexpr cpx::TagInfo get_tag_info(const T &field) {
+    constexpr decltype(auto) get_tag_info(const T &field) {
         if constexpr (cpx::detail::is_tag_info_for_v<T>)
             return field.ti;
         else

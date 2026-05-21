@@ -19,34 +19,6 @@
 #endif
 
 namespace cpx {
-    template <typename T>
-    struct member_pointer_traits;
-
-    template <typename Class, typename Member>
-    struct member_pointer_traits<Member Class::*> {
-        using class_type  = Class;
-        using member_type = Member;
-    };
-
-    template <auto MemberPtr>
-    struct Field {
-        using traits = member_pointer_traits<decltype(MemberPtr)>;
-
-        using class_type  = typename traits::class_type;
-        using member_type = typename traits::member_type;
-
-        using const_ref = cpx::TagInfoFor<const member_type &, const TagInfo &>;
-        using ref       = cpx::TagInfoFor<member_type &, const TagInfo &>;
-    };
-
-    template <auto... MemberPtrs>
-    struct Fields {
-        static constexpr bool value = true;
-
-        using const_type = std::tuple<typename Field<MemberPtrs>::const_ref...>;
-        using type       = std::tuple<typename Field<MemberPtrs>::ref...>;
-    };
-
     template <typename T, typename Enable = void>
     struct Reflect : std::false_type {
         using const_type = type;
@@ -170,6 +142,7 @@ namespace cpx::detail {
     template <typename T, size_t N>
     struct is_std_array<std::array<T, N>> : std::true_type {};
 } // namespace cpx::detail
+
 
 #ifdef BOOST_PFR_HPP
 template <typename T>

@@ -5,7 +5,7 @@
 
 namespace cpx::cli {
     template <typename T>
-    constexpr TagInfo get_tag_info(const T &field) {
+    constexpr decltype(auto) get_tag_info(const T &field) {
         if constexpr (::cpx::detail::is_tag_info_for_v<T>)
             return field.ti;
         else

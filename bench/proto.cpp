@@ -1,6 +1,7 @@
 #include <benchmark/benchmark.h>
 #include <cpx/proto/protobuf.h>
 #include <cpx/fmt.h>
+#include <cpx/fields.h>
 #include "bench/person.pb.h"
 
 using namespace cpx;
@@ -27,41 +28,24 @@ namespace {
     };
 } // namespace
 
+static constexpr cpx::TagInfo name  = "name,field_number=1";
+static constexpr cpx::TagInfo id    = "id,field_number=2";
+static constexpr cpx::TagInfo email = "email,field_number=3";
+static constexpr cpx::TagInfo num1  = "num1,field_number=4";
+static constexpr cpx::TagInfo num2  = "num2,field_number=5";
+static constexpr cpx::TagInfo num3  = "num3,field_number=6";
+static constexpr cpx::TagInfo nums  = "7";
+
 template <>
-struct cpx::Reflect<Person3>
-    : cpx::Fields<&Person3::name, &Person3::id, &Person3::email, &Person3::num1, &Person3::num2, &Person3::num3, &Person3::nums> {
-    static constexpr cpx::TagInfo name  = "name,field_number=1";
-    static constexpr cpx::TagInfo id    = "id,field_number=2";
-    static constexpr cpx::TagInfo email = "email,field_number=3";
-    static constexpr cpx::TagInfo num1  = "num1,field_number=4";
-    static constexpr cpx::TagInfo num2  = "num2,field_number=5";
-    static constexpr cpx::TagInfo num3  = "num3,field_number=6";
-    static constexpr cpx::TagInfo nums  = "7";
-
-    static const_type of(const Person3 &p) {
-        return std::make_tuple(
-            cpx::tag_tie(p.name, name),
-            cpx::tag_tie(p.id, id),
-            cpx::tag_tie(p.email, email),
-            cpx::tag_tie(p.num1, num1),
-            cpx::tag_tie(p.num2, num2),
-            cpx::tag_tie(p.num3, num3),
-            cpx::tag_tie(p.nums, nums)
-        );
-    }
-
-    static type of(Person3 &p) {
-        return std::make_tuple(
-            cpx::tag_tie(p.name, name),
-            cpx::tag_tie(p.id, id),
-            cpx::tag_tie(p.email, email),
-            cpx::tag_tie(p.num1, num1),
-            cpx::tag_tie(p.num2, num2),
-            cpx::tag_tie(p.num3, num3),
-            cpx::tag_tie(p.nums, nums)
-        );
-    }
-};
+struct cpx::Reflect<Person3> //
+    : Fields<
+          Field<&Person3::name, name>,
+          Field<&Person3::id, id>,
+          Field<&Person3::email, email>,
+          Field<&Person3::num1, num1>,
+          Field<&Person3::num2, num2>,
+          Field<&Person3::num3, num3>,
+          Field<&Person3::nums, nums>> {};
 
 using Person1 = Person;         // tag
 using Person2 = person::Person; // compiled

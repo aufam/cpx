@@ -1,6 +1,7 @@
 #include <cpx/fmt.h>
 #include <cpx/json/yy_json.h>
 #include <cpx/toml/marzer_toml.h>
+#include <cpx/fields.h>
 
 
 template <typename T>
@@ -35,18 +36,10 @@ struct Bar {
     int a;
 };
 
+static constexpr cpx::TagInfo foo_a = "a";
+
 template <>
-struct cpx::Reflect<Foo> : cpx::Fields<&Foo::a> {
-    static constexpr cpx::TagInfo a = "a";
-
-    static const_type of(const Foo &p) {
-        return std::make_tuple(cpx::tag_tie(p.a, a));
-    }
-
-    static type of(Foo &p) {
-        return std::make_tuple(cpx::tag_tie(p.a, a));
-    }
-};
+struct cpx::Reflect<Foo> : cpx::Fields<cpx::Field<&Foo::a, foo_a>> {};
 
 constexpr bool asfsd  = cpx::serde::is_serializable_v<yyjson_mut_val, Foo>;
 constexpr bool asfsd2 = cpx::has_reflect_v<Bar>;
@@ -88,5 +81,6 @@ int main() {
 
     fmt::println("now = {}", cpx::ts_to_string(cpx::ts_now()));
     fmt::println("now = {:%Y-%m-%dT%H:%M:%SZ}", cpx::tm_now());
-    fmt::println("now = {:%Y-%m-%dT%H:%M:%S}", cpx::ts_now());
+    fmt::println("now = {:%Y-%m-%dT%H:%M:%SZ}", cpx::ts_now());
+    fmt::println("foo = {}", Foo{3});
 }
