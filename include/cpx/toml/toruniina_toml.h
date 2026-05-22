@@ -376,7 +376,7 @@ namespace cpx::serde {
             __toml11::value node   = is_tbl ? __toml11::value(__toml11::table()) : __toml11::value(__toml11::array());
 
             size_t idx = 0;
-            tuple_for_each(tpl, [&](auto &item, const size_t) {
+            tuple_for_each(flatten, [&](auto &item, const size_t) {
                 const cpx::TagInfo &t       = cpx::toml::get_tag_info(item);
                 auto               &v       = cpx::detail::get_underlying_value(item);
                 using T                     = std::decay_t<decltype(v)>;
@@ -434,7 +434,7 @@ namespace cpx::serde {
             const __toml11::table *tbl = &node.as_table(std::nothrow);
 
             size_t idx = 0;
-            tuple_for_each(tpl, [&](auto &item, const size_t) {
+            tuple_for_each(flattened, [&](auto &item, const size_t) {
                 const cpx::TagInfo &t         = cpx::toml::get_tag_info(item);
                 auto               &v         = detail::get_underlying_value(item);
                 using T                       = std::decay_t<decltype(v)>;
@@ -506,7 +506,8 @@ namespace cpx::serde {
                         type_names += e.expected_type + '|';
                     }
                 }(),
-                ...);
+                ...
+            );
             if (!done) {
                 type_names.pop_back();
                 throw type_mismatch_error(type_names, ::cpx::toml::toruniina_toml::detail::type(node));
