@@ -76,37 +76,6 @@ namespace cpx::json::nlohmann_json {
 
     template <typename T>
     void parse(FILE *pfile, T &val, bool ignore_comments = false);
-
-    constexpr struct IO {
-        int  _indent          = -1;
-        char _indent_char     = ' ';
-        bool _ensure_ascii    = true;
-        bool _ignore_comments = false; // for input
-
-        constexpr IO indent(int val) const {
-            IO self      = *this;
-            self._indent = val;
-            return self;
-        }
-
-        constexpr IO indent_char(char val) const {
-            IO self           = *this;
-            self._indent_char = val;
-            return self;
-        }
-
-        constexpr IO ensure_ascii(bool val) const {
-            IO self            = *this;
-            self._ensure_ascii = val;
-            return self;
-        }
-
-        constexpr IO ignore_comments(bool val = true) const {
-            IO self               = *this;
-            self._ignore_comments = val;
-            return self;
-        }
-    } io{};
 } // namespace cpx::json::nlohmann_json
 
 // optional
@@ -468,12 +437,43 @@ void cpx::json::nlohmann_json::parse(FILE *pfile, T &val, bool ignore_comments) 
 }
 
 namespace cpx::stream_operators {
-    cpx::serde::Dump<nlohmann::json, std::ostream> operator<<(std::ostream &os, const cpx::json::nlohmann_json::IO &io) {
-        return {os, io._indent, io._indent_char, io._ensure_ascii};
-    }
+    constexpr struct IO {
+        int  _indent          = -1;
+        char _indent_char     = ' ';
+        bool _ensure_ascii    = true;
+        bool _ignore_comments = false; // for input
 
-    cpx::serde::Parse<nlohmann::json, std::istream> operator>>(std::istream &is, const cpx::json::nlohmann_json::IO &io) {
-        return {is, io._ignore_comments};
-    }
+        constexpr IO indent(int val) const {
+            IO self      = *this;
+            self._indent = val;
+            return self;
+        }
+
+        constexpr IO indent_char(char val) const {
+            IO self           = *this;
+            self._indent_char = val;
+            return self;
+        }
+
+        constexpr IO ensure_ascii(bool val) const {
+            IO self            = *this;
+            self._ensure_ascii = val;
+            return self;
+        }
+
+        constexpr IO ignore_comments(bool val = true) const {
+            IO self               = *this;
+            self._ignore_comments = val;
+            return self;
+        }
+
+        friend cpx::serde::Dump<nlohmann::json, std::ostream> operator<<(std::ostream &os, const IO &io) {
+            return {os, io._indent, io._indent_char, io._ensure_ascii};
+        }
+
+        friend cpx::serde::Parse<nlohmann::json, std::istream> operator>>(std::istream &is, const IO &io) {
+            return {is, io._ignore_comments};
+        }
+    } io{};
 } // namespace cpx::stream_operators
 #endif

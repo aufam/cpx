@@ -86,9 +86,6 @@ namespace cpx::json::rapid_json {
 
     template <typename T>
     void dump(std::ostream &, const T &&val) = delete;
-
-    constexpr class IO {
-    } io;
 } // namespace cpx::json::rapid_json
 
 namespace cpx::json::rapid_json::detail {
@@ -997,16 +994,18 @@ void cpx::json::rapid_json::dump(std::ostream &os, const T &val) {
 }
 #endif
 
-namespace cpx::stream_operators {
+namespace cpx::json::rapid_json {
+    constexpr struct IO {
 #ifdef RAPIDJSON_OSTREAMWRAPPER_H_
-    cpx::serde::Dump<rapidjson::Writer<rapidjson::OStreamWrapper>, std::ostream>
-    operator<<(std::ostream &os, const cpx::json::rapid_json::IO &) {
-        return {os};
-    }
+        friend cpx::serde::Dump<rapidjson::Writer<rapidjson::OStreamWrapper>, std::ostream>
+        operator<<(std::ostream &os, const IO &) {
+            return {os};
+        }
 #endif
 
-    cpx::serde::Parse<rapidjson::Reader, std::istream> operator>>(std::istream &is, const cpx::json::rapid_json::IO &) {
-        return {is};
-    }
-} // namespace cpx::stream_operators
+        friend cpx::serde::Parse<rapidjson::Reader, std::istream> operator>>(std::istream &is, const IO &) {
+            return {is};
+        }
+    } io;
+} // namespace cpx::json::rapid_json
 #endif
