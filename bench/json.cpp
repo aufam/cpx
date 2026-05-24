@@ -1,4 +1,5 @@
 #include <cpx/json/yy_json.h>
+#include <cpx/json/rapid_json.h>
 #include <cpx/json/nlohmann_json.h>
 #include <cpx/reflect.h>
 #include <cpx/fields.h>
@@ -169,6 +170,15 @@ static void cpx_tag_yyjson_serialization(benchmark::State &state) {
 }
 BENCHMARK(cpx_tag_yyjson_serialization);
 
+static void cpx_tag_rapid_json_serialization(benchmark::State &state) {
+    Schema s;
+    cpx::json::rapid_json::parse(data, s);
+    for (auto _ : state) {
+        std::ignore = cpx::json::yy_json::dump(s);
+    }
+}
+BENCHMARK(cpx_tag_rapid_json_serialization);
+
 static void cpx_tag_nlohmann_json_serialization(benchmark::State &state) {
     Schema s = nlohmann::json::parse(data);
     for (auto _ : state) {
@@ -187,6 +197,15 @@ static void cpx_tag_yyjson_deserialization(benchmark::State &state) {
 }
 BENCHMARK(cpx_tag_yyjson_deserialization);
 
+static void cpx_tag_rapid_json_deserialization(benchmark::State &state) {
+    std::string payload = data;
+    for (auto _ : state) {
+        Schema s;
+        cpx::json::rapid_json::parse(payload, s);
+    }
+}
+BENCHMARK(cpx_tag_rapid_json_deserialization);
+
 static void cpx_tag_nlohmann_json_deserialization(benchmark::State &state) {
     std::string payload = data;
     for (auto _ : state) {
@@ -203,6 +222,15 @@ static void cpx_reflect_yyjson_serialization(benchmark::State &state) {
     }
 }
 BENCHMARK(cpx_reflect_yyjson_serialization);
+
+static void cpx_reflect_rapid_json_serialization(benchmark::State &state) {
+    Schema2 s;
+    cpx::json::rapid_json::parse(data, s);
+    for (auto _ : state) {
+        std::ignore = cpx::json::yy_json::dump(s);
+    }
+}
+BENCHMARK(cpx_reflect_rapid_json_serialization);
 
 static void cpx_reflect_nlohmann_json_serialization(benchmark::State &state) {
     Schema2 s = nlohmann::json::parse(data);
@@ -221,6 +249,15 @@ static void cpx_reflect_yyjson_deserialization(benchmark::State &state) {
     }
 }
 BENCHMARK(cpx_reflect_yyjson_deserialization);
+
+static void cpx_reflect_rapid_json_deserialization(benchmark::State &state) {
+    std::string payload = data;
+    for (auto _ : state) {
+        Schema2 s;
+        cpx::json::rapid_json::parse(payload, s);
+    }
+}
+BENCHMARK(cpx_reflect_rapid_json_deserialization);
 
 static void cpx_reflect_nlohmann_json_deserialization(benchmark::State &state) {
     std::string payload = data;

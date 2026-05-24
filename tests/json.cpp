@@ -1,5 +1,6 @@
 #include <cpx/json/yy_json.h>
 #include <cpx/json/nlohmann_json.h>
+#include <cpx/json/rapid_json.h>
 #include <gtest/gtest.h>
 
 
@@ -162,4 +163,57 @@ TEST(json, yy_json_round_trip) {
     EXPECT_EQ(p2.name(), p1.name());
     EXPECT_EQ(p2.age(), p1.age());
     EXPECT_EQ(p2.department(), p1.department());
+}
+
+
+TEST(json, rapid_json_parse_full) {
+    Person p = json::rapid_json::parse<Person>(json_full);
+
+    EXPECT_EQ(p.name(), "Sucipto");
+    EXPECT_EQ(p.age(), 24);
+
+    ASSERT_TRUE(p.address().has_value());
+
+    EXPECT_EQ(*p.address(), "Jakarta");
+    EXPECT_EQ(p.department(), "Engineering");
+    EXPECT_EQ(p.salary(), 1000);
+
+    const std::tm &t = p.created_at();
+
+    EXPECT_EQ(t.tm_year + 1900, 2024);
+    EXPECT_EQ(t.tm_mon + 1, 1);
+    EXPECT_EQ(t.tm_mday, 2);
+
+    EXPECT_EQ(t.tm_hour, 3);
+    EXPECT_EQ(t.tm_min, 4);
+    EXPECT_EQ(t.tm_sec, 5);
+}
+
+
+TEST(json, rapid_json_parse_missing_department) {
+    Person p = json::rapid_json::parse<Person>(json_missing_department);
+
+    ASSERT_TRUE(p.address().has_value());
+    EXPECT_EQ(*p.address(), "Jakarta");
+
+    // fallback value
+    EXPECT_EQ(p.department(), "unset");
+}
+
+
+TEST(json, rapid_json_dump_omitempty) {
+    Person p;
+    p.name() = "Sucipto";
+    p.age()  = 24;
+
+    std::string dumped = json::rapid_json::dump(p);
+
+    EXPECT_NE(dumped.find("\"name\":\"Sucipto\""), std::string::npos);
+    EXPECT_NE(dumped.find("\"age\":24"), std::string::npos);
+
+    EXPECT_NE(dumped.find("\"address\":null"), std::string::npos);
+    EXPECT_NE(dumped.find("\"department\":\"unset\""), std::string::npos);
+
+    // omitted fields
+    EXPECT_EQ(dumped.find("salary"), std::string::npos);
 }

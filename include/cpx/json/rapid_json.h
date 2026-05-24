@@ -14,12 +14,38 @@
 #include <tuple>
 #include <unordered_map>
 
-#include <rapidjson/document.h>
-#include <rapidjson/writer.h>
-#include <rapidjson/stringbuffer.h>
-#include <rapidjson/ostreamwrapper.h>
-#include <rapidjson/istreamwrapper.h>
-#include <rapidjson/error/en.h>
+
+#ifndef RAPIDJSON_DOCUMENT_H_
+#    include <rapidjson/document.h>
+#endif
+
+#ifndef RAPIDJSON_WRITER_H_
+#    include <rapidjson/writer.h>
+#endif
+
+#ifndef RAPIDJSON_READER_H_
+#    include <rapidjson/reader.h>
+#endif
+
+#ifdef RAPIDJSON_STRINGBUFFER_H_
+#    include <rapidjson/stringbuffer.h>
+#endif
+
+#ifndef RAPIDJSON_OSTREAMWRAPPER_H_
+#    if __has_include(<rapidjson/ostreamwrapper.h>)
+#        include <rapidjson/ostreamwrapper.h>
+#    endif
+#endif
+
+#ifndef RAPIDJSON_ISTREAMWRAPPER_H_
+#    if __has_include(<rapidjson/istreamwrapper.h>)
+#        include <rapidjson/istreamwrapper.h>
+#    endif
+#endif
+
+#ifndef RAPIDJSON_ERROR_EN_H_
+#    include <rapidjson/error/en.h>
+#endif
 
 namespace cpx::json::rapid_json {
     template <typename From>
@@ -38,12 +64,31 @@ namespace cpx::json::rapid_json {
     void parse(const std::string &str, T &val);
 
     template <typename T>
+    void parse(std::istream &, T &val);
+
+    template <typename T>
     [[nodiscard]]
     std::enable_if_t<std::is_default_constructible_v<T>, T> parse(const std::string &str);
 
     template <typename T>
     [[nodiscard]]
+    std::enable_if_t<std::is_default_constructible_v<T>, T> parse(std::istream &);
+
+    template <typename T>
+    [[nodiscard]]
     std::string dump(const T &val);
+
+    template <typename T>
+    void dump(std::ostream &, const T &val);
+
+    template <typename T>
+    void dump(const T &&val) = delete;
+
+    template <typename T>
+    void dump(std::ostream &, const T &&val) = delete;
+
+    constexpr class IO {
+    } io;
 } // namespace cpx::json::rapid_json
 
 namespace cpx::json::rapid_json::detail {
@@ -66,11 +111,15 @@ namespace cpx::json::rapid_json::detail {
         return "unknown";
     }
 
-    template <typename T>
-    struct is_std_string : std::false_type {};
+    struct Stack {
+        enum Type { Null, Bool, Int, Uint, Int64, Uint64, Double, String, Object, Array };
+        Type   type;
+        Stack *parent   = nullptr;
+        bool   nullable = false;
 
-    template <typename CT, typename A>
-    struct is_std_string<std::basic_string<char, CT, A>> : std::false_type {};
+        std::vector<Stack *>                          arr;
+        std::unordered_map<std::string_view, Stack *> obj;
+    };
 
     struct Handler {
         using Ch = char;
@@ -99,6 +148,9 @@ namespace cpx::json::rapid_json::detail {
         virtual bool String(const char *, rapidjson::SizeType, bool) {
             return false;
         }
+        virtual bool RawNumber(const char *, rapidjson::SizeType, bool) {
+            return false;
+        }
         virtual bool StartObject() {
             return false;
         }
@@ -116,8 +168,9 @@ namespace cpx::json::rapid_json::detail {
         }
     };
 
+#ifdef RAPIDJSON_ISTREAMWRAPPER_H_
     template <typename T>
-    class HandlerFor : Handler {
+    class HandlerFor : public Handler {
     public:
         rapidjson::Reader &reader;
         T                 &v;
@@ -128,6 +181,7 @@ namespace cpx::json::rapid_json::detail {
         // TODO
         void into(T &) {}
     };
+#endif
 } // namespace cpx::json::rapid_json::detail
 
 template <typename CT, typename A>
@@ -148,20 +202,29 @@ struct cpx::serde::Parse<rapidjson::Document, std::basic_string<char, CT, A>> {
     }
 };
 
+#ifdef RAPIDJSON_ISTREAMWRAPPER_H_
 template <>
 struct cpx::serde::Parse<rapidjson::Reader, std::istream> {
-    std::istream &ist;
+    std::istream &is;
 
     template <typename T>
-    void into(T &v) const {
-        rapidjson::IStreamWrapper isw(ist);
+    std::istream &into(T &v) const {
+        rapidjson::IStreamWrapper isw(is);
         rapidjson::Reader         reader;
 
         Deserialize<rapidjson::Reader, T> handler(reader, v);
         if (!reader.Parse(isw, handler))
             throw error(rapidjson::GetParseError_En(reader.GetParseErrorCode()));
+
+        return is;
+    }
+
+    template <typename T>
+    std::istream &operator>>(T &v) const {
+        return into(v);
     }
 };
+#endif
 
 template <typename CT, typename A>
 struct cpx::serde::Dump<rapidjson::Document, std::basic_string<char, CT, A>> {
@@ -175,10 +238,11 @@ struct cpx::serde::Dump<rapidjson::Document, std::basic_string<char, CT, A>> {
         rapidjson::Writer<rapidjson::StringBuffer> writer(buf);
 
         v.Accept(writer);
-        return buf.GetString();
+        return std::basic_string<char, CT, A>(buf.GetString(), buf.GetSize());
     }
 };
 
+#ifdef RAPIDJSON_OSTREAMWRAPPER_H_
 template <>
 struct cpx::serde::Dump<rapidjson::Writer<rapidjson::OStreamWrapper>, std::ostream> {
     std::ostream &os;
@@ -190,7 +254,13 @@ struct cpx::serde::Dump<rapidjson::Writer<rapidjson::OStreamWrapper>, std::ostre
         Serialize<rapidjson::Writer<rapidjson::OStreamWrapper>, T>{writer}.from(val);
         return os;
     }
+
+    template <typename T>
+    std::ostream &operator<<(const T &val) const {
+        return from(val);
+    }
 };
+#endif
 
 // bool & number
 template <typename T>
@@ -235,21 +305,24 @@ struct cpx::serde::Deserialize<rapidjson::Value, T, std::enable_if_t<std::is_int
 };
 
 // string
-template <typename CT, typename A>
-struct cpx::serde::Serialize<rapidjson::Value, std::basic_string<char, CT, A>> {
+template <typename CT>
+struct cpx::serde::Serialize<rapidjson::Value, std::basic_string_view<char, CT>> {
     rapidjson::Document &doc;
 
-    rapidjson::Value from(const std::basic_string<char, CT, A> &v) const {
+    rapidjson::Value from(std::basic_string_view<char, CT> v, bool owned = false) const {
         rapidjson::Value val;
-        val.SetString(v.data(), v.size(), doc.GetAllocator());
+        if (owned)
+            val.SetString(v.data(), v.size(), doc.GetAllocator());
+        else
+            val.SetString(rapidjson::StringRef(v.data(), v.size()));
         return val;
     }
 
-    rapidjson::Value from_raw(const std::basic_string<char, CT, A> &v) const {
+    rapidjson::Value from_raw(std::basic_string_view<char, CT> v) const {
         rapidjson::Document doc(&this->doc.GetAllocator());
 
         constexpr auto flag = rapidjson::kParseDefaultFlags;
-        doc.Parse<flag>(v.c_str(), v.size());
+        doc.Parse<flag>(v.data(), v.size());
         if (doc.HasParseError())
             throw error(rapidjson::GetParseError_En(doc.GetParseError()));
 
@@ -257,14 +330,20 @@ struct cpx::serde::Serialize<rapidjson::Value, std::basic_string<char, CT, A>> {
     }
 };
 
-template <typename CT>
-struct cpx::serde::Serialize<rapidjson::Value, std::basic_string_view<char, CT>> {
+template <typename CT, typename A>
+struct cpx::serde::Serialize<rapidjson::Value, std::basic_string<char, CT, A>> {
     rapidjson::Document &doc;
 
-    rapidjson::Value from(std::basic_string_view<char, CT> v) const {
-        rapidjson::Value val;
-        val.SetString(v.data(), v.size(), doc.GetAllocator());
-        return val;
+    rapidjson::Value from(const std::basic_string<char, CT, A> &v) const {
+        return Serialize<rapidjson::Value, std::basic_string_view<char, CT>>{doc}.from(v, false);
+    }
+
+    rapidjson::Value from(std::basic_string<char, CT, A> &&v) const {
+        return Serialize<rapidjson::Value, std::basic_string_view<char, CT>>{doc}.from(v, true);
+    }
+
+    rapidjson::Value from_raw(const std::basic_string<char, CT, A> &v) const {
+        return Serialize<rapidjson::Value, std::basic_string_view<char, CT>>{doc}.from_raw(v);
     }
 };
 
@@ -274,7 +353,7 @@ struct cpx::serde::Deserialize<rapidjson::Value, std::basic_string<char, CT, A>>
 
     void into(std::basic_string<char, CT, A> &v) {
         if (val.IsString())
-            v = val.GetString();
+            v = std::basic_string<char, CT, A>(val.GetString(), val.GetStringLength());
         else
             throw cpx::serde::type_mismatch_error("string", cpx::json::rapid_json::detail::type(val));
     }
@@ -356,8 +435,7 @@ struct cpx::serde::Deserialize<
                     type_names += e.expected_type + '|';
                 }
             }(),
-            ...
-        );
+            ...);
         if (!done) {
             type_names.pop_back();
             throw type_mismatch_error(type_names, cpx::json::rapid_json::detail::type(val));
@@ -453,7 +531,7 @@ struct cpx::serde::Serialize<
         rapidjson::Value obj(rapidjson::Type::kObjectType);
         for (auto &[key, item] : v)
             obj.AddMember(
-                Serialize<rapidjson::Value, std::string>{doc}.from(key),
+                Serialize<rapidjson::Value, std::basic_string<char, CT, CA>>{doc}.from(key),
                 Serialize<rapidjson::Value, T>{doc}.from(item),
                 doc.GetAllocator()
             );
@@ -476,10 +554,10 @@ struct cpx::serde::Deserialize<
             auto k    = std::string();
             auto item = T{};
             try {
-                Deserialize<rapidjson::Value, std::string>{key}.into(k);
+                Deserialize<rapidjson::Value, std::basic_string<char, CT, CA>>{key}.into(k);
                 Deserialize<rapidjson::Value, T>{val}.into(item);
             } catch (error &e) {
-                e.add_context(key.GetString());
+                e.add_context(std::string_view(key.GetString(), key.GetStringLength()));
                 throw;
             }
             v.emplace(std::move(k), std::move(item));
@@ -499,7 +577,7 @@ struct cpx::serde::Serialize<rapidjson::Value, std::tuple<Ts...>> {
         rapidjson::Value val(is_obj ? rapidjson::kObjectType : rapidjson::kArrayType);
 
         size_t idx = 0;
-        tuple_for_each(tpl, [&](auto &item, const size_t) {
+        tuple_for_each(flatten, [&](auto &item, const size_t) {
             const cpx::TagInfo &t       = cpx::json::get_tag_info(item);
             auto               &v       = cpx::detail::get_underlying_value(item);
             using T                     = std::decay_t<decltype(v)>;
@@ -515,8 +593,8 @@ struct cpx::serde::Serialize<rapidjson::Value, std::tuple<Ts...>> {
             rapidjson::Value sub;
             try {
                 if (t.noserde)
-                    if constexpr (std::is_same_v<T, std::string>)
-                        sub = Serialize<rapidjson::Value, std::string>{doc}.from_raw(v);
+                    if constexpr (std::is_same_v<T, std::string> || std::is_same_v<T, std::string_view>)
+                        sub = Serialize<rapidjson::Value, std::string_view>{doc}.from_raw(v);
                     else
                         throw error("field with tag `noserde` can only be serialized from std::string");
                 else {
@@ -524,7 +602,7 @@ struct cpx::serde::Serialize<rapidjson::Value, std::tuple<Ts...>> {
                         sub = Serialize<rapidjson::Value, T>{doc}.from(v);
                 }
             } catch (error &e) {
-                if (is_obj)
+                if constexpr (is_obj)
                     e.add_context(t.key);
                 else
                     e.add_context(i);
@@ -568,11 +646,14 @@ struct cpx::serde::Deserialize<rapidjson::Value, std::tuple<Ts...>> {
                 return;
 
             const size_t            i = idx++;
-            const rapidjson::Value  empty;
+            const rapidjson::Value  empty(rapidjson::Type::kNullType);
             const rapidjson::Value *ptr = &empty;
-            if (is_obj) {
+            if constexpr (is_obj) {
+                rapidjson::Value key;
+                key.SetString(rapidjson::StringRef(t.key.data(), t.key.size()));
+
                 auto obj = val.GetObject();
-                if (auto it = obj.FindMember(rapidjson::StringRef(t.key.data(), t.key.size())); it != obj.end())
+                if (auto it = obj.FindMember(key); it != obj.end())
                     ptr = &it->value;
             } else {
                 auto arr = val.GetArray();
@@ -641,7 +722,7 @@ struct cpx::serde::Serialize<rapidjson::Writer<OS>, T, std::enable_if_t<std::is_
         } else {
             res = writer.Int64(v);
         }
-        if (res) {
+        if (!res) {
             throw error("error"); // TODO
         }
     }
@@ -682,7 +763,7 @@ struct cpx::serde::Deserialize<rapidjson::Reader, T, std::enable_if_t<std::is_in
 
     bool Int64(int64_t i) override {
         if constexpr (std::is_same_v<T, int64_t>) {
-            v = T(i);
+            v = i;
             return true;
         } else {
             return false;
@@ -691,7 +772,7 @@ struct cpx::serde::Deserialize<rapidjson::Reader, T, std::enable_if_t<std::is_in
 
     bool Uint64(uint64_t u) override {
         if constexpr (std::is_same_v<T, uint64_t>) {
-            v = T(u);
+            v = u;
             return true;
         } else {
             return false;
@@ -709,13 +790,35 @@ struct cpx::serde::Deserialize<rapidjson::Reader, T, std::enable_if_t<std::is_in
 };
 
 // string
+template <typename OS, typename CT>
+struct cpx::serde::Serialize<rapidjson::Writer<OS>, std::basic_string_view<char, CT>> {
+    rapidjson::Writer<OS> &writer;
+
+    void from(const std::basic_string_view<char, CT> &v) const {
+        if (!writer.String(v.data(), v.size()))
+            throw error("error"); // TODO
+    }
+
+    void from_raw(const std::basic_string_view<char, CT> &v) const {
+        rapidjson::Document doc;
+        doc.Parse(v.data(), v.size());
+        if (doc.HasParseError())
+            throw error(rapidjson::GetParseError_En(doc.GetParseError()));
+        if (!writer.RawValue(v.data(), v.size(), doc.GetType()))
+            throw error("error"); // TODO
+    }
+};
+
 template <typename OS, typename CT, typename A>
 struct cpx::serde::Serialize<rapidjson::Writer<OS>, std::basic_string<char, CT, A>> {
     rapidjson::Writer<OS> &writer;
 
     void from(const std::basic_string<char, CT, A> &v) const {
-        if (!writer.WriteString(v.c_str(), v.size()))
-            throw error("error"); // TODO
+        Serialize<rapidjson::Writer<OS>, std::basic_string_view<char, CT>>{writer}.from(v);
+    }
+
+    void from_raw(const std::basic_string<char, CT, A> &v) const {
+        Serialize<rapidjson::Writer<OS>, std::basic_string_view<char, CT>>{writer}.from_raw(v);
     }
 };
 
@@ -746,43 +849,164 @@ struct cpx::serde::Serialize<
     }
 };
 
-// TODO
-template <typename T>
-struct cpx::serde::Deserialize<
-    rapidjson::Reader,
-    std::optional<T>,
-    std::enable_if_t<cpx::serde::is_deserializable_v<rapidjson::Reader, T> && std::is_default_constructible_v<T>>>
-    : public cpx::json::rapid_json::detail::HandlerFor<T> {
-    Deserialize(rapidjson::Reader &reader, std::optional<T> &v)
-        : cpx::json::rapid_json::detail::HandlerFor<T>(reader) {
-        v = T{};
-    }
+// array
+template <typename OS, typename T, size_t N>
+struct cpx::serde::Serialize<
+    rapidjson::Writer<OS>,
+    std::array<T, N>,
+    std::enable_if_t<cpx::serde::is_serializable_v<rapidjson::Writer<OS>, T>>> {
+    rapidjson::Writer<OS> &writer;
 
-    bool Null() override {
-        this->v = std::nullopt;
-        return true;
+    void from(const std::array<T, N> &v) const {
+        writer.StartArray();
+        for (auto &item : v)
+            Serialize<rapidjson::Writer<OS>, T>{writer}.from(item);
+        writer.EndArray(v.size());
     }
 };
 
+template <typename OS, typename T>
+struct cpx::serde::
+    Serialize<rapidjson::Writer<OS>, std::vector<T>, std::enable_if_t<cpx::serde::is_serializable_v<rapidjson::Writer<OS>, T>>> {
+    rapidjson::Writer<OS> &writer;
 
-namespace cpx::josn::rapid_json {
-    template <typename T>
-    void parse(const std::string &str, T &val) {
-        cpx::json::rapid_json::Parse<std::string>{str}.into(val);
+    void from(const std::vector<T> &v) const {
+        writer.StartArray();
+        for (auto &item : v)
+            Serialize<rapidjson::Writer<OS>, T>{writer}.from(item);
+        writer.EndArray(v.size());
     }
+};
 
-    template <typename T>
-    [[nodiscard]]
-    std::enable_if_t<std::is_default_constructible_v<T>, T> parse(const std::string &str) {
-        T val = {};
-        cpx::json::rapid_json::Parse<std::string>{str}.into(val);
-        return val;
-    }
+// map
+template <typename OS, typename CT, typename CA, typename T, typename H, typename P, typename A>
+struct cpx::serde::Serialize<
+    rapidjson::Writer<OS>,
+    std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A>,
+    std::enable_if_t<cpx::serde::is_serializable_v<rapidjson::Writer<OS>, T>>> {
+    rapidjson::Writer<OS> &writer;
 
-    template <typename T>
-    [[nodiscard]]
-    std::string dump(const T &val) {
-        return cpx::json::rapid_json::Dump<std::string>{}.from(val);
+    void from(const std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A> &v) const {
+        writer.StartObject();
+        for (auto &[k, v] : v) {
+            writer.Key(k.c_str(), k.size());
+            Serialize<rapidjson::Writer<OS>, T>{writer}.from(v);
+        }
+        writer.EndObject();
     }
-} // namespace cpx::josn::rapid_json
+};
+
+// tuple
+template <typename OS, typename... Ts>
+struct cpx::serde::Serialize<rapidjson::Writer<OS>, std::tuple<Ts...>> {
+    rapidjson::Writer<OS> &writer;
+
+    void from(const std::tuple<Ts...> &tpl) {
+        auto flatten          = cpx::flatten(tpl);
+        using Tpl             = decltype(flatten);
+        constexpr bool is_obj = cpx::detail::tuple_has_any_tagged_type_v<Tpl>;
+
+        if constexpr (is_obj)
+            writer.StartObject();
+        else
+            writer.StartArray();
+
+        size_t idx = 0;
+        tuple_for_each(flatten, [&](auto &item, const size_t) {
+            const cpx::TagInfo &t       = cpx::json::get_tag_info(item);
+            auto               &v       = cpx::detail::get_underlying_value(item);
+            using T                     = std::decay_t<decltype(v)>;
+            constexpr bool serializable = cpx::serde::is_serializable_v<rapidjson::Value, T>;
+
+            if (!serializable || (is_obj && t.key == ""))
+                return;
+
+            size_t i = idx++;
+            if (t.omitempty && detail::is_empty_value(v) && is_obj)
+                return;
+
+            try {
+                if (t.noserde)
+                    if constexpr (std::is_same_v<T, std::string> || std::is_same_v<T, std::string_view>)
+                        Serialize<rapidjson::Writer<OS>, std::string_view>{writer}.from_raw(v);
+                    else
+                        throw error("field with tag `noserde` can only be serialized from std::string");
+                else {
+                    if constexpr (serializable) {
+                        if constexpr (is_obj) {
+                            writer.Key(t.key.data(), t.key.size());
+                            Serialize<rapidjson::Writer<OS>, T>{writer}.from(v);
+                        } else
+                            Serialize<rapidjson::Writer<OS>, T>{writer}.from(v);
+                    }
+                }
+            } catch (error &e) {
+                if constexpr (is_obj)
+                    e.add_context(t.key);
+                else
+                    e.add_context(i);
+                throw;
+            }
+        });
+
+        if constexpr (is_obj)
+            writer.EndObject(idx);
+        else
+            writer.EndArray(idx);
+    }
+};
+
+// reflect
+template <typename OS, typename T>
+struct cpx::serde::Serialize<rapidjson::Writer<OS>, T, std::enable_if_t<cpx::json::has_reflect_v<T>>> {
+    rapidjson::Writer<OS> &writer;
+
+    void from(const T &v) const {
+        return Serialize<rapidjson::Writer<OS>, cpx::json::const_reflect_t<T>>{writer}.from(cpx::json::reflect_of(v));
+    }
+};
+
+template <typename T>
+void cpx::json::rapid_json::parse(const std::string &str, T &val) {
+    cpx::json::rapid_json::Parse<std::string>{str}.into(val);
+}
+
+template <typename T>
+void cpx::json::rapid_json::parse(std::istream &is, T &val) {
+    cpx::serde::Parse<rapidjson::Reader, std::istream>{is}.into(val);
+}
+
+template <typename T>
+[[nodiscard]]
+std::enable_if_t<std::is_default_constructible_v<T>, T> cpx::json::rapid_json::parse(const std::string &str) {
+    T val = {};
+    cpx::json::rapid_json::Parse<std::string>{str}.into(val);
+    return val;
+}
+
+template <typename T>
+[[nodiscard]]
+std::string cpx::json::rapid_json::dump(const T &val) {
+    return cpx::json::rapid_json::Dump<std::string>{}.from(val);
+}
+
+#ifdef RAPIDJSON_OSTREAMWRAPPER_H_
+template <typename T>
+void cpx::json::rapid_json::dump(std::ostream &os, const T &val) {
+    cpx::serde::Dump<rapidjson::Writer<rapidjson::OStreamWrapper>, std::ostream>{os}.from(val);
+}
+#endif
+
+namespace cpx::stream_operators {
+#ifdef RAPIDJSON_OSTREAMWRAPPER_H_
+    cpx::serde::Dump<rapidjson::Writer<rapidjson::OStreamWrapper>, std::ostream>
+    operator<<(std::ostream &os, const cpx::json::rapid_json::IO &) {
+        return {os};
+    }
+#endif
+
+    cpx::serde::Parse<rapidjson::Reader, std::istream> operator>>(std::istream &is, const cpx::json::rapid_json::IO &) {
+        return {is};
+    }
+} // namespace cpx::stream_operators
 #endif

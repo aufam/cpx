@@ -88,7 +88,7 @@ CPMAddPackage(
 CPMAddPackage(
     NAME            rapidjson
     GIT_REPOSITORY  "https://github.com/Tencent/rapidjson"
-    GIT_TAG         v1.1.0
+    GIT_TAG         master
     DOWNLOAD_ONLY   YES
 )
 add_library(rapidjson INTERFACE)
@@ -199,6 +199,9 @@ target_link_libraries(cpx_private INTERFACE
 
 if (TARGET absl::log)
     target_link_libraries(cpx_private INTERFACE absl::log)
+endif()
+if (TARGET absl::check)
+    target_link_libraries(cpx_private INTERFACE absl::check)
 endif()
 
 target_compile_options(cpx_private INTERFACE
