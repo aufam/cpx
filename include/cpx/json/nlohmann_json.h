@@ -436,7 +436,7 @@ void cpx::json::nlohmann_json::parse(FILE *pfile, T &val, bool ignore_comments) 
     Parse<FILE *>{pfile, ignore_comments}.into(val);
 }
 
-namespace cpx::stream_operators {
+namespace cpx::json::nlohmann_json {
     constexpr struct IO {
         int  _indent          = -1;
         char _indent_char     = ' ';
@@ -475,5 +475,5 @@ namespace cpx::stream_operators {
             return {is, io._ignore_comments};
         }
     } io{};
-} // namespace cpx::stream_operators
+} // namespace cpx::json::nlohmann_json
 #endif
