@@ -6,10 +6,10 @@
 namespace cpx::toml {
     template <typename T>
     constexpr decltype(auto) get_tag_info(const T &field) {
-        if constexpr (::cpx::detail::is_tag_info_for_v<T>)
+        if constexpr (cpx::detail::is_tag_info_for_v<T>)
             return field.ti;
         else
-            return ::cpx::get_tag_info(field, "toml");
+            return cpx::get_tag_info(field, "toml");
     }
 
     template <typename T>
