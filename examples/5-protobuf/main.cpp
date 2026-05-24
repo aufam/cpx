@@ -3,7 +3,6 @@
 #include <cpx/fields.h>
 #include <fstream>
 
-using namespace cpx::proto::protobuf::stream;
 
 template <typename T>
 using Tag = cpx::Tag<T>;

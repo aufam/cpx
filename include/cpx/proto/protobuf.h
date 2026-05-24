@@ -72,11 +72,21 @@ namespace cpx::proto::protobuf {
     std::string dump(const T &val);
 
     template <typename T>
+    void dump(std::ostream &os, const T &val);
+
+    template <typename T>
     void parse(const std::string &str, T &val);
 
     template <typename T>
     [[nodiscard]]
     T parse(const std::string &str);
+
+    template <typename T>
+    void parse(std::istream &is, T &val);
+
+    template <typename T>
+    [[nodiscard]]
+    T parse(std::istream &is);
 
     template <typename T>
     constexpr decltype(auto) get_tag_info(const T &field) {
@@ -303,6 +313,11 @@ namespace cpx::serde {
             Serialize<google::protobuf::io::CodedOutputStream, T>{doc}.from(v);
             return stream;
         }
+
+        template <typename T>
+        std::ostream &operator<<(const T &v) const {
+            return from(v);
+        }
     };
 
     template <>
@@ -328,7 +343,7 @@ namespace cpx::serde {
         std::istream &stream;
 
         template <typename T>
-        void into(T &v) const {
+        std::istream &into(T &v) const {
             google::protobuf::io::IstreamInputStream iis(&stream);
             google::protobuf::io::CodedInputStream   doc(&iis);
 
@@ -338,6 +353,13 @@ namespace cpx::serde {
 
             if (!doc.ConsumedEntireMessage())
                 throw serde::error("message not fully consumed");
+
+            return stream;
+        }
+
+        template <typename T>
+        std::istream &operator>>(T &v) const {
+            return into(v);
         }
     };
 
@@ -383,11 +405,13 @@ namespace cpx::serde {
                         this->doc.WriteLittleEndian32(static_cast<uint32_t>(v));
                 } else if (zigzag) {
                     if constexpr (sizeof(T) == 8)
-                        this->doc.WriteVarint64(google::protobuf::internal::WireFormatLite::ZigZagEncode64(static_cast<int64_t>(v)
-                        ));
+                        this->doc.WriteVarint64(
+                            google::protobuf::internal::WireFormatLite::ZigZagEncode64(static_cast<int64_t>(v))
+                        );
                     else
-                        this->doc.WriteVarint32(google::protobuf::internal::WireFormatLite::ZigZagEncode32(static_cast<int32_t>(v)
-                        ));
+                        this->doc.WriteVarint32(
+                            google::protobuf::internal::WireFormatLite::ZigZagEncode32(static_cast<int32_t>(v))
+                        );
                 } else {
                     if constexpr (sizeof(T) == 8)
                         this->doc.WriteVarint64(static_cast<uint64_t>(v));
@@ -991,6 +1015,11 @@ namespace cpx::proto::protobuf {
     }
 
     template <typename T>
+    void dump(std::ostream &os, const T &val) {
+        Dump<std::ostream>{os}.from(val);
+    }
+
+    template <typename T>
     void parse(const std::string &str, T &val) {
         Parse<std::string>{str}.into(val);
     }
@@ -1000,6 +1029,19 @@ namespace cpx::proto::protobuf {
     T parse(const std::string &str) {
         T val;
         Parse<std::string>{str}.into(val);
+        return val;
+    }
+
+    template <typename T>
+    void parse(std::istream &is, T &val) {
+        Parse<std::istream>{is}.into(val);
+    }
+
+    template <typename T>
+    [[nodiscard]]
+    T parse(std::istream &is) {
+        T val;
+        Parse<std::istream>{is}.into(val);
         return val;
     }
 } // namespace cpx::proto::protobuf
@@ -1028,46 +1070,15 @@ namespace cpx::proto::protobuf::detail {
 } // namespace cpx::proto::protobuf::detail
 
 namespace cpx::proto::protobuf {
-    class OStream {
-        std::ostream &stream;
-
-    public:
-        explicit OStream(std::ostream &stream)
-            : stream(stream) {}
-
-        template <typename T>
-        std::ostream &operator<<(const T &v) const {
-            cpx::proto::protobuf::Dump<std::ostream>{stream}.from(v);
-            return stream;
-        }
-    };
-
-    class IStream {
-        std::istream &stream;
-
-    public:
-        explicit IStream(std::istream &stream)
-            : stream(stream) {}
-
-        template <typename T>
-        std::istream &operator>>(T &v) const {
-            cpx::proto::protobuf::Parse<std::istream>{stream}.into(v);
-            return stream;
-        }
-    };
-
     inline constexpr class IO {
+        friend cpx::proto::protobuf::Dump<std::ostream> operator<<(std::ostream &os, const IO &) {
+            return {os};
+        }
+
+        friend cpx::proto::protobuf::Parse<std::istream> operator>>(std::istream &is, const IO &) {
+            return {is};
+        }
     } io;
 } // namespace cpx::proto::protobuf
-
-namespace cpx::proto::protobuf::stream {
-    inline cpx::proto::protobuf::OStream operator<<(std::ostream &stream, const cpx::proto::protobuf::IO &) {
-        return OStream(stream);
-    }
-
-    inline cpx::proto::protobuf::IStream operator>>(std::istream &stream, const cpx::proto::protobuf::IO &) {
-        return IStream(stream);
-    }
-} // namespace cpx::proto::protobuf::stream
 
 #endif
