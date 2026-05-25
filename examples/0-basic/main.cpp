@@ -11,7 +11,7 @@
 
 int main() {
     constexpr cpx::TagInfo name_tag     = "name,field_number=1";
-    constexpr cpx::TagInfo nickname_tag = "nickname"; // protobuf will be skipped for this
+    constexpr cpx::TagInfo nickname_tag = "nickname"; // protobuf will skip this
     constexpr cpx::TagInfo age_tag      = "age,field_number=2";
     constexpr cpx::TagInfo address_tag  = "address,field_number=3";
     constexpr cpx::TagInfo city_tag     = "city,field_number=1";
@@ -23,7 +23,7 @@ int main() {
     std::string        nickname = "The Shark";
     int                age      = 23;
     std::string        city     = "Tanjung Priok";
-    std::optional<int> zip_code = std::nullopt; // toml does not have null, will be set to '0', unless omitempty specified
+    std::optional<int> zip_code = std::nullopt; // if not omitempty, toml will output 0
 
     std::tuple address = {
         cpx::tag_tie(city, city_tag),
@@ -47,6 +47,8 @@ int main() {
     // native adl serializer specialization
     nlohmann::json j = p;
     fmt::println("nlohmann_json = {}", j.dump());
+    // the same with
+    // fmt::println("nlohmann_json = {}", cpx::json::nlohmann_json::dump(p));
 
     // SAX streaming (if lib supports)
     std::cout << "rapidjson = " << cpx::json::rapid_json::io << p << std::endl;
