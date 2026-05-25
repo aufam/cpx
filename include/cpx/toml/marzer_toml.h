@@ -7,8 +7,10 @@
 #include <cpx/reflect.h>
 #include <cpx/extend.h>
 #include <array>
-#include <variant>
 #include <tuple>
+#include <unordered_map>
+#include <variant>
+#include <vector>
 
 #ifndef TOMLPLUSPLUS_HPP
 #    include <toml++/toml.h>
@@ -522,7 +524,8 @@ protected:
                     type_names += e.expected_type + '|';
                 }
             }(),
-            ...);
+            ...
+        );
         if (!done) {
             type_names.pop_back();
             throw type_mismatch_error(type_names, std::string(__tomlpp::impl::node_type_friendly_names[(int)node->type()]));

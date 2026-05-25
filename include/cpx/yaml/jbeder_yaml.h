@@ -7,8 +7,10 @@
 #include <cpx/reflect.h>
 #include <cpx/extend.h>
 #include <array>
-#include <variant>
 #include <tuple>
+#include <unordered_map>
+#include <variant>
+#include <vector>
 
 
 #ifndef YAML_H_62B23520_7C8E_11DE_8A39_0800200C9A66
@@ -501,7 +503,8 @@ struct cpx::serde::
                     type_names += e.expected_type + '|';
                 }
             }(),
-            ...);
+            ...
+        );
         if (!done) {
             type_names.pop_back();
             throw type_mismatch_error(type_names, ::cpx::yaml::jbeder_yaml::detail::type(node));

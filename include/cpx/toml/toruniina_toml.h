@@ -7,8 +7,10 @@
 #include <cpx/reflect.h>
 #include <cpx/extend.h>
 #include <array>
-#include <variant>
 #include <tuple>
+#include <unordered_map>
+#include <variant>
+#include <vector>
 
 #ifndef TOML11_TOML_HPP
 #    include <toml.hpp>
@@ -524,7 +526,8 @@ struct cpx::serde::
                     type_names += e.expected_type + '|';
                 }
             }(),
-            ...);
+            ...
+        );
         if (!done) {
             type_names.pop_back();
             throw type_mismatch_error(type_names, ::cpx::toml::toruniina_toml::detail::type(node));
