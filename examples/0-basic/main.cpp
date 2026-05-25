@@ -1,49 +1,53 @@
-#include <cpx/fmt.h>
-#include <cpx/json/yy_json.h>
-#include <cpx/toml/marzer_toml.h>
+// single include libs
+// #include "maybe/you/place/nlohmann/json/in/a/weird/path/single_include/json.h"
+// #include "as/well/as/toml++.h"
 
-
-template <typename T>
-using Tag = cpx::Tag<T>;
+#include <cpx/fmt.h>                // includes fmt/ranges.h
+#include <cpx/toml/marzer_toml.h>   // does not include toml++ if already included
+#include <cpx/json/nlohmann_json.h> // does not include nlohmann/json.h if already included
+#include <cpx/json/rapid_json.h>    // includes RapidJSON reader/writer headers
+#include <cpx/proto/protobuf.h>     // includes protobuf coded stream headers
+#include <iostream>
 
 int main() {
-    std::tuple inner = {
-        Tag<std::string>{"fmt,json,toml:`text`"},
-        Tag<float>{"fmt,json,toml:`pi,skipmissing`", 3.14f}, // skip missing field when deserializing
+    constexpr cpx::TagInfo name_tag     = "name,field_number=1";
+    constexpr cpx::TagInfo nickname_tag = "nickname"; // protobuf will be skipped for this
+    constexpr cpx::TagInfo age_tag      = "age,field_number=2";
+    constexpr cpx::TagInfo address_tag  = "address,field_number=3";
+    constexpr cpx::TagInfo city_tag     = "city,field_number=1";
+    constexpr cpx::TagInfo zip_tag      = "zip,field_number=2"
+        // ",omitempty" // uncomment this line to see the output diff
+        ;
+
+    std::string        name     = "Sucipto";
+    std::string        nickname = "The Shark";
+    int                age      = 23;
+    std::string        city     = "Tanjung Priok";
+    std::optional<int> zip_code = std::nullopt; // toml does not have null, will be set to '0', unless omitempty specified
+
+    std::tuple address = {
+        cpx::tag_tie(city, city_tag),
+        cpx::tag_tie(zip_code, zip_tag),
     };
 
-    std::tuple data = {
-        Tag<int>{"fmt,json,toml:`number`"},
-        Tag<std::tm>{"fmt:`dt` json:`dateTime` toml:`date-time`"}, // different names for different serde
-        Tag<decltype(inner)>{"fmt,json,toml:`inner`", inner}, // sub table
-        Tag<std::optional<std::string>>{"fmt,json,toml:`text,omitempty`"}, // omit if value.empty() or nullopt when serializing
-        int(40)  // untagged
+    std::tuple p = {
+        cpx::tag_tie(name, name_tag),
+        cpx::tag_tie(nickname, nickname_tag),
+        cpx::tag_tie(age, age_tag),
+        cpx::tag_tie(address, address_tag),
     };
 
+    // formatting using fmtlib
+    fmt::println("fmt = {}", p);
 
-    const char *jdoc = R"json({
-        "number": 42,
-        "dateTime": "2023-10-27T10:00:00Z",
-        "inner": {
-            "text": "from json"
-        }
-    })json";
+    // dump interface
+    fmt::println("toml++ = {:?}", cpx::toml::marzer_toml::dump(p));
+    fmt::println("protobuf = {:?}", cpx::proto::protobuf::dump(p));
 
-    cpx::json::yy_json::parse(jdoc, data);
-    fmt::println("data = {}", data);
-    fmt::println("json = {}", cpx::json::yy_json::dump(data));
+    // native adl serializer specialization
+    nlohmann::json j = p;
+    fmt::println("nlohmann_json = {}", j.dump());
 
-
-    const char *tdoc = R"toml(
-        number = 37
-        date-time = 2023-10-27T10:30:00Z
-
-        [inner]
-        text = "From toml"
-        pi = 3.0
-    )toml";
-
-    cpx::toml::marzer_toml::parse(tdoc, data);
-    fmt::println("data = {}", data);
-    fmt::println("=== toml ===\n{}", cpx::toml::marzer_toml::dump(data));
+    // SAX streaming (if lib supports)
+    std::cout << "rapidjson = " << cpx::json::rapid_json::io << p << std::endl;
 }

@@ -273,8 +273,10 @@ if (CPX_BUILD_EXAMPLES)
     target_link_libraries(example_basic PRIVATE
         cpx
         fmt
-        yyjson
+        rapidjson
+        nlohmann_json
         tomlplusplus::tomlplusplus
+        protobuf::libprotobuf
         CLI11
     )
 
