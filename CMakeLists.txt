@@ -154,6 +154,14 @@ CPMAddPackage(
     OPTIONS         "HTTPLIB_COMPILE ON" "HTTPLIB_USE_ZSTD_IF_AVAILABLE OFF" "HTTPLIB_REQUIRE_OPENSSL ON" "HTTPLIB_INSTALL OFF"
 )
 
+## msgpack
+CPMAddPackage(
+    NAME            msgpack
+    GIT_REPOSITORY  "https://github.com/msgpack/msgpack-c"
+    GIT_TAG         cpp-7.0.0
+    OPTIONS         "MSGPACK_USE_BOOST OFF"
+)
+
 ## Tests using GoogleTest
 CPMAddPackage(
     NAME            googletest
@@ -195,6 +203,7 @@ target_link_libraries(cpx_private INTERFACE
     cxxopts
     CLI11
     protobuf::libprotobuf
+    msgpack-cxx
 )
 
 if (TARGET absl::log)
@@ -277,6 +286,7 @@ if (CPX_BUILD_EXAMPLES)
         nlohmann_json
         tomlplusplus::tomlplusplus
         protobuf::libprotobuf
+        msgpack-cxx
         CLI11
     )
 
