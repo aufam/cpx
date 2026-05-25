@@ -25,7 +25,8 @@ namespace cpx::msgpack {
     };
 
     template <typename T>
-    struct has_reflect : std::bool_constant<(Reflect<T>::value || cpx::has_reflect_v<T>) && !cpx::is_time_v<T>> {};
+    struct has_reflect
+        : std::bool_constant<(Reflect<T>::value || cpx::has_reflect_v<T>) && !cpx::is_time_v<T> && !std::is_enum_v<T>> {};
 
     template <typename T>
     inline constexpr bool has_reflect_v = has_reflect<T>::value;
@@ -101,6 +102,29 @@ struct cpx::serde::Deserialize<::msgpack::object, T, std::enable_if_t<std::is_in
     void into(T &v) const {
         try {
             v = obj.as<T>();
+        } catch (const ::msgpack::type_error &e) {
+            throw type_mismatch_error("primitive", "unknown", e.what());
+        }
+    }
+};
+
+// enums
+template <typename OS, typename T>
+struct cpx::serde::Serialize<::msgpack::packer<OS>, T, std::enable_if_t<std::is_enum_v<T> && !cpx::msgpack::has_reflect_v<T>>> {
+    ::msgpack::packer<OS> &doc;
+
+    void from(T v) const {
+        doc.pack(int(v));
+    }
+};
+
+template <typename T>
+struct cpx::serde::Deserialize<::msgpack::object, T, std::enable_if_t<std::is_enum_v<T> && !cpx::msgpack::has_reflect_v<T>>> {
+    const ::msgpack::object &obj;
+
+    void into(T &v) const {
+        try {
+            v = (T)obj.as<int>();
         } catch (const ::msgpack::type_error &e) {
             throw type_mismatch_error("primitive", "unknown", e.what());
         }
