@@ -363,14 +363,14 @@ struct cpx::serde::Deserialize<
 template <typename... Ts>
 struct cpx::serde::Serialize<__yaml_cpp::Node, std::tuple<Ts...>> {
     __yaml_cpp::Node from(const std::tuple<Ts...> &tpl) {
-        auto flatten          = cpx::flatten(tpl);
-        using Tpl             = decltype(flatten);
+        auto flattened        = cpx::flatten(tpl);
+        using Tpl             = decltype(flattened);
         constexpr bool is_map = cpx::detail::tuple_has_any_tagged_type_v<Tpl>;
 
         __yaml_cpp::Node node(is_map ? __yaml_cpp::NodeType::Map : __yaml_cpp::NodeType::Sequence);
 
         size_t idx = 0;
-        tuple_for_each(tpl, [&](auto &item, const size_t) {
+        tuple_for_each(flattened, [&](auto &item, const size_t) {
             const cpx::TagInfo &t       = cpx::yaml::get_tag_info(item);
             auto               &v       = cpx::detail::get_underlying_value(item);
             using T                     = std::decay_t<decltype(v)>;
@@ -431,7 +431,7 @@ struct cpx::serde::Deserialize<__yaml_cpp::Node, std::tuple<Ts...>> {
         const auto &map = node;
 
         size_t idx = 0;
-        tuple_for_each(tpl, [&](auto &item, const size_t) {
+        tuple_for_each(flattened, [&](auto &item, const size_t) {
             const cpx::TagInfo &t         = cpx::yaml::get_tag_info(item);
             auto               &v         = detail::get_underlying_value(item);
             using T                       = std::decay_t<decltype(v)>;
@@ -474,7 +474,10 @@ struct cpx::serde::Deserialize<__yaml_cpp::Node, std::tuple<Ts...>> {
 };
 
 template <typename... T>
-struct cpx::serde::Serialize<__yaml_cpp::Node, std::variant<T...>> {
+struct cpx::serde::Serialize<
+    __yaml_cpp::Node,
+    std::variant<T...>,
+    std::enable_if_t<(cpx::serde::is_serializable_v<__yaml_cpp::Node, T> && ...)>> {
     __yaml_cpp::Node from(const std::variant<T...> &v) const {
         return std::visit(
             [](const auto &var) { return Serialize<__yaml_cpp::Node, std::decay_t<decltype(var)>>{}.from(var); }, v
@@ -483,8 +486,10 @@ struct cpx::serde::Serialize<__yaml_cpp::Node, std::variant<T...>> {
 };
 
 template <typename... T>
-struct cpx::serde::
-    Deserialize<__yaml_cpp::Node, std::variant<T...>, std::enable_if_t<(std::is_default_constructible_v<T> && ...)>> {
+struct cpx::serde::Deserialize<
+    __yaml_cpp::Node,
+    std::variant<T...>,
+    std::enable_if_t<((cpx::serde::is_deserializable_v<__yaml_cpp::Node, T> && std::is_default_constructible_v<T>) && ...)>> {
     const __yaml_cpp::Node &node;
 
     void into(std::variant<T...> &v) const {
