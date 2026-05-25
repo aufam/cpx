@@ -866,7 +866,7 @@ namespace cpx::serde {
 
     template <typename K, typename T, typename H, typename P, typename A>
     struct Deserialize<
-        google::protobuf::io::CodedOutputStream,
+        google::protobuf::io::CodedInputStream,
         std::unordered_map<K, T, H, P, A>,
         std::enable_if_t<
             is_deserializable_v<google::protobuf::io::CodedInputStream, K> &&
@@ -934,7 +934,7 @@ namespace cpx::serde {
     };
 
     template <>
-    struct Deserialize<google::protobuf::io::CodedOutputStream, std::timespec>
+    struct Deserialize<google::protobuf::io::CodedInputStream, std::timespec>
         : public proto::protobuf::detail::DeserializeDispatcherFor<std::timespec> {
 
         using proto::protobuf::detail::DeserializeDispatcherFor<timespec>::DeserializeDispatcherFor;
@@ -978,7 +978,7 @@ namespace cpx::serde {
     };
 
     template <>
-    struct Deserialize<google::protobuf::io::CodedOutputStream, std::tm>
+    struct Deserialize<google::protobuf::io::CodedInputStream, std::tm>
         : public proto::protobuf::detail::DeserializeDispatcherFor<std::tm> {
 
         using proto::protobuf::detail::DeserializeDispatcherFor<tm>::DeserializeDispatcherFor;
