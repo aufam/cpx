@@ -556,7 +556,7 @@ struct cpx::serde::Deserialize<::msgpack::object, T, std::enable_if_t<cpx::msgpa
 
     void into(T &v) const {
         decltype(auto) r = cpx::msgpack::reflect_of(v);
-        Deserialize<::msgpack::object, cpx::msgpack::const_reflect_t<T>>{obj}.from(r);
+        Deserialize<::msgpack::object, cpx::msgpack::reflect_t<T>>{obj}.into(r);
     }
 };
 
