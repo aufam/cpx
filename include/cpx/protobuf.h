@@ -119,6 +119,9 @@ namespace cpx::protobuf::detail {
     template <typename CT, typename A>
     struct is_bytes<std::basic_string<char, CT, A>> : std::true_type {};
 
+    template <typename CT>
+    struct is_bytes<std::basic_string_view<char, CT>> : std::true_type {};
+
     // repeated numeric
     template <typename T>
     struct is_repeated_numeric : std::false_type {};
@@ -321,11 +324,23 @@ struct DESERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_bytes<T>::value
         bool ok = false;
         if constexpr (std::is_same_v<T, std::string>) {
             ok = doc.ReadString(&v, (int)len);
+        } else if constexpr (std::is_same_v<T, std::string_view>) {
+            const void *ptr;
+            int         available;
+            if (doc.GetDirectBufferPointer(&ptr, &available)) {
+                if ((int)len != available)
+                    throw size_mismatch_error(len, size_t(available));
+                v = std::string_view(static_cast<const char *>(ptr), available);
+                doc.Skip((int)len);
+                ok = true;
+            } else {
+                throw error("cannot get bytes view for this reader");
+            }
         } else if constexpr (std::is_same_v<T, std::vector<uint8_t>>) {
             v.resize(len);
-            ok = this->doc.ReadRaw(v.data(), (int)len);
+            ok = doc.ReadRaw(v.data(), (int)len);
         } else {
-            ok = this->doc.ReadRaw(v.data(), (int)len);
+            ok = doc.ReadRaw(v.data(), (int)len);
         }
 
         if (!ok)
