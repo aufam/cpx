@@ -506,10 +506,7 @@ struct DESERIALIZE(std::tuple<Ts...>) {
         constexpr size_t size      = std::tuple_size_v<decltype(flattened)>;
 
         std::array<cpx::TagInfo, size> tis = {};
-        tuple_for_each(flattened, [&](auto &v, size_t i) {
-            auto &val = detail::get_underlying_value(v);
-            tis[i]    = cpx::protobuf::get_tag_info(v);
-        });
+        tuple_for_each(flattened, [&](auto &v, size_t i) { tis[i] = cpx::protobuf::get_tag_info(v); });
 
         while (const uint32_t tag = doc.ReadTag()) {
             DESERIALIZER_BODY
