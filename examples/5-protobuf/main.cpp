@@ -1,4 +1,4 @@
-#include <cpx/proto/protobuf.h>
+#include <cpx/protobuf.h>
 #include <cpx/fmt.h>
 #include <cpx/fields.h>
 #include <fstream>
@@ -60,53 +60,53 @@ int main() {
 
     std::string buf;
     {
-        buf = cpx::proto::protobuf::dump(p);
+        buf = cpx::protobuf::dump(p);
         fmt::println("proto = {:02x}", fmt::join(buf, " "));
     }
     {
-        std::string buf = cpx::proto::protobuf::dump(std::tie(p.name));
+        std::string buf = cpx::protobuf::dump(std::tie(p.name));
         fmt::println("p.name = {:02x}", fmt::join(buf, " "));
     }
     {
-        std::string buf = cpx::proto::protobuf::dump(std::tie(p.id));
+        std::string buf = cpx::protobuf::dump(std::tie(p.id));
         fmt::println("p.id = {:02x}", fmt::join(buf, " "));
     }
     {
-        std::string buf = cpx::proto::protobuf::dump(std::tie(p.email));
+        std::string buf = cpx::protobuf::dump(std::tie(p.email));
         fmt::println("p.email = {:02x}", fmt::join(buf, " "));
     }
     {
-        std::string buf = cpx::proto::protobuf::dump(std::tie(p.num1));
+        std::string buf = cpx::protobuf::dump(std::tie(p.num1));
         fmt::println("p.num1 = {:02x}", fmt::join(buf, " "));
     }
     {
-        std::string buf = cpx::proto::protobuf::dump(std::tie(p.num2));
+        std::string buf = cpx::protobuf::dump(std::tie(p.num2));
         fmt::println("p.num2 = {:02x}", fmt::join(buf, " "));
     }
     {
-        std::string buf = cpx::proto::protobuf::dump(std::tie(p.num3));
+        std::string buf = cpx::protobuf::dump(std::tie(p.num3));
         fmt::println("p.num3 = {:02x}", fmt::join(buf, " "));
     }
     {
-        std::string buf = cpx::proto::protobuf::dump(std::tie(p.nums));
+        std::string buf = cpx::protobuf::dump(std::tie(p.nums));
         fmt::println("p.num3 = {:02x}", fmt::join(buf, " "));
     }
 
-    auto pp = cpx::proto::protobuf::parse<Person3>(buf);
+    auto pp = cpx::protobuf::parse<Person3>(buf);
     fmt::println("person = {}", pp);
 
-    auto e = cpx::proto::protobuf::parse<Person3>("");
+    auto e = cpx::protobuf::parse<Person3>("");
     fmt::println("empty = {}", e);
 
     {
         std::ofstream ofs("data.bin", std::ios::binary);
-        ofs << cpx::proto::protobuf::io << pp;
+        ofs << cpx::protobuf::io << pp;
     }
 
     {
         Person3       p;
         std::ifstream ifs("data.bin", std::ios::binary);
-        ifs >> cpx::proto::protobuf::io >> p;
+        ifs >> cpx::protobuf::io >> p;
         fmt::println("data.bin = {}", p);
     }
 }

@@ -1,5 +1,5 @@
 #include <benchmark/benchmark.h>
-#include <cpx/proto/protobuf.h>
+#include <cpx/protobuf.h>
 #include <cpx/fmt.h>
 #include <cpx/fields.h>
 #include "bench/person.pb.h"
@@ -62,9 +62,9 @@ static const char data[] = "\x0a\x07Sucipto"
 static void cpx_tag_protobuf_serialization(benchmark::State &state) {
     std::string buf = std::string(data, sizeof(data) - 1);
     Person1     p;
-    cpx::proto::protobuf::parse(buf, p);
+    cpx::protobuf::parse(buf, p);
     for (auto _ : state) {
-        std::string s = cpx::proto::protobuf::dump(p);
+        std::string s = cpx::protobuf::dump(p);
         benchmark::DoNotOptimize(s);
     }
 }
@@ -73,9 +73,9 @@ BENCHMARK(cpx_tag_protobuf_serialization);
 static void cpx_reflect_protobuf_serialization(benchmark::State &state) {
     std::string buf = std::string(data, sizeof(data) - 1);
     Person3     p;
-    cpx::proto::protobuf::parse(buf, p);
+    cpx::protobuf::parse(buf, p);
     for (auto _ : state) {
-        std::string s = cpx::proto::protobuf::dump(p);
+        std::string s = cpx::protobuf::dump(p);
         benchmark::DoNotOptimize(s);
     }
 }
@@ -97,7 +97,7 @@ static void cpx_tag_protobuf_deserialization(benchmark::State &state) {
     std::string buf = std::string(data, sizeof(data) - 1);
     for (auto _ : state) {
         Person1 p;
-        proto::protobuf::parse(buf, p);
+        cpx::protobuf::parse(buf, p);
         benchmark::DoNotOptimize(p);
     }
 }
@@ -107,7 +107,7 @@ static void cpx_reflect_protobuf_deserialization(benchmark::State &state) {
     std::string buf = std::string(data, sizeof(data) - 1);
     for (auto _ : state) {
         Person3 p;
-        proto::protobuf::parse(buf, p);
+        cpx::protobuf::parse(buf, p);
         benchmark::DoNotOptimize(p);
     }
 }

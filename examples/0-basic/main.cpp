@@ -6,7 +6,7 @@
 #include <cpx/toml/marzer_toml.h>   // does not include toml++ if already included
 #include <cpx/json/nlohmann_json.h> // does not include nlohmann/json.h if already included
 #include <cpx/json/rapid_json.h>    // includes RapidJSON reader/writer headers
-#include <cpx/proto/protobuf.h>     // includes protobuf coded stream headers
+#include <cpx/protobuf.h>           // includes protobuf coded stream headers
 #include <iostream>
 
 int main() {
@@ -42,7 +42,7 @@ int main() {
 
     // dump interface
     fmt::println("toml++ = {:?}", cpx::toml::marzer_toml::dump(p));
-    fmt::println("protobuf = {:?}", cpx::proto::protobuf::dump(p));
+    fmt::println("protobuf = {:?}", cpx::protobuf::dump(p));
 
     // native adl serializer specialization
     nlohmann::json j = p;
