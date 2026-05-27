@@ -17,18 +17,31 @@
 #    include <yyjson.h>
 #endif
 
+#define SERIALIZE(...)      cpx::serde::Serialize<yyjson_mut_val, __VA_ARGS__>
+#define DESERIALIZE(...)    cpx::serde::Deserialize<yyjson_val, __VA_ARGS__>
+#define SERIALIZABLE(...)   cpx::serde::is_serializable_v<yyjson_mut_val, __VA_ARGS__>
+#define DESERIALIZABLE(...) cpx::serde::is_deserializable_v<yyjson_val, __VA_ARGS__>
+#define DUMP(...)           cpx::serde::Dump<yyjson_mut_doc, __VA_ARGS__>
+#define PARSE(...)          cpx::serde::Parse<yyjson_doc, __VA_ARGS__>
+
 namespace cpx::json::yy_json {
     template <typename From>
-    using Serialize = ::cpx::serde::Serialize<yyjson_mut_val, From>;
+    using Serialize = SERIALIZE(From);
 
     template <typename To>
-    using Deserialize = ::cpx::serde::Deserialize<yyjson_val, To>;
+    using Deserialize = DESERIALIZE(To);
 
     template <typename From>
-    using Parse = ::cpx::serde::Parse<yyjson_doc, From>;
+    constexpr bool is_serializable_v = SERIALIZABLE(From);
 
     template <typename To>
-    using Dump = ::cpx::serde::Dump<yyjson_mut_doc, To>;
+    constexpr bool is_deserializable_v = DESERIALIZABLE(To);
+
+    template <typename From>
+    using Parse = PARSE(From);
+
+    template <typename To>
+    using Dump = DUMP(To);
 
     template <typename T>
     void parse(const std::string &str, T &val, yyjson_read_flag = YYJSON_READ_NOFLAG);
@@ -53,60 +66,9 @@ namespace cpx::json::yy_json {
     void dump(const T &&val, yyjson_write_flag = YYJSON_WRITE_NOFLAG, const yyjson_alc *alc = nullptr) = delete;
 } // namespace cpx::json::yy_json
 
-
-template <typename CT, typename A>
-struct cpx::serde::Parse<yyjson_doc, std::basic_string<char, CT, A>> {
-    const std::basic_string<char, CT, A> &src;
-    yyjson_read_flag                      flag = YYJSON_READ_NOFLAG;
-    const yyjson_alc                     *alc  = nullptr;
-
-    template <typename T>
-    void into(T &val, bool src_is_path = false) const {
-        yyjson_read_err err;
-        try {
-            yyjson_doc *doc = src_is_path ? yyjson_read_file(const_cast<char *>(src.c_str()), flag, alc, &err)
-                                          : yyjson_read_opts(const_cast<char *>(src.c_str()), src.size(), flag, alc, &err);
-            if (!doc)
-                throw error(err.msg);
-
-            auto _ = defer([&] { yyjson_doc_free(doc); });
-            Deserialize<yyjson_val, T>{yyjson_doc_get_root(doc)}.into(val);
-        } catch (error &err) {
-            if (src_is_path)
-                err.path = src;
-            throw;
-        }
-    }
-};
-
-template <typename CT, typename A>
-struct cpx::serde::Dump<yyjson_mut_doc, std::basic_string<char, CT, A>> {
-    yyjson_write_flag flag = YYJSON_WRITE_NOFLAG;
-    const yyjson_alc *alc  = nullptr;
-
-    template <typename T>
-    std::basic_string<char, CT, A> from(const T &val) const {
-        yyjson_mut_doc *doc = yyjson_mut_doc_new(alc);
-        if (!doc)
-            throw error("Fatal error: cannot create yyjson doc");
-
-        auto _ = defer([&]() { yyjson_mut_doc_free(doc); });
-        yyjson_mut_doc_set_root(doc, Serialize<yyjson_mut_val, T>{doc}.from(val));
-
-        size_t           len;
-        yyjson_write_err err;
-        const char      *str = yyjson_mut_write_opts(doc, flag, nullptr, &len, &err);
-        if (!str)
-            throw error(err.msg);
-
-        auto __ = defer([&]() { ::free((void *)str); });
-        return {str, len};
-    }
-};
-
 // bool
 template <>
-struct cpx::serde::Serialize<yyjson_mut_val, bool> {
+struct SERIALIZE(bool) {
     yyjson_mut_doc *doc;
 
     yyjson_mut_val *from(bool v) const {
@@ -115,7 +77,7 @@ struct cpx::serde::Serialize<yyjson_mut_val, bool> {
 };
 
 template <>
-struct cpx::serde::Deserialize<yyjson_val, bool> {
+struct DESERIALIZE(bool) {
     yyjson_val *val;
 
     void into(bool &v) const {
@@ -127,10 +89,7 @@ struct cpx::serde::Deserialize<yyjson_val, bool> {
 
 // sint
 template <typename T>
-struct cpx::serde::Serialize<
-    yyjson_mut_val,
-    T,
-    std::enable_if_t<std::is_signed_v<T> && !std::is_same_v<T, bool> && !std::is_floating_point_v<T>>> {
+struct SERIALIZE(T, std::enable_if_t<std::is_signed_v<T> && !std::is_same_v<T, bool> && !std::is_floating_point_v<T>>) {
     yyjson_mut_doc *doc;
 
     yyjson_mut_val *from(T v) const {
@@ -139,10 +98,7 @@ struct cpx::serde::Serialize<
 };
 
 template <typename T>
-struct cpx::serde::Deserialize<
-    yyjson_val,
-    T,
-    std::enable_if_t<std::is_signed_v<T> && !std::is_same_v<T, bool> && !std::is_floating_point_v<T>>> {
+struct DESERIALIZE(T, std::enable_if_t<std::is_signed_v<T> && !std::is_same_v<T, bool> && !std::is_floating_point_v<T>>) {
     yyjson_val *val;
 
     void into(T &v) const {
@@ -154,7 +110,7 @@ struct cpx::serde::Deserialize<
 
 // uint
 template <typename T>
-struct cpx::serde::Serialize<yyjson_mut_val, T, std::enable_if_t<std::is_unsigned_v<T> && !std::is_same_v<T, bool>>> {
+struct SERIALIZE(T, std::enable_if_t<std::is_unsigned_v<T> && !std::is_same_v<T, bool>>) {
     yyjson_mut_doc *doc;
 
     yyjson_mut_val *from(T v) const {
@@ -163,7 +119,7 @@ struct cpx::serde::Serialize<yyjson_mut_val, T, std::enable_if_t<std::is_unsigne
 };
 
 template <typename T>
-struct cpx::serde::Deserialize<yyjson_val, T, std::enable_if_t<std::is_unsigned_v<T> && !std::is_same_v<T, bool>>> {
+struct DESERIALIZE(T, std::enable_if_t<std::is_unsigned_v<T> && !std::is_same_v<T, bool>>) {
     yyjson_val *val;
 
     void into(T &v) const {
@@ -175,7 +131,7 @@ struct cpx::serde::Deserialize<yyjson_val, T, std::enable_if_t<std::is_unsigned_
 
 // float
 template <typename T>
-struct cpx::serde::Serialize<yyjson_mut_val, T, std::enable_if_t<std::is_floating_point_v<T>>> {
+struct SERIALIZE(T, std::enable_if_t<std::is_floating_point_v<T>>) {
     yyjson_mut_doc *doc;
 
     yyjson_mut_val *from(T v) const {
@@ -184,7 +140,7 @@ struct cpx::serde::Serialize<yyjson_mut_val, T, std::enable_if_t<std::is_floatin
 };
 
 template <typename T>
-struct cpx::serde::Deserialize<yyjson_val, T, std::enable_if_t<std::is_floating_point_v<T>>> {
+struct DESERIALIZE(T, std::enable_if_t<std::is_floating_point_v<T>>) {
     yyjson_val *val;
 
     void into(T &v) const {
@@ -196,7 +152,7 @@ struct cpx::serde::Deserialize<yyjson_val, T, std::enable_if_t<std::is_floating_
 
 // string
 template <typename CT>
-struct cpx::serde::Serialize<yyjson_mut_val, std::basic_string_view<char, CT>> {
+struct SERIALIZE(std::basic_string_view<char, CT>) {
     yyjson_mut_doc *doc;
 
     yyjson_mut_val *from(std::basic_string_view<char, CT> v, bool owned = false) const {
@@ -217,24 +173,24 @@ struct cpx::serde::Serialize<yyjson_mut_val, std::basic_string_view<char, CT>> {
 };
 
 template <typename CT, typename A>
-struct cpx::serde::Serialize<yyjson_mut_val, std::basic_string<char, CT, A>> {
+struct SERIALIZE(std::basic_string<char, CT, A>) {
     yyjson_mut_doc *doc;
 
     yyjson_mut_val *from(const std::basic_string<char, CT, A> &v) const {
-        return Serialize<yyjson_mut_val, std::basic_string_view<char, CT>>{doc}.from(v, false);
+        return SERIALIZE(std::basic_string_view<char, CT>){doc}.from(v, false);
     }
     yyjson_mut_val *from(std::basic_string<char, CT, A> &&v) const {
-        return Serialize<yyjson_mut_val, std::basic_string_view<char, CT>>{doc}.from(v, true);
+        return SERIALIZE(std::basic_string_view<char, CT>){doc}.from(v, true);
     }
 
     yyjson_mut_val *
     from_raw(const std::basic_string<char, CT, A> &v, yyjson_read_flag flag = 0, const yyjson_alc *alc = nullptr) const {
-        return Serialize<yyjson_mut_val, std::basic_string_view<char, CT>>{doc}.from_raw(v, flag, alc);
+        return SERIALIZE(std::basic_string_view<char, CT>){doc}.from_raw(v, flag, alc);
     }
 };
 
 template <typename CT, typename A>
-struct cpx::serde::Deserialize<yyjson_val, std::basic_string<char, CT, A>> {
+struct DESERIALIZE(std::basic_string<char, CT, A>) {
     yyjson_val *val;
 
     void into(std::basic_string<char, CT, A> &v) const {
@@ -261,36 +217,31 @@ struct cpx::serde::Deserialize<yyjson_val, std::basic_string<char, CT, A>> {
 
 // optional
 template <typename T>
-struct cpx::serde::
-    Serialize<yyjson_mut_val, std::optional<T>, std::enable_if_t<cpx::serde::is_serializable_v<yyjson_mut_val, T>>> {
+struct SERIALIZE(std::optional<T>, std::enable_if_t<SERIALIZABLE(T)>) {
     yyjson_mut_doc *doc;
 
     yyjson_mut_val *from(const std::optional<T> &v) const {
         if (!v.has_value())
             return yyjson_mut_null(doc);
-        return Serialize<yyjson_mut_val, T>{doc}.from(*v);
+        return SERIALIZE(T){doc}.from(*v);
     }
 };
 
 template <typename T>
-struct cpx::serde::Deserialize<
-    yyjson_val,
-    std::optional<T>,
-    std::enable_if_t<std::is_default_constructible_v<T> && cpx::serde::is_deserializable_v<yyjson_val, T>>> {
+struct DESERIALIZE(std::optional<T>, std::enable_if_t<std::is_default_constructible_v<T> && DESERIALIZABLE(T)>) {
     yyjson_val *val;
 
     void into(std::optional<T> &v) const {
         if (!val || yyjson_is_null(val))
             return void(v = std::nullopt);
         v = T{};
-        Deserialize<yyjson_val, T>{val}.into(*v);
+        DESERIALIZE(T){val}.into(*v);
     }
 };
 
 // array
 template <typename T, size_t N>
-struct cpx::serde::
-    Serialize<yyjson_mut_val, std::array<T, N>, std::enable_if_t<cpx::serde::is_serializable_v<yyjson_mut_val, T>>> {
+struct SERIALIZE(std::array<T, N>, std::enable_if_t<SERIALIZABLE(T)>) {
     yyjson_mut_doc *doc;
 
     template <typename I>
@@ -299,9 +250,7 @@ struct cpx::serde::
         size_t          i   = 0;
         for (I ptr = begin; ptr != end; ++i, ++ptr)
             try {
-                Serialize<yyjson_mut_val, T> ser{doc};
-                yyjson_mut_val              *val;
-                val = ser.from(*ptr);
+                yyjson_mut_val *val = SERIALIZE(T){doc}.from(*ptr);
                 yyjson_mut_arr_append(arr, val);
             } catch (error &e) {
                 e.add_context(i);
@@ -316,7 +265,7 @@ struct cpx::serde::
 };
 
 template <typename T, size_t N>
-struct cpx::serde::Deserialize<yyjson_val, std::array<T, N>, std::enable_if_t<cpx::serde::is_deserializable_v<yyjson_val, T>>> {
+struct DESERIALIZE(std::array<T, N>, std::enable_if_t<DESERIALIZABLE(T)>) {
     yyjson_val *val;
 
     template <typename I>
@@ -326,7 +275,7 @@ struct cpx::serde::Deserialize<yyjson_val, std::array<T, N>, std::enable_if_t<cp
         yyjson_val *val;
         I           ptr = begin;
         yyjson_arr_foreach(arr, idx, max, val) try {
-            Deserialize<yyjson_val, T>{val}.into(*ptr);
+            DESERIALIZE(T){val}.into(*ptr);
             ++ptr;
         } catch (error &e) {
             e.add_context(idx);
@@ -347,20 +296,16 @@ struct cpx::serde::Deserialize<yyjson_val, std::array<T, N>, std::enable_if_t<cp
 
 // vector
 template <typename T, typename A>
-struct cpx::serde::
-    Serialize<yyjson_mut_val, std::vector<T, A>, std::enable_if_t<cpx::serde::is_serializable_v<yyjson_mut_val, T>>> {
+struct SERIALIZE(std::vector<T, A>, std::enable_if_t<SERIALIZABLE(T)>) {
     yyjson_mut_doc *doc;
 
     yyjson_mut_val *from(const std::vector<T, A> &v) const {
-        return Serialize<yyjson_mut_val, std::array<T, 1>>{doc}.from(v.begin(), v.end());
+        return SERIALIZE(std::array<T, 1>){doc}.from(v.begin(), v.end());
     }
 };
 
 template <typename T, typename A>
-struct cpx::serde::Deserialize<
-    yyjson_val,
-    std::vector<T, A>,
-    std::enable_if_t<std::is_default_constructible_v<T> && cpx::serde::is_deserializable_v<yyjson_val, T>>> {
+struct DESERIALIZE(std::vector<T, A>, std::enable_if_t<std::is_default_constructible_v<T> && DESERIALIZABLE(T)>) {
     yyjson_val *val;
 
     void into(std::vector<T, A> &v) const {
@@ -369,13 +314,13 @@ struct cpx::serde::Deserialize<
             throw type_mismatch_error("array", yyjson_get_type_desc(arr));
 
         v.resize(yyjson_arr_size(arr));
-        Deserialize<yyjson_val, std::array<T, 1>>{arr}.into(v.begin(), v.end());
+        DESERIALIZE(std::array<T, 1>){arr}.into(v.begin(), v.end());
     }
 };
 
 // tuple
 template <typename... Ts>
-struct cpx::serde::Serialize<yyjson_mut_val, std::tuple<Ts...>> {
+struct SERIALIZE(std::tuple<Ts...>) {
     yyjson_mut_doc *doc;
 
     yyjson_mut_val *from(const std::tuple<Ts...> &tpl) const {
@@ -386,13 +331,11 @@ struct cpx::serde::Serialize<yyjson_mut_val, std::tuple<Ts...>> {
 
         size_t idx = 0;
         tuple_for_each(flattened, [&](auto &item, const size_t) {
-            const cpx::TagInfo &t       = cpx::json::get_tag_info(item);
-            auto               &v       = cpx::detail::get_underlying_value(item);
-            using T                     = std::decay_t<decltype(v)>;
-            constexpr bool serializable = cpx::serde::is_serializable_v<yyjson_mut_val, T>;
-            constexpr bool is_const     = std::is_const_v<std::remove_reference_t<decltype(v)>>;
+            const cpx::TagInfo &t = cpx::json::get_tag_info(item);
+            auto               &v = cpx::detail::get_underlying_value(item);
+            using T               = std::decay_t<decltype(v)>;
 
-            if (!serializable || (is_obj && t.key == ""))
+            if (!SERIALIZABLE(T) || (is_obj && t.key == ""))
                 return;
 
             size_t i = idx++;
@@ -406,17 +349,12 @@ struct cpx::serde::Serialize<yyjson_mut_val, std::tuple<Ts...>> {
             try {
                 if (t.noserde)
                     if constexpr (std::is_same_v<T, std::string>)
-                        val = Serialize<yyjson_mut_val, std::string>{doc}.from_raw(v);
+                        val = SERIALIZE(std::string){doc}.from_raw(v);
                     else
                         throw error("field with tag `noserde` can only be serialized from std::string");
                 else {
-                    if constexpr (serializable) {
-                        if constexpr (is_const) {
-                            val = Serialize<yyjson_mut_val, T>{doc}.from(v);
-                        } else {
-                            val = Serialize<yyjson_mut_val, T>{doc}.from(std::move(v));
-                        }
-                    }
+                    if constexpr (SERIALIZABLE(T))
+                        val = SERIALIZE(T){doc}.from(v);
                 }
             } catch (error &e) {
                 if constexpr (is_obj)
@@ -435,7 +373,7 @@ struct cpx::serde::Serialize<yyjson_mut_val, std::tuple<Ts...>> {
 };
 
 template <typename... Ts>
-struct cpx::serde::Deserialize<yyjson_val, std::tuple<Ts...>> {
+struct DESERIALIZE(std::tuple<Ts...>) {
     yyjson_val *val;
 
     void into(std::tuple<Ts...> &tpl) const {
@@ -452,12 +390,11 @@ struct cpx::serde::Deserialize<yyjson_val, std::tuple<Ts...>> {
 
         size_t idx = 0;
         tuple_for_each(flattened, [&](auto &item, const size_t) {
-            const cpx::TagInfo &t         = cpx::json::get_tag_info(item);
-            auto               &v         = detail::get_underlying_value(item);
-            using T                       = std::decay_t<decltype(v)>;
-            constexpr bool deserializable = cpx::serde::is_deserializable_v<yyjson_val, T>;
+            const cpx::TagInfo &t = cpx::json::get_tag_info(item);
+            auto               &v = detail::get_underlying_value(item);
+            using T               = std::decay_t<decltype(v)>;
 
-            if (!deserializable || (is_obj && t.key == ""))
+            if (!DESERIALIZABLE(T) || (is_obj && t.key == ""))
                 return;
 
             const size_t i   = idx++;
@@ -468,12 +405,12 @@ struct cpx::serde::Deserialize<yyjson_val, std::tuple<Ts...>> {
             try {
                 if (t.noserde)
                     if constexpr (std::is_same_v<T, std::string>)
-                        Deserialize<yyjson_val, std::string>{val}.into_raw(v);
+                        DESERIALIZE(std::string){val}.into_raw(v);
                     else
                         throw error("field with tag `noserde` can only be deserialized into std::string");
                 else {
-                    if constexpr (deserializable)
-                        Deserialize<yyjson_val, T>{val}.into(v);
+                    if constexpr (DESERIALIZABLE(T))
+                        DESERIALIZE(T){val}.into(v);
                 }
             } catch (error &e) {
                 if constexpr (is_obj)
@@ -488,22 +425,16 @@ struct cpx::serde::Deserialize<yyjson_val, std::tuple<Ts...>> {
 
 // variant
 template <typename... T>
-struct cpx::serde::
-    Serialize<yyjson_mut_val, std::variant<T...>, std::enable_if_t<(cpx::serde::is_serializable_v<yyjson_mut_val, T> && ...)>> {
+struct SERIALIZE(std::variant<T...>, std::enable_if_t<(SERIALIZABLE(T) && ...)>) {
     yyjson_mut_doc *doc;
 
     yyjson_mut_val *from(const std::variant<T...> &v) const {
-        return std::visit(
-            [&](const auto &var) { return Serialize<yyjson_mut_val, std::decay_t<decltype(var)>>{doc}.from(var); }, v
-        );
+        return std::visit([&](const auto &var) { return SERIALIZE(std::decay_t<decltype(var)>){doc}.from(var); }, v);
     }
 };
 
 template <typename... T>
-struct cpx::serde::Deserialize<
-    yyjson_val,
-    std::variant<T...>,
-    std::enable_if_t<((std::is_default_constructible_v<T> && cpx::serde::is_deserializable_v<yyjson_val, T>) && ...)>> {
+struct DESERIALIZE(std::variant<T...>, std::enable_if_t<((std::is_default_constructible_v<T> && DESERIALIZABLE(T)) && ...)>) {
     yyjson_val *val;
 
     void into(std::variant<T...> &v) const {
@@ -514,7 +445,7 @@ struct cpx::serde::Deserialize<
                 try {
                     if (!done) {
                         auto element = T{};
-                        Deserialize<yyjson_val, T>{val}.into(element);
+                        DESERIALIZE(T){val}.into(element);
                         v    = std::move(element);
                         done = true;
                     }
@@ -532,10 +463,7 @@ struct cpx::serde::Deserialize<
 
 // map
 template <typename CT, typename CA, typename T, typename H, typename P, typename A>
-struct cpx::serde::Serialize<
-    yyjson_mut_val,
-    std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A>,
-    std::enable_if_t<cpx::serde::is_serializable_v<yyjson_mut_val, T>>> {
+struct SERIALIZE(std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A>, std::enable_if_t<SERIALIZABLE(T)>) {
     yyjson_mut_doc *doc;
 
     yyjson_mut_val *from(const std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A> &v) const {
@@ -543,7 +471,7 @@ struct cpx::serde::Serialize<
         for (auto &[k, v] : v) {
             yyjson_mut_val *key = yyjson_mut_strn(doc, k.data(), k.size()), *item;
             try {
-                item = Serialize<yyjson_mut_val, T>{doc}.from(v);
+                item = SERIALIZE(T){doc}.from(v);
             } catch (error &e) {
                 throw e.add_context(k);
             }
@@ -554,10 +482,10 @@ struct cpx::serde::Serialize<
 };
 
 template <typename CT, typename CA, typename T, typename H, typename P, typename A>
-struct cpx::serde::Deserialize<
-    yyjson_val,
+struct DESERIALIZE(
     std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A>,
-    std::enable_if_t<std::is_default_constructible_v<T> && cpx::serde::is_deserializable_v<yyjson_val, T>>> {
+    std::enable_if_t<std::is_default_constructible_v<T> && DESERIALIZABLE(T)>
+) {
     yyjson_val *val;
 
     void into(std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A> &v) {
@@ -569,10 +497,10 @@ struct cpx::serde::Deserialize<
         yyjson_val *key, *val;
         yyjson_obj_foreach(obj, idx, max, key, val) {
             std::basic_string<char, CT, CA> key_str;
-            Deserialize<yyjson_val, std::basic_string<char, CT, CA>>{key}.into(key_str);
+            DESERIALIZE(std::basic_string<char, CT, CA>){key}.into(key_str);
             auto item = T{};
             try {
-                Deserialize<yyjson_val, T>{val}.into(item);
+                DESERIALIZE(T){val}.into(item);
             } catch (error &e) {
                 e.add_context(key_str);
                 throw;
@@ -584,40 +512,90 @@ struct cpx::serde::Deserialize<
 
 // reflection
 template <typename T>
-struct cpx::serde::Serialize<yyjson_mut_val, T, std::enable_if_t<cpx::json::has_reflect_v<T>>> {
+struct SERIALIZE(T, std::enable_if_t<cpx::json::has_reflect_v<T>>) {
     yyjson_mut_doc *doc;
 
     yyjson_mut_val *from(const T &v) const {
-        return Serialize<yyjson_mut_val, cpx::json::const_reflect_t<T>>{doc}.from(cpx::json::reflect_of(v));
+        return SERIALIZE(cpx::json::const_reflect_t<T>){doc}.from(cpx::json::reflect_of(v));
     }
 };
 
 template <typename T>
-struct cpx::serde::Deserialize<yyjson_val, T, std::enable_if_t<cpx::json::has_reflect_v<T>>> {
+struct DESERIALIZE(T, std::enable_if_t<cpx::json::has_reflect_v<T>>) {
     yyjson_val *val;
 
     void into(T &v) {
         decltype(auto) r = cpx::json::reflect_of(v);
-        cpx::serde::Deserialize<yyjson_val, cpx::json::reflect_t<T>>{val}.into(r);
+        DESERIALIZE(cpx::json::reflect_t<T>){val}.into(r);
     }
 };
 
+// parse and dump
+template <typename CT, typename A>
+struct PARSE(std::basic_string<char, CT, A>) {
+    const std::basic_string<char, CT, A> &src;
+    yyjson_read_flag                      flag = YYJSON_READ_NOFLAG;
+    const yyjson_alc                     *alc  = nullptr;
+
+    template <typename T>
+    void into(T &val, bool src_is_path = false) const {
+        yyjson_read_err err;
+        try {
+            yyjson_doc *doc = src_is_path ? yyjson_read_file(const_cast<char *>(src.c_str()), flag, alc, &err)
+                                          : yyjson_read_opts(const_cast<char *>(src.c_str()), src.size(), flag, alc, &err);
+            if (!doc)
+                throw error(err.msg);
+
+            auto _ = defer([&] { yyjson_doc_free(doc); });
+            DESERIALIZE(T){yyjson_doc_get_root(doc)}.into(val);
+        } catch (error &err) {
+            if (src_is_path)
+                err.path = src;
+            throw;
+        }
+    }
+};
+
+template <typename CT, typename A>
+struct DUMP(std::basic_string<char, CT, A>) {
+    yyjson_write_flag flag = YYJSON_WRITE_NOFLAG;
+    const yyjson_alc *alc  = nullptr;
+
+    template <typename T>
+    std::basic_string<char, CT, A> from(const T &val) const {
+        yyjson_mut_doc *doc = yyjson_mut_doc_new(alc);
+        if (!doc)
+            throw error("Fatal error: cannot create yyjson doc");
+
+        auto _ = defer([&]() { yyjson_mut_doc_free(doc); });
+        yyjson_mut_doc_set_root(doc, SERIALIZE(T){doc}.from(val));
+
+        size_t           len;
+        yyjson_write_err err;
+        const char      *str = yyjson_mut_write_opts(doc, flag, nullptr, &len, &err);
+        if (!str)
+            throw error(err.msg);
+
+        auto __ = defer([&]() { ::free((void *)str); });
+        return {str, len};
+    }
+};
 
 template <typename T>
 void cpx::json::yy_json::parse(const std::string &str, T &val, yyjson_read_flag flag) {
-    cpx::serde::Parse<yyjson_doc, std::string>{str, flag}.into(val);
+    Parse<std::string>{str, flag}.into(val);
 }
 
 template <typename T>
 void cpx::json::yy_json::parse_from_file(const std::string &path, T &val, yyjson_read_flag flag) {
-    cpx::serde::Parse<yyjson_doc, std::string>{path, flag}.into(val, true);
+    Parse<std::string>{path, flag}.into(val, true);
 }
 
 template <typename T>
 [[nodiscard]]
 std::enable_if_t<std::is_default_constructible_v<T>, T> cpx::json::yy_json::parse(const std::string &str, yyjson_read_flag flag) {
     T val = {};
-    cpx::serde::Parse<yyjson_doc, std::string>{str, flag}.into(val);
+    Parse<std::string>{str, flag}.into(val);
     return val;
 }
 
@@ -626,13 +604,20 @@ template <typename T>
 std::enable_if_t<std::is_default_constructible_v<T>, T>
 cpx::json::yy_json::parse_from_file(const std::string &path, yyjson_read_flag flag) {
     T val = {};
-    cpx::serde::Parse<yyjson_doc, std::string>{path, flag}.into(val, true);
+    Parse<std::string>{path, flag}.into(val, true);
     return val;
 }
 
 template <typename T>
 [[nodiscard]]
 std::string cpx::json::yy_json::dump(const T &val, yyjson_write_flag flag, const yyjson_alc *alc) {
-    return cpx::serde::Dump<yyjson_mut_doc, std::string>{flag, alc}.from(val);
+    return Dump<std::string>{flag, alc}.from(val);
 }
+
+#undef SERIALIZE
+#undef DESERIALIZE
+#undef SERIALIZABLE
+#undef DESERIALIZABLE
+#undef DUMP
+#undef PARSE
 #endif

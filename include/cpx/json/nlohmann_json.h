@@ -39,19 +39,33 @@ namespace cpx::json::nlohmann_json {
         else
             return cpx::json::reflect_of(std::forward<T>(v));
     }
+} // namespace cpx::json::nlohmann_json
 
+#define SERIALIZE(...)      cpx::serde::Serialize<nlohmann::json, __VA_ARGS__>
+#define DESERIALIZE(...)    cpx::serde::Deserialize<nlohmann::json, __VA_ARGS__>
+#define SERIALIZABLE(...)   cpx::serde::is_serializable_v<nlohmann::json, __VA_ARGS__>
+#define DESERIALIZABLE(...) cpx::serde::is_deserializable_v<nlohmann::json, __VA_ARGS__>
+#define PARSE(...)          cpx::serde::Parse<nlohmann::json, __VA_ARGS__>
+#define DUMP(...)           cpx::serde::Dump<nlohmann::json, __VA_ARGS__>
+
+namespace cpx::json::nlohmann_json {
+    template <typename From>
+    using Serialize = SERIALIZE(From);
+
+    template <typename To>
+    using Deserialize = DESERIALIZE(To);
 
     template <typename From>
-    using Serialize = cpx::serde::Serialize<nlohmann::json, From>;
+    constexpr bool is_serializable_v = SERIALIZABLE(From);
 
     template <typename To>
-    using Deserialize = cpx::serde::Deserialize<nlohmann::json, To>;
+    constexpr bool is_deserializable_v = DESERIALIZABLE(To);
 
     template <typename To>
-    using Dump = cpx::serde::Dump<nlohmann::json, To>;
+    using Dump = DUMP(To);
 
     template <typename From = std::string>
-    using Parse = ::cpx::serde::Parse<nlohmann::json, From>;
+    using Parse = PARSE(From);
 
     template <typename T>
     std::string dump(const T &val, int indent = -1, char indent_char = ' ', bool ensure_ascii = false);
@@ -80,12 +94,7 @@ namespace cpx::json::nlohmann_json {
 
 // optional
 template <typename T>
-struct nlohmann::adl_serializer<
-    std::optional<T>,
-    std::enable_if_t<
-        std::is_convertible_v<T, nlohmann::json>,
-        std::void_t<decltype(std::declval<const nlohmann::json &>().get<T>())>>> {
-
+struct nlohmann::adl_serializer<std::optional<T>, std::enable_if_t<SERIALIZABLE(T) && DESERIALIZABLE(T)>> {
     static void to_json(json &j, const std::optional<T> &opt) {
         if (opt.has_value())
             j = *opt;
@@ -103,10 +112,7 @@ struct nlohmann::adl_serializer<
 
 // variant
 template <typename... T>
-struct nlohmann::adl_serializer<
-    std::variant<T...>,
-    std::enable_if_t<((std::is_convertible_v<T, nlohmann::json> && cpx::serde::is_deserializable_v<nlohmann::json, T>) && ...)>> {
-
+struct nlohmann::adl_serializer<std::variant<T...>, std::enable_if_t<((SERIALIZABLE(T) && DESERIALIZABLE(T)) && ...)>> {
     static void to_json(json &j, const std::variant<T...> &v) {
         std::visit([&](const auto &var) { j = var; }, v);
     }
@@ -119,7 +125,7 @@ struct nlohmann::adl_serializer<
                 try {
                     if (!done) {
                         auto element = T{};
-                        cpx::serde::Deserialize<nlohmann::json, T>{j}.into(element);
+                        DESERIALIZE(T){j}.into(element);
                         v    = std::move(element);
                         done = true;
                     }
@@ -147,12 +153,11 @@ struct nlohmann::adl_serializer<std::tuple<Ts...>> {
 
         size_t idx = 0;
         cpx::tuple_for_each(flattened, [&](const auto &item, const size_t) {
-            const cpx::TagInfo &t       = cpx::json::get_tag_info(item);
-            const auto         &v       = cpx::detail::get_underlying_value(item);
-            using T                     = std::decay_t<decltype(v)>;
-            constexpr bool serializable = cpx::serde::is_serializable_v<nlohmann::json, T>;
+            const cpx::TagInfo &t = cpx::json::get_tag_info(item);
+            const auto         &v = cpx::detail::get_underlying_value(item);
+            using T               = std::decay_t<decltype(v)>;
 
-            if (!serializable || (is_obj && t.key == ""))
+            if (!SERIALIZABLE(T) || (is_obj && t.key == ""))
                 return;
 
             size_t i = idx++;
@@ -167,7 +172,7 @@ struct nlohmann::adl_serializer<std::tuple<Ts...>> {
                     else
                         throw cpx::serde::error("field with tag `noserde` can only be serialized from std::string");
                 else {
-                    if constexpr (serializable)
+                    if constexpr (SERIALIZABLE(T))
                         try {
                             val = v;
                         } catch (nlohmann::json::exception &e) {
@@ -196,12 +201,11 @@ struct nlohmann::adl_serializer<std::tuple<Ts...>> {
 
         size_t pos = 0;
         cpx::tuple_for_each(flattened, [&](auto &item, const size_t) {
-            const cpx::TagInfo &t         = cpx::json::get_tag_info(item);
-            auto               &v         = cpx::detail::get_underlying_value(item);
-            using T                       = std::decay_t<decltype(v)>;
-            constexpr bool deserializable = cpx::serde::is_deserializable_v<nlohmann::json, T>;
+            const cpx::TagInfo &t = cpx::json::get_tag_info(item);
+            auto               &v = cpx::detail::get_underlying_value(item);
+            using T               = std::decay_t<decltype(v)>;
 
-            if (!deserializable || (is_obj && t.key == ""))
+            if (!DESERIALIZABLE(T) || (is_obj && t.key == ""))
                 return;
 
             size_t                idx = pos++;
@@ -221,7 +225,7 @@ struct nlohmann::adl_serializer<std::tuple<Ts...>> {
                     else
                         throw cpx::serde::error("field with tag `noserde` can only be deserialized into std::string");
                 else {
-                    if constexpr (deserializable)
+                    if constexpr (DESERIALIZABLE(T))
                         try {
                             ptr->get_to(v);
                         } catch (nlohmann::json::exception &e) {
@@ -243,19 +247,18 @@ struct nlohmann::adl_serializer<std::tuple<Ts...>> {
 template <typename T>
 struct nlohmann::adl_serializer<T, std::enable_if_t<cpx::json::nlohmann_json::has_reflect_v<T>>> {
     static void to_json(nlohmann::json &j, const T &v) {
-        j = cpx::serde::Serialize<nlohmann::json, cpx::json::nlohmann_json::const_reflect_t<T>>{}.from(
-            cpx::json::nlohmann_json::reflect_of(v)
-        );
+        j = SERIALIZE(cpx::json::nlohmann_json::const_reflect_t<T>){}.from(cpx::json::nlohmann_json::reflect_of(v));
     }
 
     static void from_json(const nlohmann::json &j, T &v) {
         decltype(auto) proxy = cpx::json::nlohmann_json::reflect_of(v);
-        cpx::serde::Deserialize<nlohmann::json, cpx::json::nlohmann_json::reflect_t<T>>{j}.into(proxy);
+        DESERIALIZE(cpx::json::nlohmann_json::reflect_t<T>){j}.into(proxy);
     }
 };
 
+// serde specializations
 template <typename T>
-struct cpx::serde::Serialize<nlohmann::json, T, std::enable_if_t<std::is_convertible_v<T, nlohmann::json>>> {
+struct SERIALIZE(T, std::enable_if_t<std::is_convertible_v<T, nlohmann::json>>) {
     nlohmann::json from(const T &v) const {
         try {
             return v;
@@ -266,8 +269,7 @@ struct cpx::serde::Serialize<nlohmann::json, T, std::enable_if_t<std::is_convert
 };
 
 template <typename T>
-struct cpx::serde::
-    Deserialize<nlohmann::json, T, std::void_t<decltype(std::declval<const nlohmann::json &>().get_to(std::declval<T &>()))>> {
+struct DESERIALIZE(T, std::void_t<decltype(std::declval<const nlohmann::json &>().get_to(std::declval<T &>()))>) {
     const nlohmann::json &j;
 
     void into(T &v) const {
@@ -299,8 +301,9 @@ struct cpx::serde::
     }
 };
 
+// parse and dump
 template <>
-struct cpx::serde::Parse<nlohmann::json, std::string> {
+struct PARSE(std::string) {
     const std::string &str;
     bool               ignore_comments = false;
 
@@ -308,7 +311,7 @@ struct cpx::serde::Parse<nlohmann::json, std::string> {
     void into(T &val) const {
         try {
             auto j = nlohmann::json::parse(str, nullptr, true, ignore_comments);
-            Deserialize<nlohmann::json, T>{j}.into(val);
+            DESERIALIZE(T){j}.into(val);
         } catch (nlohmann::json::exception &e) {
             throw error(e.what());
         }
@@ -316,7 +319,7 @@ struct cpx::serde::Parse<nlohmann::json, std::string> {
 };
 
 template <>
-struct cpx::serde::Parse<nlohmann::json, std::istream> {
+struct PARSE(std::istream) {
     std::istream &stream;
     bool          ignore_comments = false;
 
@@ -324,7 +327,7 @@ struct cpx::serde::Parse<nlohmann::json, std::istream> {
     std::istream &into(T &val) const {
         try {
             auto j = nlohmann::json::parse(stream, nullptr, true, ignore_comments);
-            Deserialize<nlohmann::json, T>{j}.into(val);
+            DESERIALIZE(T){j}.into(val);
         } catch (nlohmann::json::exception &e) {
             throw error(e.what());
         }
@@ -337,7 +340,7 @@ struct cpx::serde::Parse<nlohmann::json, std::istream> {
 };
 
 template <>
-struct cpx::serde::Parse<nlohmann::json, std::FILE *> {
+struct PARSE(std::FILE *) {
     std::FILE *file;
     bool       ignore_comments = false;
 
@@ -345,7 +348,7 @@ struct cpx::serde::Parse<nlohmann::json, std::FILE *> {
     void into(T &val) const {
         try {
             auto j = nlohmann::json::parse(file, nullptr, true, ignore_comments);
-            Deserialize<nlohmann::json, T>{j}.into(val);
+            DESERIALIZE(T){j}.into(val);
         } catch (nlohmann::json::exception &e) {
             throw error(e.what());
         }
@@ -353,7 +356,7 @@ struct cpx::serde::Parse<nlohmann::json, std::FILE *> {
 };
 
 template <>
-struct cpx::serde::Dump<nlohmann::json, std::ostream> {
+struct DUMP(std::ostream) {
     std::ostream &os;
     int           indent       = -1;
     char          indent_char  = ' ';
@@ -362,7 +365,7 @@ struct cpx::serde::Dump<nlohmann::json, std::ostream> {
     template <typename T>
     void from(const T &val) const {
         try {
-            os << Serialize<nlohmann::json, T>{}.from(val);
+            os << SERIALIZE(T){}.from(val);
         } catch (nlohmann::json::exception &e) {
             throw error(e.what());
         }
@@ -375,7 +378,7 @@ struct cpx::serde::Dump<nlohmann::json, std::ostream> {
 };
 
 template <>
-struct cpx::serde::Dump<nlohmann::json, std::string> {
+struct DUMP(std::string) {
     int  indent       = -1;
     char indent_char  = ' ';
     bool ensure_ascii = false;
@@ -383,7 +386,7 @@ struct cpx::serde::Dump<nlohmann::json, std::string> {
     template <typename T>
     std::string from(const T &val) const {
         try {
-            return Serialize<nlohmann::json, T>{}.from(val).dump(indent, indent_char, ensure_ascii);
+            return SERIALIZE(T){}.from(val).dump(indent, indent_char, ensure_ascii);
         } catch (nlohmann::json::exception &e) {
             throw error(e.what());
         }
@@ -467,13 +470,20 @@ namespace cpx::json::nlohmann_json {
             return self;
         }
 
-        friend cpx::serde::Dump<nlohmann::json, std::ostream> operator<<(std::ostream &os, const IO &io) {
+        friend DUMP(std::ostream) operator<<(std::ostream &os, const IO &io) {
             return {os, io._indent, io._indent_char, io._ensure_ascii};
         }
 
-        friend cpx::serde::Parse<nlohmann::json, std::istream> operator>>(std::istream &is, const IO &io) {
+        friend PARSE(std::istream) operator>>(std::istream &is, const IO &io) {
             return {is, io._ignore_comments};
         }
     } io{};
 } // namespace cpx::json::nlohmann_json
+
+#undef SERIALIZE
+#undef DESERIALIZE
+#undef SERIALIZABLE
+#undef DESERIALIZABLE
+#undef PARSE
+#undef DUMP
 #endif
