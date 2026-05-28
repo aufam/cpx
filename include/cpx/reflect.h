@@ -19,19 +19,13 @@ namespace cpx::detail {
         using class_type  = Class;
         using member_type = Member;
     };
-
-#if __cplusplus >= 202002L
-    using tparam_TagInfo = TagInfo;
-#else
-    using tparam_TagInfo = const TagInfo &;
-#endif
 } // namespace cpx::detail
 
 namespace cpx {
-    template <auto MemberPtr, cpx::detail::tparam_TagInfo TagRef>
+    template <auto MemberPtr, const TagInfo &TagRef>
     struct Field {
-        static constexpr auto                        member_ptr = MemberPtr;
-        static constexpr cpx::detail::tparam_TagInfo tag        = TagRef;
+        static constexpr auto  member_ptr = MemberPtr;
+        static constexpr auto &tag        = TagRef;
 
         using traits = cpx::detail::member_pointer_traits<decltype(MemberPtr)>;
 

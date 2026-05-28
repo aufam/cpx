@@ -11,10 +11,12 @@ module;
 #include <cpx/time.h>
 #include <cpx/time.h>
 #include <cpx/tuple.h>
+#include <cpx/reflect_builtin.h>
 
 export module cpx;
 
 export using std::tm;
+export using std::timespec;
 
 export namespace cpx {
     using ::cpx::defer;
@@ -54,9 +56,7 @@ export namespace cpx {
     using ::cpx::Tag;
 
     using ::cpx::get_tag_info;
-    using ::cpx::get_tag_info_from_tuple;
     using ::cpx::TagInfo;
-    using ::cpx::TagInfoTuple;
 
     using ::cpx::tm_from_string;
     using ::cpx::tm_max;
@@ -71,4 +71,13 @@ export namespace cpx {
     using ::cpx::tie_if;
     using ::cpx::tie_if_one;
     using ::cpx::tuple_for_each;
+
+    using ::cpx::const_reflect_t;
+    using ::cpx::Field;
+    using ::cpx::Fields;
+    using ::cpx::has_reflect;
+    using ::cpx::has_reflect_v;
+    using ::cpx::Reflect;
+    using ::cpx::reflect_of;
+    using ::cpx::reflect_t;
 } // namespace cpx
