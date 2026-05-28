@@ -6,23 +6,23 @@
 
 ## Features
 
-- **Tag-based serialization/deserialization**  
-  Unified interface for JSON, TOML, YAML, Protobuf, CLI, and SQL
+- **Tag-based serialization/deserialization**
+  Unified interface for JSON, TOML, YAML, Protobuf, MessagePack, CLI, and SQL
 
-- **Composable iterator utilities**  
+- **Composable iterator utilities**
   `iterate`, `enumerate`, `zip`, `map`, `drop`, `take`, `collect`
 
-- **RAII utilities**  
+- **RAII utilities**
   Scope-exit guard via `defer`
 
 - **SQL query builder**
 
 - **CLI argument parsing**
 
-- **Concurrency primitives**  
+- **Concurrency primitives**
   Channel, queue, and semaphore
 
-- **Inference utilities**  
+- **Inference utilities**
   Support for ONNX Runtime and OpenVINO
 
 - **...and more**
@@ -39,26 +39,29 @@ It does not bundle or enforce specific libraries, instead it provides adapters s
 
 ## Supported Integrations
 
-- **Formatting**  
+- **Formatting**
   [`fmt`](https://github.com/fmtlib/fmt)
 
-- **CLI parsing**  
-  [`CLI11`](https://github.com/CLIUtils/CLI11), [`cxxopts`](https://github.com/jarro2783/cxxopts)
+- **CLI parsing**
+  [`CLI11`](https://github.com/CLIUtils/CLI11)
 
-- **JSON**  
-  [`yyjson`](https://github.com/ibireme/yyjson), [`nlohmann::json`](https://github.com/nlohmann/json)
+- **JSON**
+  [`yyjson`](https://github.com/ibireme/yyjson), [`nlohmann::json`](https://github.com/nlohmann/json), [`rapidjson`](https://github.com/Tencent/rapidjson)
 
-- **TOML**  
+- **TOML**
   [`toml11`](https://github.com/ToruNiina/toml11), [`toml++`](https://github.com/marzer/tomlplusplus)
 
 - **YAML**
   [`yaml-cpp`](https://github.com/jbeder/yaml-cpp)
 
-- **Inference runtimes**  
-  [ONNX Runtime](https://onnx.ai), [OpenVINO](https://openvino.ai)
+- **MessagePack**
+  [`msgpack`](https://github.com/msgpack/msgpack-c)
 
-- **Protobuf**  
+- **Protobuf**
   [Protocol Buffers](https://protobuf.dev)
+
+- **Inference runtimes**
+  [ONNX Runtime](https://onnx.ai), [OpenVINO](https://openvino.ai)
 
 Contributions are very much welcomed :)
 
