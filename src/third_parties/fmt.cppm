@@ -1,16 +1,10 @@
 module;
 
-#include <cpx/tag_info.h>
+#include <cpx/reflect_builtin.h>
+#include <cpx/extend.h>
 #include <optional>
 #include <variant>
-
-#if __has_include(<boost/pfr.hpp>)
-#    include <boost/pfr.hpp>
-#endif
-
-#if __has_include(<magic_enum/magic_enum.hpp>)
-#    include <magic_enum/magic_enum.hpp>
-#endif
+#include <chrono>
 
 #define FMT_RANGES_H_
 #define FMT_CHRONO_H_
