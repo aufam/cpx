@@ -4,7 +4,7 @@
 #include <cpx/yaml/yaml.h>
 #include <cpx/serde/serialize.h>
 #include <cpx/serde/deserialize.h>
-#include <cpx/reflect.h>
+#include <cpx/reflect_builtin.h>
 #include <cpx/extend.h>
 #include <array>
 #include <tuple>
@@ -19,18 +19,31 @@
 
 namespace __yaml_cpp = ::YAML;
 
+#define SERIALIZE(...)      cpx::serde::Serialize<__yaml_cpp::Node, __VA_ARGS__>
+#define DESERIALIZE(...)    cpx::serde::Deserialize<__yaml_cpp::Node, __VA_ARGS__>
+#define SERIALIZABLE(...)   cpx::serde::is_serializable_v<__yaml_cpp::Node, __VA_ARGS__>
+#define DESERIALIZABLE(...) cpx::serde::is_deserializable_v<__yaml_cpp::Node, __VA_ARGS__>
+#define DUMP(...)           cpx::serde::Dump<__yaml_cpp::Node, __VA_ARGS__>
+#define PARSE(...)          cpx::serde::Parse<__yaml_cpp::Node, __VA_ARGS__>
+
 namespace cpx::yaml::jbeder_yaml {
     template <typename From>
-    using Serialize = cpx::serde::Serialize<__yaml_cpp::Node, From>;
+    using Serialize = SERIALIZE(From);
 
     template <typename To>
-    using Deserialize = cpx::serde::Deserialize<__yaml_cpp::Node, To>;
+    using Deserialize = DESERIALIZE(To);
 
     template <typename From>
-    using Parse = cpx::serde::Parse<__yaml_cpp::Node, From>;
+    constexpr bool is_serializable_v = SERIALIZABLE(From);
 
     template <typename To>
-    using Dump = cpx::serde::Dump<__yaml_cpp::Node, To>;
+    constexpr bool is_deserializable_v = DESERIALIZABLE(To);
+
+    template <typename From>
+    using Parse = PARSE(From);
+
+    template <typename To>
+    using Dump = DUMP(To);
 
     template <typename T>
     void parse(const std::string &str, T &val);
@@ -94,95 +107,16 @@ namespace cpx::yaml::jbeder_yaml::detail {
     }
 } // namespace cpx::yaml::jbeder_yaml::detail
 
-template <>
-struct cpx::serde::Dump<__yaml_cpp::Node, std::ostream> {
-    std::ostream &os;
-
-    template <typename T>
-    std::ostream &from(const T &v) const {
-        return os << Serialize<__yaml_cpp::Node, T>{}.from(v);
-    }
-
-    template <typename T>
-    std::ostream &operator<<(const T &v) const {
-        return from(v);
-    }
-};
-
-template <>
-struct cpx::serde::Dump<__yaml_cpp::Node, std::string> {
-    template <typename T>
-    std::string from(const T &v) const {
-        __yaml_cpp::Node   val = Serialize<__yaml_cpp::Node, T>{}.from(v);
-        std::ostringstream oss;
-        oss << val;
-        return oss.str();
-    }
-};
-
-template <>
-struct cpx::serde::Parse<__yaml_cpp::Node, std::string> {
-    const std::string &src;
-
-    template <typename T>
-    void into(T &v, bool src_is_path = false) const {
-        try {
-            __yaml_cpp::Node val;
-            try {
-                val = src_is_path ? __yaml_cpp::LoadFile(src) : __yaml_cpp::Load(src);
-            } catch (std::exception &e) {
-                throw error(e.what());
-            }
-            Deserialize<__yaml_cpp::Node, T>{val}.into(v);
-        } catch (error &err) {
-            if (src_is_path)
-                err.path = src;
-            throw;
-        }
-    }
-};
-
-template <>
-struct cpx::serde::Parse<__yaml_cpp::Node, std::istream> {
-    std::istream    &stream;
-    std::string_view filename = "";
-
-    template <typename T>
-    std::istream &into(T &v) const {
-        try {
-            __yaml_cpp::Node val;
-            try {
-                val = __yaml_cpp::Load(stream);
-            } catch (std::exception &e) {
-                throw error(e.what());
-            }
-            Deserialize<__yaml_cpp::Node, T>{val}.into(v);
-        } catch (error &err) {
-            if (!filename.empty())
-                err.path = std::string(filename);
-            throw;
-        }
-        return stream;
-    }
-
-    template <typename T>
-    std::istream &operator>>(T &v) const {
-        return into(v);
-    }
-};
-
 // bool, integers, floats
 template <typename T>
-struct cpx::serde::
-    Serialize<__yaml_cpp::Node, T, std::enable_if_t<::cpx::yaml::jbeder_yaml::detail::is_primitive_type<T>::value>> {
+struct SERIALIZE(T, std::enable_if_t<::cpx::yaml::jbeder_yaml::detail::is_primitive_type<T>::value>) {
     __yaml_cpp::Node from(T v) const {
         return __yaml_cpp::Node(v);
     }
 };
 
 template <typename T>
-struct cpx::serde::
-    Deserialize<__yaml_cpp::Node, T, std::enable_if_t<::cpx::yaml::jbeder_yaml::detail::is_primitive_type<T>::value>> {
+struct DESERIALIZE(T, std::enable_if_t<::cpx::yaml::jbeder_yaml::detail::is_primitive_type<T>::value>) {
     const __yaml_cpp::Node &node;
 
     void into(T &v) const {
@@ -200,7 +134,7 @@ struct cpx::serde::
 
 // string
 template <typename A>
-struct cpx::serde::Serialize<__yaml_cpp::Node, std::basic_string<char, std::char_traits<char>, A>> {
+struct SERIALIZE(std::basic_string<char, std::char_traits<char>, A>) {
     __yaml_cpp::Node from(const std::basic_string<char, std::char_traits<char>, A> &v) const {
         if constexpr (std::is_same_v<std::allocator<char>, A>)
             return __yaml_cpp::Node(v);
@@ -221,18 +155,18 @@ struct cpx::serde::Serialize<__yaml_cpp::Node, std::basic_string<char, std::char
 };
 
 template <>
-struct cpx::serde::Serialize<__yaml_cpp::Node, std::string_view> {
+struct SERIALIZE(std::string_view) {
     __yaml_cpp::Node from(std::string_view v) const {
         return __yaml_cpp::Node(v);
     }
 
     __yaml_cpp::Node from_raw(std::string_view v) const {
-        return Serialize<__yaml_cpp::Node, std::string>{}.from_raw(std::string(v));
+        return SERIALIZE(std::string){}.from_raw(std::string(v));
     }
 };
 
 template <typename A>
-struct cpx::serde::Deserialize<__yaml_cpp::Node, std::basic_string<char, std::char_traits<char>, A>> {
+struct DESERIALIZE(std::basic_string<char, std::char_traits<char>, A>) {
     const __yaml_cpp::Node &node;
 
     void into(std::basic_string<char, std::char_traits<char>, A> &v) const {
@@ -261,8 +195,7 @@ struct cpx::serde::Deserialize<__yaml_cpp::Node, std::basic_string<char, std::ch
 
 // optional
 template <typename T>
-struct cpx::serde::
-    Serialize<__yaml_cpp::Node, std::optional<T>, std::enable_if_t<cpx::serde::is_serializable_v<__yaml_cpp::Node, T>>> {
+struct SERIALIZE(std::optional<T>, std::enable_if_t<SERIALIZABLE(T)>) {
     __yaml_cpp::Node from(const std::optional<T> &v) const {
         Serialize<__yaml_cpp::Node, T> ser = {};
         if (v.has_value())
@@ -273,10 +206,7 @@ struct cpx::serde::
 };
 
 template <typename T>
-struct cpx::serde::Deserialize<
-    __yaml_cpp::Node,
-    std::optional<T>,
-    std::enable_if_t<std::is_default_constructible_v<T> && cpx::serde::is_deserializable_v<__yaml_cpp::Node, T>>> {
+struct DESERIALIZE(std::optional<T>, std::enable_if_t<std::is_default_constructible_v<T> && DESERIALIZABLE(T)>) {
     const __yaml_cpp::Node &node;
 
     void into(std::optional<T> &v) const {
@@ -284,36 +214,41 @@ struct cpx::serde::Deserialize<
             v = std::nullopt;
             return;
         }
-        v = T{};
-        Deserialize<__yaml_cpp::Node, T>{node}.into(*v);
+        v.emplace();
+        DESERIALIZE(T){node}.into(*v);
     }
 };
 
 // array
 template <typename T, size_t N>
-struct cpx::serde::
-    Serialize<__yaml_cpp::Node, std::array<T, N>, std::enable_if_t<cpx::serde::is_serializable_v<__yaml_cpp::Node, T>>> {
-    __yaml_cpp::Node from(const std::array<T, N> &v) const {
+struct SERIALIZE(std::array<T, N>, std::enable_if_t<SERIALIZABLE(T)>) {
+    template <typename Container>
+    __yaml_cpp::Node from_container(const Container &v) const {
         __yaml_cpp::Node arr(__yaml_cpp::NodeType::Sequence);
         for (auto &item : v)
-            arr.push_back(Serialize<__yaml_cpp::Node, T>{}.from(item));
+            arr.push_back(SERIALIZE(T){}.from(item));
         return arr;
+    }
+
+    __yaml_cpp::Node from(const std::array<T, N> &v) const {
+        return from_container(v);
     }
 };
 
 template <typename T, size_t N>
-struct cpx::serde::
-    Deserialize<__yaml_cpp::Node, std::array<T, N>, std::enable_if_t<cpx::serde::is_deserializable_v<__yaml_cpp::Node, T>>> {
+struct DESERIALIZE(std::array<T, N>, std::enable_if_t<DESERIALIZABLE(T)>) {
     const __yaml_cpp::Node &node;
 
-    void into(std::array<T, N> &v) const {
+
+    template <typename Container, typename F>
+    void into_container(std::array<T, N> &v, F &&on_size_mismatch) const {
         if (!node.IsSequence())
             throw type_mismatch_error("array", ::cpx::yaml::jbeder_yaml::detail::type(node));
 
         const auto  &arr = node;
         const size_t n   = arr.size();
         if (n != N)
-            throw size_mismatch_error(N, n);
+            on_size_mismatch(n);
 
         for (size_t i = 0; i < n; ++i)
             try {
@@ -323,45 +258,30 @@ struct cpx::serde::
                 throw;
             }
     };
+
+    void into(std::array<T, N> &v) const {
+        into_container(v, [](size_t got) { throw size_mismatch_error(N, got); });
+    };
 };
 
 template <typename T, typename A>
-struct cpx::serde::
-    Serialize<__yaml_cpp::Node, std::vector<T, A>, std::enable_if_t<cpx::serde::is_serializable_v<__yaml_cpp::Node, T>>> {
+struct SERIALIZE(std::vector<T, A>, std::enable_if_t<SERIALIZABLE(T)>) {
     __yaml_cpp::Node from(const std::vector<T, A> &v) const {
-        __yaml_cpp::Node arr(__yaml_cpp::NodeType::Sequence);
-        for (auto &item : v)
-            arr.push_back(Serialize<__yaml_cpp::Node, T>{}.from(item));
-        return arr;
+        return SERIALIZE(std::array<T, 1>){}.from_container(v);
     }
 };
 
 template <typename T, typename A>
-struct cpx::serde::Deserialize<
-    __yaml_cpp::Node,
-    std::vector<T, A>,
-    std::enable_if_t<std::is_default_constructible_v<T> && cpx::serde::is_deserializable_v<__yaml_cpp::Node, T>>> {
+struct DESERIALIZE(std::vector<T, A>, std::enable_if_t<std::is_default_constructible_v<T> && DESERIALIZABLE(T)>) {
     const __yaml_cpp::Node &node;
 
     void into(std::vector<T, A> &v) const {
-        if (!node.IsSequence())
-            throw type_mismatch_error("array", ::cpx::yaml::jbeder_yaml::detail::type(node));
-
-        const auto  &arr = node;
-        const size_t n   = arr.size();
-        v.resize(n);
-        for (size_t i = 0; i < n; ++i)
-            try {
-                Deserialize<__yaml_cpp::Node, T>{arr[i]}.into(v[i]);
-            } catch (error &e) {
-                e.add_context(i);
-                throw;
-            }
+        DESERIALIZE(std::array<T, 1>){node}.into_container(v, [&v](size_t got) { v.resize(got); });
     }
 };
 
 template <typename... Ts>
-struct cpx::serde::Serialize<__yaml_cpp::Node, std::tuple<Ts...>> {
+struct SERIALIZE(std::tuple<Ts...>) {
     __yaml_cpp::Node from(const std::tuple<Ts...> &tpl) {
         auto flattened        = cpx::flatten(tpl);
         using Tpl             = decltype(flattened);
@@ -369,18 +289,20 @@ struct cpx::serde::Serialize<__yaml_cpp::Node, std::tuple<Ts...>> {
 
         __yaml_cpp::Node node(is_map ? __yaml_cpp::NodeType::Map : __yaml_cpp::NodeType::Sequence);
 
+        std::array<std::string_view, std::tuple_size_v<Tpl>> oneofs = {};
+
         size_t idx = 0;
         tuple_for_each(flattened, [&](auto &item, const size_t) {
             const cpx::TagInfo &t       = cpx::yaml::get_tag_info(item);
             auto               &v       = cpx::detail::get_underlying_value(item);
             using T                     = std::decay_t<decltype(v)>;
-            constexpr bool serializable = cpx::serde::is_serializable_v<__yaml_cpp::Node, T>;
+            constexpr bool serializable = SERIALIZABLE(T);
 
             if (!serializable || (is_map && t.key == ""))
                 return;
 
             size_t i = idx++;
-            if (t.omitempty && cpx::detail::is_empty_value(v)) {
+            if ((t.omitempty || !t.oneof.empty()) && cpx::detail::is_empty_value(v)) {
                 if constexpr (!is_map)
                     node.push_back(__yaml_cpp::Node(__yaml_cpp::NodeType::Null));
                 return;
@@ -408,14 +330,25 @@ struct cpx::serde::Serialize<__yaml_cpp::Node, std::tuple<Ts...>> {
                 node[t.key] = val;
             else
                 node.push_back(val);
+
+            oneofs[i] = t.oneof;
         });
+
+        for (const auto &oneof : oneofs) {
+            if (oneof.empty())
+                continue;
+
+            for (const auto &existing : oneofs)
+                if (existing == oneof && &existing != &oneof)
+                    throw duplicate_oneof_error(oneof);
+        }
 
         return node;
     }
 };
 
 template <typename... Ts>
-struct cpx::serde::Deserialize<__yaml_cpp::Node, std::tuple<Ts...>> {
+struct DESERIALIZE(std::tuple<Ts...>) {
     const __yaml_cpp::Node &node;
 
     void into(std::tuple<Ts...> &tpl) const {
@@ -429,6 +362,8 @@ struct cpx::serde::Deserialize<__yaml_cpp::Node, std::tuple<Ts...>> {
             throw type_mismatch_error("map", ::cpx::yaml::jbeder_yaml::detail::type(node));
         const auto &arr = node;
         const auto &map = node;
+
+        std::array<std::string_view, std::tuple_size_v<Tpl>> oneofs = {};
 
         size_t idx = 0;
         tuple_for_each(flattened, [&](auto &item, const size_t) {
@@ -449,7 +384,7 @@ struct cpx::serde::Deserialize<__yaml_cpp::Node, std::tuple<Ts...>> {
                 if (i < arr.size())
                     val = arr[i];
             }
-            if ((!val.IsDefined() || val.IsNull()) && t.skipmissing)
+            if ((!val.IsDefined() || val.IsNull()) && (t.skipmissing || !t.oneof.empty()))
                 return;
 
             try {
@@ -469,27 +404,30 @@ struct cpx::serde::Deserialize<__yaml_cpp::Node, std::tuple<Ts...>> {
                     e.add_context(i);
                 throw;
             }
+
+            oneofs[i] = t.oneof;
         });
+
+        for (const auto &oneof : oneofs) {
+            if (oneof.empty())
+                continue;
+
+            for (const auto &existing : oneofs)
+                if (existing == oneof && &existing != &oneof)
+                    throw duplicate_oneof_error(oneof);
+        }
     }
 };
 
 template <typename... T>
-struct cpx::serde::Serialize<
-    __yaml_cpp::Node,
-    std::variant<T...>,
-    std::enable_if_t<(cpx::serde::is_serializable_v<__yaml_cpp::Node, T> && ...)>> {
+struct SERIALIZE(std::variant<T...>, std::enable_if_t<(SERIALIZABLE(T) && ...)>) {
     __yaml_cpp::Node from(const std::variant<T...> &v) const {
-        return std::visit(
-            [](const auto &var) { return Serialize<__yaml_cpp::Node, std::decay_t<decltype(var)>>{}.from(var); }, v
-        );
+        return std::visit([](const auto &var) { return SERIALIZE(std::decay_t<decltype(var)>){}.from(var); }, v);
     }
 };
 
 template <typename... T>
-struct cpx::serde::Deserialize<
-    __yaml_cpp::Node,
-    std::variant<T...>,
-    std::enable_if_t<((cpx::serde::is_deserializable_v<__yaml_cpp::Node, T> && std::is_default_constructible_v<T>) && ...)>> {
+struct DESERIALIZE(std::variant<T...>, std::enable_if_t<((std::is_default_constructible_v<T> && DESERIALIZABLE(T)) && ...)>) {
     const __yaml_cpp::Node &node;
 
     void into(std::variant<T...> &v) const {
@@ -500,7 +438,7 @@ struct cpx::serde::Deserialize<
                 try {
                     if (!done) {
                         auto element = T{};
-                        Deserialize<__yaml_cpp::Node, T>{node}.into(element);
+                        DESERIALIZE(T){node}.into(element);
                         v    = std::move(element);
                         done = true;
                     }
@@ -519,23 +457,18 @@ struct cpx::serde::Deserialize<
 
 // map
 template <typename T, typename H, typename P, typename A>
-struct cpx::serde::Serialize<
-    __yaml_cpp::Node,
-    std::unordered_map<std::string, T, H, P, A>,
-    std::enable_if_t<cpx::serde::is_serializable_v<__yaml_cpp::Node, T>>> {
+struct SERIALIZE(std::unordered_map<std::string, T, H, P, A>, std::enable_if_t<SERIALIZABLE(T)>) {
     __yaml_cpp::Node from(const std::unordered_map<std::string, T, H, P, A> &v) const {
         __yaml_cpp::Node node(__yaml_cpp::NodeType::Map);
         for (auto &[key, item] : v)
-            node[key] = Serialize<__yaml_cpp::Node, T>{}.from(item);
+            node[key] = SERIALIZE(T){}.from(item);
         return node;
     }
 };
 
 template <typename T, typename H, typename P, typename A>
-struct cpx::serde::Deserialize<
-    __yaml_cpp::Node,
-    std::unordered_map<std::string, T, H, P, A>,
-    std::enable_if_t<std::is_default_constructible_v<T> && cpx::serde::is_deserializable_v<__yaml_cpp::Node, T>>> {
+struct
+    DESERIALIZE(std::unordered_map<std::string, T, H, P, A>, std::enable_if_t<std::is_default_constructible_v<T> && DESERIALIZABLE(T)>) {
     const __yaml_cpp::Node &node;
 
     void into(std::unordered_map<std::string, T, H, P, A> &v) const {
@@ -547,7 +480,7 @@ struct cpx::serde::Deserialize<
             const auto &node = kv.second;
             auto        item = T{};
             try {
-                Deserialize<__yaml_cpp::Node, T>{node}.into(item);
+                DESERIALIZE(T){node}.into(item);
             } catch (error &e) {
                 e.add_context(key.Scalar());
                 throw;
@@ -559,42 +492,120 @@ struct cpx::serde::Deserialize<
 
 // generic reflection
 template <typename T>
-struct cpx::serde::Serialize<__yaml_cpp::Node, T, std::enable_if_t<cpx::yaml::has_reflect_v<T>>> {
+struct SERIALIZE(T, std::enable_if_t<cpx::yaml::has_reflect_v<T>>) {
     __yaml_cpp::Node from(const T &v) const {
-        return Serialize<__yaml_cpp::Node, cpx::yaml::const_reflect_t<T>>{}.from(cpx::yaml::reflect_of(v));
+        return SERIALIZE(cpx::yaml::const_reflect_t<T>){}.from(cpx::yaml::reflect_of(v));
     }
 };
 
 template <typename T>
-struct cpx::serde::Deserialize<__yaml_cpp::Node, T, std::enable_if_t<cpx::yaml::has_reflect_v<T>>> {
+struct DESERIALIZE(T, std::enable_if_t<cpx::yaml::has_reflect_v<T>>) {
     const __yaml_cpp::Node &node;
 
     void into(T &v) const {
         decltype(auto) r = cpx::yaml::reflect_of(v);
-        Deserialize<__yaml_cpp::Node, cpx::yaml::reflect_t<T>>{node}.into(r);
+        DESERIALIZE(cpx::yaml::reflect_t<T>){node}.into(r);
+    }
+};
+
+// dump and parse
+template <>
+struct DUMP(std::ostream) {
+    std::ostream &os;
+
+    template <typename T>
+    std::ostream &from(const T &v) const {
+        return os << SERIALIZE(T){}.from(v);
+    }
+
+    template <typename T>
+    std::ostream &operator<<(const T &v) const {
+        return from(v);
+    }
+};
+
+template <>
+struct DUMP(std::string) {
+    template <typename T>
+    std::string from(const T &v) const {
+        __yaml_cpp::Node   val = SERIALIZE(T){}.from(v);
+        std::ostringstream oss;
+        oss << val;
+        return oss.str();
+    }
+};
+
+template <>
+struct PARSE(std::string) {
+    const std::string &src;
+
+    template <typename T>
+    void into(T &v, bool src_is_path = false) const {
+        try {
+            __yaml_cpp::Node val;
+            try {
+                val = src_is_path ? __yaml_cpp::LoadFile(src) : __yaml_cpp::Load(src);
+            } catch (std::exception &e) {
+                throw error(e.what());
+            }
+            DESERIALIZE(T){val}.into(v);
+        } catch (error &err) {
+            if (src_is_path)
+                err.path = src;
+            throw;
+        }
+    }
+};
+
+template <>
+struct PARSE(std::istream) {
+    std::istream    &stream;
+    std::string_view filename = "";
+
+    template <typename T>
+    std::istream &into(T &v) const {
+        try {
+            __yaml_cpp::Node val;
+            try {
+                val = __yaml_cpp::Load(stream);
+            } catch (std::exception &e) {
+                throw error(e.what());
+            }
+            DESERIALIZE(T){val}.into(v);
+        } catch (error &err) {
+            if (!filename.empty())
+                err.path = std::string(filename);
+            throw;
+        }
+        return stream;
+    }
+
+    template <typename T>
+    std::istream &operator>>(T &v) const {
+        return into(v);
     }
 };
 
 template <typename T>
 void cpx::yaml::jbeder_yaml::parse(const std::string &str, T &val) {
-    cpx::yaml::jbeder_yaml::Parse<std::string>{str}.into(val, false);
+    Parse<std::string>{str}.into(val, false);
 }
 
 template <typename T>
 void cpx::yaml::jbeder_yaml::parse(std::istream &stream, T &val, const std::string &filename) {
-    cpx::yaml::jbeder_yaml::Parse<std::istream>{stream}.into(val, filename);
+    Parse<std::istream>{stream}.into(val, filename);
 }
 
 template <typename T>
 void cpx::yaml::jbeder_yaml::parse_from_file(const std::string &path, T &val) {
-    cpx::yaml::jbeder_yaml::Parse<std::string>{path}.into(val, true);
+    Parse<std::string>{path}.into(val, true);
 }
 
 template <typename T>
 [[nodiscard]]
 std::enable_if_t<std::is_default_constructible_v<T>, T> cpx::yaml::jbeder_yaml::parse(const std::string &str) {
     T val = {};
-    cpx::yaml::jbeder_yaml::Parse<std::string>{str}.into(val, false);
+    Parse<std::string>{str}.into(val, false);
     return val;
 }
 
@@ -603,7 +614,7 @@ template <typename T>
 std::enable_if_t<std::is_default_constructible_v<T>, T>
 cpx::yaml::jbeder_yaml::parse(std::istream &stream, const std::string &filename) {
     T val = {};
-    cpx::yaml::jbeder_yaml::Parse<std::istream>{stream}.into(val, filename);
+    Parse<std::istream>{stream}.into(val, filename);
     return val;
 }
 
@@ -611,30 +622,37 @@ template <typename T>
 [[nodiscard]]
 std::enable_if_t<std::is_default_constructible_v<T>, T> cpx::yaml::jbeder_yaml::parse_from_file(const std::string &path) {
     T val = {};
-    cpx::yaml::jbeder_yaml::Parse<std::string>{path}.into(val, true);
+    Parse<std::string>{path}.into(val, true);
     return val;
 }
 
 template <typename T>
 [[nodiscard]]
 std::string cpx::yaml::jbeder_yaml::dump(const T &val) {
-    return cpx::yaml::jbeder_yaml::Dump<std::string>{}.from(val);
+    return Dump<std::string>{}.from(val);
 }
 
 template <typename T>
 void cpx::yaml::jbeder_yaml::dump(std::ostream &os, const T &val) {
-    cpx::yaml::jbeder_yaml::Dump<std::ostream>{os}.from(val);
+    Dump<std::ostream>{os}.from(val);
 }
 
 namespace cpx::yaml::jbeder_yaml {
     constexpr struct IO {
-        friend cpx::serde::Dump<__yaml_cpp::Node, std::ostream> operator<<(std::ostream &os, const IO &) {
+        friend Dump<std::ostream> operator<<(std::ostream &os, const IO &) {
             return {os};
         }
 
-        friend cpx::serde::Parse<__yaml_cpp::Node, std::istream> operator>>(std::istream &is, const IO &) {
+        friend Parse<std::istream> operator>>(std::istream &is, const IO &) {
             return {is};
         }
     } io{};
 } // namespace cpx::yaml::jbeder_yaml
+
+#undef SERIALIZE
+#undef DESERIALIZE
+#undef SERIALIZABLE
+#undef DESERIALIZABLE
+#undef DUMP
+#undef PARSE
 #endif

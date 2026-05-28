@@ -4,7 +4,7 @@
 #include <cpx/json/json.h>
 #include <cpx/serde/serialize.h>
 #include <cpx/serde/deserialize.h>
-#include <cpx/reflect.h>
+#include <cpx/reflect_builtin.h>
 #include <cpx/extend.h>
 #include <variant>
 
@@ -133,7 +133,8 @@ struct nlohmann::adl_serializer<std::variant<T...>, std::enable_if_t<((SERIALIZA
                     type_names += e.expected_type + '|';
                 }
             }(),
-            ...);
+            ...
+        );
         if (!done) {
             type_names.pop_back();
             throw cpx::serde::type_mismatch_error(type_names, j.type_name());
@@ -151,6 +152,8 @@ struct nlohmann::adl_serializer<std::tuple<Ts...>> {
 
         j = is_obj ? nlohmann::json::object() : nlohmann::json::array();
 
+        std::array<std::string_view, std::tuple_size_v<Tpl>> oneofs = {};
+
         size_t idx = 0;
         cpx::tuple_for_each(flattened, [&](const auto &item, const size_t) {
             const cpx::TagInfo &t = cpx::json::get_tag_info(item);
@@ -161,7 +164,7 @@ struct nlohmann::adl_serializer<std::tuple<Ts...>> {
                 return;
 
             size_t i = idx++;
-            if (t.omitempty && cpx::detail::is_empty_value(v))
+            if ((t.omitempty || !t.oneof.empty()) && cpx::detail::is_empty_value(v))
                 return;
 
             auto &val = is_obj ? j[t.key] : j[i];
@@ -186,7 +189,18 @@ struct nlohmann::adl_serializer<std::tuple<Ts...>> {
                     e.add_context(i);
                 throw;
             }
+
+            oneofs[i] = t.oneof;
         });
+
+        for (const auto &oneof : oneofs) {
+            if (oneof.empty())
+                continue;
+
+            for (const auto &existing : oneofs)
+                if (existing == oneof && &existing != &oneof)
+                    throw cpx::serde::duplicate_oneof_error(oneof);
+        }
     }
 
     static void from_json(const json &j, std::tuple<Ts...> &tpl) {
@@ -199,7 +213,9 @@ struct nlohmann::adl_serializer<std::tuple<Ts...>> {
         if (!is_obj && !j.is_array())
             throw cpx::serde::type_mismatch_error("array", j.type_name());
 
-        size_t pos = 0;
+        std::array<std::string_view, std::tuple_size_v<Tpl>> oneofs = {};
+
+        size_t idx = 0;
         cpx::tuple_for_each(flattened, [&](auto &item, const size_t) {
             const cpx::TagInfo &t = cpx::json::get_tag_info(item);
             auto               &v = cpx::detail::get_underlying_value(item);
@@ -208,13 +224,13 @@ struct nlohmann::adl_serializer<std::tuple<Ts...>> {
             if (!DESERIALIZABLE(T) || (is_obj && t.key == ""))
                 return;
 
-            size_t                idx = pos++;
+            size_t                i   = idx++;
             const nlohmann::json *ptr = nullptr;
             try {
                 try {
                     ptr = is_obj ? &j.at(t.key) : &j.at(idx);
                 } catch (nlohmann::json::exception &e) {
-                    if (t.skipmissing)
+                    if (t.skipmissing || !t.oneof.empty())
                         return;
                     else
                         throw cpx::serde::error(e.what());
@@ -236,10 +252,20 @@ struct nlohmann::adl_serializer<std::tuple<Ts...>> {
                 if (is_obj)
                     e.add_context(t.key);
                 else
-                    e.add_context(idx);
+                    e.add_context(i);
                 throw;
             }
+            oneofs[i] = t.oneof;
         });
+
+        for (const auto &oneof : oneofs) {
+            if (oneof.empty())
+                continue;
+
+            for (const auto &existing : oneofs)
+                if (existing == oneof && &existing != &oneof)
+                    throw cpx::serde::duplicate_oneof_error(oneof);
+        }
     }
 };
 
@@ -470,11 +496,11 @@ namespace cpx::json::nlohmann_json {
             return self;
         }
 
-        friend DUMP(std::ostream) operator<<(std::ostream &os, const IO &io) {
+        friend DUMP(std::ostream) operator<<(std::ostream & os, const IO & io) {
             return {os, io._indent, io._indent_char, io._ensure_ascii};
         }
 
-        friend PARSE(std::istream) operator>>(std::istream &is, const IO &io) {
+        friend PARSE(std::istream) operator>>(std::istream & is, const IO & io) {
             return {is, io._ignore_comments};
         }
     } io{};

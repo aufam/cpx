@@ -135,12 +135,6 @@ CPMAddPackage(
 
 ## Option parser
 CPMAddPackage(
-    NAME            cxxopts
-    GIT_REPOSITORY  "https://github.com/jarro2783/cxxopts"
-    GIT_TAG         v3.2.1
-)
-
-CPMAddPackage(
     NAME            CLI11
     GIT_REPOSITORY  "https://github.com/CLIUtils/CLI11"
     GIT_TAG         v2.6.1
@@ -200,7 +194,6 @@ target_link_libraries(cpx_private INTERFACE
     yaml-cpp
     Boost::pfr
     magic_enum
-    cxxopts
     CLI11
     protobuf::libprotobuf
     msgpack-cxx
@@ -299,7 +292,6 @@ if (CPX_BUILD_EXAMPLES)
         fmt
         yyjson
         tomlplusplus::tomlplusplus
-        Boost::pfr
     )
 
     file(GLOB_RECURSE SRCS examples/2-enum/*)
@@ -344,5 +336,6 @@ if (CPX_BUILD_EXAMPLES)
         fmt
         Boost::pfr
         protobuf::libprotobuf
+        msgpack-cxx
     )
 endif()

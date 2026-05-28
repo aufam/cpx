@@ -10,8 +10,10 @@ namespace cpx {
         std::string_view key = "";
 
         // for cli
-        std::string_view env  = "";
-        std::string_view help = "";
+        std::string_view short_ = "";
+        std::string_view env    = "";
+        std::string_view help   = "";
+        std::string_view oneof  = "";
 
         int field_number = 0;
 
@@ -26,6 +28,10 @@ namespace cpx {
         bool packed = true;
 
         constexpr TagInfo() = default;
+
+        template <size_t N>
+        constexpr TagInfo(const char (&str)[N])
+            : TagInfo(std::string_view(str, N - 1)) {}
 
         constexpr TagInfo(const char *str)
             : TagInfo(std::string_view(str)) {}
@@ -74,8 +80,12 @@ namespace cpx {
                     noserde = true;
                 else if (part == "positional")
                     positional = true;
+                else if (std::string_view h = "short="; part.size() >= h.size() && part.compare(0, h.size(), h) == 0)
+                    short_ = part.substr(h.size());
                 else if (std::string_view h = "help="; part.size() >= h.size() && part.compare(0, h.size(), h) == 0)
                     help = part.substr(h.size());
+                else if (std::string_view h = "oneof="; part.size() >= h.size() && part.compare(0, h.size(), h) == 0)
+                    oneof = part.substr(h.size());
 
                 if (next == std::string_view::npos)
                     break;

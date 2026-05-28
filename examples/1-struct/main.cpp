@@ -1,86 +1,73 @@
 #include <cpx/fmt.h>
 #include <cpx/json/yy_json.h>
 #include <cpx/toml/marzer_toml.h>
-#include <cpx/fields.h>
 
-
-template <typename T>
-using Tag = cpx::Tag<T>;
-
-
-struct Data {
-    struct Inner {
-        Tag<std::string> text = "fmt,json,toml:`text`";
-        Tag<float>       pi   = {"fmt,json,toml:`pi,skipmissing`", 3.14f};
-    };
-
-    Tag<int>                        number = "fmt,json,toml:`number`";
-    Tag<std::tm>                    dt     = "fmt:`dt` json:`dateTime` toml:`date-time`";
-    Tag<Inner>                      inner  = "fmt,json,toml:`inner`";
-    Tag<std::optional<std::string>> text   = "fmt,json,toml:`text,omitempty`";
-    int                             dummy;
+struct Address {
+    std::string        city;
+    std::optional<int> zip;
 };
 
-static_assert(std::is_aggregate_v<Data> && std::is_aggregate_v<Data::Inner>);
-
-
-class Foo {
-public:
-    Foo(int a)
-        : a(a) {}
-
-    int a;
+struct User {
+    std::string name;
+    int         age;
+    std::tm     joined;
+    Address     address;
 };
 
-struct Bar {
-    int a;
-};
-
-static constexpr cpx::TagInfo foo_a = "a";
+constexpr cpx::TagInfo name_tag    = "name";
+constexpr cpx::TagInfo age_tag     = "age";
+constexpr cpx::TagInfo joined_tag  = "joined";
+constexpr cpx::TagInfo address_tag = "address";
+constexpr cpx::TagInfo city_tag    = "city";
+constexpr cpx::TagInfo zip_tag     = "zip";
 
 template <>
-struct cpx::Reflect<Foo> : cpx::Fields<cpx::Field<&Foo::a, foo_a>> {};
+struct cpx::Reflect<User>                    //
+    : Fields<                                //
+          Field<&User::name, name_tag>,      //
+          Field<&User::age, age_tag>,        //
+          Field<&User::joined, joined_tag>,  //
+          Field<&User::address, address_tag> //
+          > {};
 
-constexpr bool asfsd  = cpx::serde::is_serializable_v<yyjson_mut_val, Foo>;
-constexpr bool asfsd2 = cpx::has_reflect_v<Bar>;
-constexpr bool asfsd3 = fmt::is_formattable<Foo>::value;
-constexpr bool asfsd4 = fmt::is_formattable<std::timespec>::value;
+template <>
+struct cpx::Reflect<Address>               //
+    : Fields<                              //
+          Field<&Address::city, city_tag>, //
+          Field<&Address::zip, zip_tag>    //
+          > {};
+
 
 int main() {
-    Data data; // .dummy is expected to be undefined
+    User sucipto;
 
     const char *jdoc = R"json({
-        "number": 42,
-        "dateTime": "2023-10-27T10:00:00Z",
-        "inner": {
-            "text": "from json"
+        "name": "Sucipto",
+        "age": 42,
+        "joined": "2023-10-27T10:00:00Z",
+        "address": {
+            "city": "Oslo"
         }
     })json";
 
-    cpx::json::yy_json::parse(jdoc, data);
-    fmt::println("data = {}", data);
-    fmt::println("json = {}", cpx::json::yy_json::dump(data));
+    cpx::json::yy_json::parse(jdoc, sucipto);
+    fmt::println("data = {}", sucipto);
+    fmt::println("json = {}", cpx::json::yy_json::dump(sucipto));
 
+
+    User marwoto;
 
     const char *tdoc = R"toml(
-        number = 37
-        date-time = 2023-10-27T10:30:00Z
+        name = "Marwoto"
+        age = 32
+        joined = 2023-10-27T10:30:00Z
 
-        [inner]
-        text = "From toml"
-        pi = 3.0
+        [address]
+        city = "Hamburg"
+        zip = 9021
     )toml";
 
-    cpx::toml::marzer_toml::parse(tdoc, data);
-    fmt::println("data = {}", data);
-    fmt::println("toml = {:?}", cpx::toml::marzer_toml::dump(data));
-
-    const Foo foo(10);
-    fmt::println("foo = {}", cpx::json::yy_json::dump(foo));
-    fmt::println("foo = {}", foo);
-
-    fmt::println("now = {}", cpx::ts_to_string(cpx::ts_now()));
-    fmt::println("now = {:%Y-%m-%dT%H:%M:%SZ}", cpx::tm_now());
-    fmt::println("now = {:%Y-%m-%dT%H:%M:%SZ}", cpx::ts_now());
-    fmt::println("foo = {}", Foo{3});
+    cpx::toml::marzer_toml::parse(tdoc, marwoto);
+    fmt::println("data = {}", marwoto);
+    fmt::println("toml = {:?}", cpx::toml::marzer_toml::dump(marwoto));
 }

@@ -5,7 +5,7 @@
 
 #include <cpx/serde/serialize.h>
 #include <cpx/serde/deserialize.h>
-#include <cpx/reflect.h>
+#include <cpx/reflect_builtin.h>
 #include <cpx/extend.h>
 #include <cpx/defer.h>
 #include <array>
@@ -66,18 +66,31 @@ namespace cpx::protobuf {
     }
 } // namespace cpx::protobuf
 
+#define SERIALIZE(...)      cpx::serde::Serialize<google::protobuf::io::CodedOutputStream, __VA_ARGS__>
+#define DESERIALIZE(...)    cpx::serde::Deserialize<google::protobuf::io::CodedInputStream, __VA_ARGS__>
+#define SERIALIZABLE(...)   cpx::serde::is_serializable_v<google::protobuf::io::CodedOutputStream, __VA_ARGS__>
+#define DESERIALIZABLE(...) cpx::serde::is_deserializable_v<google::protobuf::io::CodedInputStream, __VA_ARGS__>
+#define DUMP(...)           cpx::serde::Dump<google::protobuf::io::CodedOutputStream, __VA_ARGS__>
+#define PARSE(...)          cpx::serde::Parse<google::protobuf::io::CodedInputStream, __VA_ARGS__>
+
 namespace cpx::protobuf {
     template <typename From>
-    using Serialize = cpx::serde::Serialize<google::protobuf::io::CodedOutputStream, From>;
+    using Serialize = SERIALIZE(From);
 
     template <typename To>
-    using Deserialize = cpx::serde::Deserialize<google::protobuf::io::CodedInputStream, To>;
-
-    template <typename To>
-    using Dump = cpx::serde::Dump<google::protobuf::io::CodedOutputStream, To>;
+    using Deserialize = DESERIALIZE(To);
 
     template <typename From>
-    using Parse = cpx::serde::Parse<google::protobuf::io::CodedInputStream, From>;
+    constexpr bool is_serializable_v = SERIALIZABLE(From);
+
+    template <typename To>
+    constexpr bool is_deserializable_v = DESERIALIZABLE(To);
+
+    template <typename To>
+    using Dump = DUMP(To);
+
+    template <typename From>
+    using Parse = PARSE(From);
 
     template <typename T>
     [[nodiscard]]
@@ -149,14 +162,12 @@ namespace cpx::protobuf::detail {
     template <typename T, size_t N>
     struct is_repeated_serializable<std::array<T, N>>
         : std::bool_constant<
-              !is_repeated_numeric<std::array<T, N>>::value && !is_bytes<std::array<T, N>>::value &&
-              cpx::serde::is_serializable_v<google::protobuf::io::CodedOutputStream, T>> {};
+              SERIALIZABLE(T) && !is_repeated_numeric<std::array<T, N>>::value && !is_bytes<std::array<T, N>>::value> {};
 
     template <typename T, typename A>
     struct is_repeated_serializable<std::vector<T, A>>
         : std::bool_constant<
-              !is_repeated_numeric<std::vector<T, A>>::value && !is_bytes<std::vector<T, A>>::value &&
-              cpx::serde::is_serializable_v<google::protobuf::io::CodedOutputStream, T>> {};
+              SERIALIZABLE(T) && !is_repeated_numeric<std::vector<T, A>>::value && !is_bytes<std::vector<T, A>>::value> {};
 
     // repeated deserializable
     template <typename T>
@@ -165,21 +176,14 @@ namespace cpx::protobuf::detail {
     template <typename T, size_t N>
     struct is_repeated_deserializable<std::array<T, N>>
         : std::bool_constant<
-              !is_repeated_numeric<std::array<T, N>>::value && !is_bytes<std::array<T, N>>::value &&
-              cpx::serde::is_deserializable_v<google::protobuf::io::CodedInputStream, T>> {};
+              DESERIALIZABLE(T) && !is_repeated_numeric<std::array<T, N>>::value && !is_bytes<std::array<T, N>>::value> {};
 
     template <typename T, typename A>
     struct is_repeated_deserializable<std::vector<T, A>>
         : std::bool_constant<
-              !is_repeated_numeric<std::vector<T, A>>::value && !is_bytes<std::vector<T, A>>::value &&
-              cpx::serde::is_deserializable_v<google::protobuf::io::CodedInputStream, T>> {};
+              DESERIALIZABLE(T) && !is_repeated_numeric<std::vector<T, A>>::value && !is_bytes<std::vector<T, A>>::value> {};
 } // namespace cpx::protobuf::detail
 
-
-#define SERIALIZE(...)      cpx::serde::Serialize<google::protobuf::io::CodedOutputStream, __VA_ARGS__>
-#define DESERIALIZE(...)    cpx::serde::Deserialize<google::protobuf::io::CodedInputStream, __VA_ARGS__>
-#define SERIALIZABLE(...)   cpx::serde::is_serializable_v<google::protobuf::io::CodedOutputStream, __VA_ARGS__>
-#define DESERIALIZABLE(...) cpx::serde::is_deserializable_v<google::protobuf::io::CodedInputStream, __VA_ARGS__>
 
 #define SERIALIZER_FIELDS                                                                                                        \
     google::protobuf::io::CodedOutputStream &doc;                                                                                \
@@ -213,9 +217,9 @@ template <typename T>
 struct SERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_numeric<T>::value>) {
     SERIALIZER_FIELDS
 
-    void from(T v) const {
-        if (ti.omitempty && v == T())
-            return;
+    bool from(T v) const {
+        if ((ti.omitempty || !ti.oneof.empty()) && v == T())
+            return false;
 
         if (ti.field_number > 0) {
             auto tag = google::protobuf::internal::WireFormatLite::MakeTag(
@@ -251,6 +255,8 @@ struct SERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_numeric<T>::value
                     doc.WriteVarint32(static_cast<uint32_t>(v));
             }
         }
+
+        return true;
     }
 };
 
@@ -298,9 +304,9 @@ template <typename T>
 struct SERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_bytes<T>::value>) {
     SERIALIZER_FIELDS
 
-    void from(const T &v) const {
-        if (ti.omitempty && v.empty())
-            return;
+    bool from(const T &v) const {
+        if ((ti.omitempty || !ti.oneof.empty()) && v.empty())
+            return false;
 
         if (ti.field_number > 0) {
             auto tag = google::protobuf::internal::WireFormatLite::MakeTag(
@@ -310,6 +316,7 @@ struct SERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_bytes<T>::value>)
             doc.WriteVarint64(v.size());
         }
         doc.WriteRaw(v.data(), (int)v.size());
+        return true;
     }
 };
 
@@ -353,17 +360,20 @@ template <typename T>
 struct SERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_repeated_numeric<T>::value>) {
     SERIALIZER_FIELDS
 
-    void from(const T &arr) const {
+    bool from(const T &arr) const {
+        bool ret = false;
         if (ti.packed) {
             std::string buffer = create_packed_buffer(arr);
-            SERIALIZE(std::string){doc, ti}.from(buffer);
+            ret                = SERIALIZE(std::string){doc, ti}.from(buffer);
         } else {
             auto ti        = this->ti;
             ti.omitempty   = false;
+            ti.oneof       = "";
             const auto ser = SERIALIZE(typename T::value_type){doc, ti};
             for (auto &v : arr)
-                ser.from(v);
+                ret |= ser.from(v);
         }
+        return ret;
     }
 
     std::string create_packed_buffer(const T &arr) const {
@@ -374,6 +384,7 @@ struct SERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_repeated_numeric<
         auto ti         = this->ti;
         ti.field_number = 0;
         ti.omitempty    = false;
+        ti.oneof        = "";
 
         SERIALIZE(typename T::value_type) ser = {doc, ti};
         for (auto &v : arr)
@@ -429,9 +440,10 @@ template <typename T>
 struct SERIALIZE(std::optional<T>, std::enable_if_t<SERIALIZABLE(T)>) {
     SERIALIZER_FIELDS
 
-    void from(const std::optional<T> &v) const {
+    bool from(const std::optional<T> &v) const {
         if (v.has_value())
-            SERIALIZE(T){doc, ti}.from(*v);
+            return SERIALIZE(T){doc, ti}.from(*v);
+        return false;
     }
 };
 
@@ -450,19 +462,22 @@ template <typename T>
 struct SERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_repeated_serializable<T>::value>) {
     SERIALIZER_FIELDS
 
-    void from(const T &arr) const {
+    bool from(const T &arr) const {
+        bool ret = false;
         for (const auto &v : arr) {
             using VT     = std::decay_t<decltype(v)>;
             auto ti      = this->ti;
             ti.omitempty = false;
-            SERIALIZE(VT){doc, ti}.from(v);
+            ti.oneof     = "";
+            ret |= SERIALIZE(VT){doc, ti}.from(v);
         }
+        return ret;
     }
 };
 
 template <typename T>
 struct
-    DESERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_repeated_deserializable<T>::value && !cpx::detail::is_std_array<T>::value>) {
+    DESERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_repeated_deserializable<T>::value && cpx::detail::is_std_array<T>::value>) {
     DESERIALIZER_FIELDS
 
     void into(T &) const {
@@ -472,7 +487,7 @@ struct
 
 template <typename T>
 struct
-    DESERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_repeated_deserializable<T>::value && cpx::detail::is_std_array<T>::value>) {
+    DESERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_repeated_deserializable<T>::value && !cpx::detail::is_std_array<T>::value>) {
     DESERIALIZER_FIELDS
     using value_type = typename T::value_type;
 
@@ -488,27 +503,45 @@ template <typename... Ts>
 struct SERIALIZE(std::tuple<Ts...>) {
     SERIALIZER_FIELDS
 
-    void from(const std::tuple<Ts...> &tpl) const {
+    bool from(const std::tuple<Ts...> &tpl) const {
         std::string buffer;
+        bool        ret = false;
         {
             google::protobuf::io::StringOutputStream os(&buffer);
             google::protobuf::io::CodedOutputStream  sdoc(&os);
 
-            auto &doc = ti.field_number > 0 ? sdoc : this->doc;
-
-            auto flattened = flatten(tpl);
-            tuple_for_each(flattened, [&doc](const auto &v, size_t) {
+            auto &doc       = ti.field_number > 0 ? sdoc : this->doc;
+            auto  flattened = flatten(tpl);
+            auto  oneofs    = std::array<std::string_view, std::tuple_size_v<decltype(flattened)>>();
+            tuple_for_each(flattened, [&ret, &doc, &oneofs](const auto &v, size_t i) {
                 const cpx::TagInfo &ti  = cpx::protobuf::get_tag_info(v);
                 const auto         &val = detail::get_underlying_value(v);
                 using T                 = std::decay_t<decltype(val)>;
 
+                bool written = false;
                 if constexpr (SERIALIZABLE(T))
                     if (ti.field_number > 0)
-                        SERIALIZE(T){doc, ti}.from(val);
+                        written = SERIALIZE(T){doc, ti}.from(val);
+
+                if (written)
+                    oneofs[i] = ti.oneof;
+
+                ret |= written;
             });
+
+            for (const auto &oneof : oneofs) {
+                if (oneof.empty())
+                    continue;
+
+                for (const auto &existing : oneofs)
+                    if (existing == oneof && &existing != &oneof)
+                        throw duplicate_oneof_error(oneof);
+            }
         }
         if (ti.field_number > 0)
-            SERIALIZE(std::string){doc, ti}.from(buffer);
+            ret = SERIALIZE(std::string){doc, ti}.from(buffer);
+
+        return ret;
     }
 };
 
@@ -520,13 +553,15 @@ struct DESERIALIZE(std::tuple<Ts...>) {
         auto             flattened = cpx::flatten(tpl);
         constexpr size_t size      = std::tuple_size_v<decltype(flattened)>;
 
-        std::array<cpx::TagInfo, size> tis = {};
+        std::array<cpx::TagInfo, size> tis    = {};
+        std::vector<std::string_view>  oneofs = {};
         tuple_for_each(flattened, [&](auto &v, size_t i) { tis[i] = cpx::protobuf::get_tag_info(v); });
 
         while (const uint32_t tag = doc.ReadTag()) {
             DESERIALIZER_BODY
 
-            bool done = false;
+            bool             done = false;
+            std::string_view oneof;
             tuple_for_each(flattened, [&](auto &item, size_t i) {
                 const cpx::TagInfo &t = tis[i];
                 if (done || (int)field_number != t.field_number)
@@ -538,19 +573,29 @@ struct DESERIALIZE(std::tuple<Ts...>) {
                 if constexpr (DESERIALIZABLE(T))
                     try {
                         DESERIALIZE(T){doc, ti, wire_type, len}.into(v);
-                        done = true;
+                        done  = true;
+                        oneof = ti.oneof;
                     } catch (serde::error &e) {
                         e.add_context(std::to_string(field_number));
                         throw;
                     }
             });
 
-            if (!done) {
+            if (done) {
+                if (!oneof.empty())
+                    oneofs.push_back(oneof);
+            } else {
                 if (wire_type == google::protobuf::internal::WireFormatLite::WireType::WIRETYPE_LENGTH_DELIMITED)
                     doc.Skip((int)len);
                 else
                     google::protobuf::internal::WireFormatLite::SkipField(&doc, tag);
             }
+        }
+
+        for (const auto &oneof : oneofs) {
+            for (const auto &existing : oneofs)
+                if (existing == oneof && &existing != &oneof)
+                    throw duplicate_oneof_error(oneof);
         }
     }
 };
@@ -560,13 +605,16 @@ template <typename K, typename T, typename H, typename P, typename A>
 struct SERIALIZE(std::unordered_map<K, T, H, P, A>, std::enable_if_t<SERIALIZABLE(K) && SERIALIZABLE(T)>) {
     SERIALIZER_FIELDS
 
-    void from(const std::unordered_map<K, T, H, P, A> &map) const {
+    bool from(const std::unordered_map<K, T, H, P, A> &map) const {
         cpx::TagInfo tag_key = ti;
         cpx::TagInfo tag_val = ti;
         tag_key.omitempty    = false;
+        tag_key.oneof        = "";
+        tag_val.oneof        = "";
         tag_key.field_number = 1;
         tag_val.field_number = 2;
 
+        bool ret = false;
         for (const auto &[k, v] : map) {
             std::string entry_buffer;
             {
@@ -576,8 +624,9 @@ struct SERIALIZE(std::unordered_map<K, T, H, P, A>, std::enable_if_t<SERIALIZABL
                 SERIALIZE(K){entry_doc, tag_key}.from(k);
                 SERIALIZE(T){entry_doc, tag_val}.from(v);
             }
-            SERIALIZE(std::string){doc, ti}.from(entry_buffer);
+            ret |= SERIALIZE(std::string){doc, ti}.from(entry_buffer);
         }
+        return ret;
     }
 };
 
@@ -586,7 +635,7 @@ struct
     DESERIALIZE(std::unordered_map<K, T, H, P, A>, std::enable_if_t<DESERIALIZABLE(K) && DESERIALIZABLE(T) && std::is_default_constructible_v<K> && std::is_default_constructible_v<T>>) {
     DESERIALIZER_FIELDS
 
-    void from(std::unordered_map<K, T, H, P, A> &map) const {
+    void into(std::unordered_map<K, T, H, P, A> &map) const {
         if (wire_type != google::protobuf::internal::WireFormatLite::WIRETYPE_LENGTH_DELIMITED)
             throw error("deserializing map requires length delimited got wire_type=" + std::to_string(wire_type));
 
@@ -618,7 +667,7 @@ template <>
 struct SERIALIZE(std::tm) {
     SERIALIZER_FIELDS
 
-    void from(const std::tm &v) const {
+    bool from(const std::tm &v) const {
         std::tm tm  = v;
         time_t  sec = timegm(&tm);
 
@@ -627,16 +676,19 @@ struct SERIALIZE(std::tm) {
         tag_sec.omitempty    = true;
 
         std::string buffer;
+        bool        ret = false;
         {
             google::protobuf::io::StringOutputStream os(&buffer);
             google::protobuf::io::CodedOutputStream  sdoc(&os);
 
             auto &doc = ti.field_number > 0 ? sdoc : this->doc;
 
-            SERIALIZE(time_t){doc, tag_sec}.from(sec);
+            ret |= SERIALIZE(time_t){doc, tag_sec}.from(sec);
         };
         if (ti.field_number > 0)
-            SERIALIZE(std::string){doc, ti}.from(buffer);
+            ret = SERIALIZE(std::string){doc, ti}.from(buffer);
+
+        return ret;
     }
 };
 
@@ -669,7 +721,7 @@ template <>
 struct SERIALIZE(std::timespec) {
     SERIALIZER_FIELDS
 
-    void from(const std::timespec &v) const {
+    bool from(const std::timespec &v) const {
         cpx::TagInfo tag_sec  = ti;
         cpx::TagInfo tag_nsec = ti;
         tag_sec.field_number  = 1;
@@ -677,17 +729,20 @@ struct SERIALIZE(std::timespec) {
         tag_sec.omitempty = tag_nsec.omitempty = true;
 
         std::string buffer;
+        bool        ret = false;
         {
             google::protobuf::io::StringOutputStream os(&buffer);
             google::protobuf::io::CodedOutputStream  sdoc(&os);
 
             auto &doc = ti.field_number > 0 ? sdoc : this->doc;
 
-            SERIALIZE(decltype(std::timespec::tv_sec)){doc, tag_sec}.from(v.tv_sec);
-            SERIALIZE(decltype(std::timespec::tv_sec)){doc, tag_nsec}.from(v.tv_nsec);
+            ret |= SERIALIZE(decltype(std::timespec::tv_sec)){doc, tag_sec}.from(v.tv_sec);
+            ret |= SERIALIZE(decltype(std::timespec::tv_sec)){doc, tag_nsec}.from(v.tv_nsec);
         };
         if (ti.field_number > 0)
-            SERIALIZE(std::string){doc, ti}.from(buffer);
+            ret = SERIALIZE(std::string){doc, ti}.from(buffer);
+
+        return ret;
     }
 };
 
@@ -720,8 +775,8 @@ template <typename T>
 struct SERIALIZE(T, std::enable_if_t<cpx::protobuf::has_reflect_v<T>>) {
     SERIALIZER_FIELDS
 
-    void from(const T &v) const {
-        SERIALIZE(cpx::protobuf::const_reflect_t<T>){doc, ti}.from(cpx::protobuf::reflect_of(v));
+    bool from(const T &v) const {
+        return SERIALIZE(cpx::protobuf::const_reflect_t<T>){doc, ti}.from(cpx::protobuf::reflect_of(v));
     }
 };
 
@@ -735,60 +790,52 @@ struct DESERIALIZE(T, std::enable_if_t<cpx::protobuf::has_reflect_v<T>>) {
     }
 };
 
-#undef SERIALIZE
-#undef DESERIALIZE
-#undef SERIALIZABLE
-#undef DESERIALIZABLE
-#undef SERIALIZER_FIELDS
-#undef DESERIALIZER_FIELDS
-#undef DESERIALIZER_BODY
-
 template <>
-struct cpx::serde::Dump<google::protobuf::io::CodedOutputStream, std::string> {
+struct DUMP(std::string) {
     template <typename T>
     std::string from(const T &v) const {
         std::string                              buffer;
         google::protobuf::io::StringOutputStream os(&buffer);
         google::protobuf::io::CodedOutputStream  doc(&os);
-        Serialize<google::protobuf::io::CodedOutputStream, T>{doc}.from(v);
+        SERIALIZE(T){doc}.from(v);
         return buffer;
     }
 };
 
 template <size_t N>
-struct cpx::serde::Dump<google::protobuf::io::CodedOutputStream, std::array<uint8_t, N>> {
+struct DUMP(std::array<uint8_t, N>) {
     template <typename T>
     std::array<uint8_t, N> from(const T &v) const {
         std::array<uint8_t, N>                  buffer;
         google::protobuf::io::ArrayOutputStream os(buffer.data(), (int)buffer.size());
         google::protobuf::io::CodedOutputStream doc(&os);
-        Serialize<google::protobuf::io::CodedOutputStream, T>{doc}.from(v);
+        SERIALIZE(T){doc}.from(v);
         return buffer;
     }
 };
 
 template <>
-struct cpx::serde::Dump<google::protobuf::io::CodedOutputStream, std::vector<uint8_t>> {
+struct DUMP(std::vector<uint8_t>) {
     template <typename T>
     std::vector<uint8_t> from(const T &v, size_t capacity) const {
         std::vector<uint8_t>                    buffer(capacity);
         google::protobuf::io::ArrayOutputStream os(buffer.data(), (int)buffer.size());
         google::protobuf::io::CodedOutputStream doc(&os);
-        Serialize<google::protobuf::io::CodedOutputStream, T>{doc}.from(v);
+        SERIALIZE(T){doc}.from(v);
         buffer.resize(size_t(doc.ByteCount()));
         return buffer;
     }
 };
 
 template <>
-struct cpx::serde::Dump<google::protobuf::io::CodedOutputStream, std::ostream> {
+struct DUMP(std::ostream) {
     std::ostream &stream;
 
     template <typename T>
     std::ostream &from(const T &v) const {
         google::protobuf::io::OstreamOutputStream os(&stream);
         google::protobuf::io::CodedOutputStream   doc(&os);
-        Serialize<google::protobuf::io::CodedOutputStream, T>{doc}.from(v);
+        SERIALIZE(T){doc}.from(v);
         return stream;
     }
 
@@ -799,7 +846,7 @@ struct cpx::serde::Dump<google::protobuf::io::CodedOutputStream, std::ostream> {
 };
 
 template <>
-struct cpx::serde::Parse<google::protobuf::io::CodedInputStream, std::string> {
+struct PARSE(std::string) {
     const std::string &buffer;
 
     template <typename T>
@@ -807,14 +854,29 @@ struct cpx::serde::Parse<google::protobuf::io::CodedInputStream, std::string> {
         google::protobuf::io::ArrayInputStream ais(buffer.data(), (int)buffer.size());
         google::protobuf::io::CodedInputStream doc(&ais);
 
-        Deserialize<google::protobuf::io::CodedInputStream, T>{doc}.into(v);
+        DESERIALIZE(T){doc}.into(v);
         if (!doc.ConsumedEntireMessage())
-            throw serde::error("message not fully consumed");
+            throw error("message not fully consumed");
     }
 };
 
 template <>
-struct cpx::serde::Parse<google::protobuf::io::CodedInputStream, std::istream> {
+struct PARSE(std::vector<uint8_t>) {
+    const std::vector<uint8_t> &buffer;
+
+    template <typename T>
+    void into(T &v) const {
+        google::protobuf::io::ArrayInputStream ais(buffer.data(), (int)buffer.size());
+        google::protobuf::io::CodedInputStream doc(&ais);
+
+        DESERIALIZE(T){doc}.into(v);
+        if (!doc.ConsumedEntireMessage())
+            throw error("message not fully consumed");
+    }
+};
+
+template <>
+struct PARSE(std::istream) {
     std::istream &stream;
 
     template <typename T>
@@ -822,9 +884,9 @@ struct cpx::serde::Parse<google::protobuf::io::CodedInputStream, std::istream> {
         google::protobuf::io::IstreamInputStream iis(&stream);
         google::protobuf::io::CodedInputStream   doc(&iis);
 
-        Deserialize<google::protobuf::io::CodedInputStream, T>{doc}.into(v);
+        DESERIALIZE(T){doc}.into(v);
         if (!doc.ConsumedEntireMessage())
-            throw serde::error("message not fully consumed");
+            throw error("message not fully consumed");
 
         return stream;
     }
@@ -874,13 +936,23 @@ std::enable_if_t<std::is_default_constructible_v<T>, T> cpx::protobuf::parse(std
 
 namespace cpx::protobuf {
     inline constexpr class IO {
-        friend cpx::protobuf::Dump<std::ostream> operator<<(std::ostream &os, const IO &) {
+        friend Dump<std::ostream> operator<<(std::ostream &os, const IO &) {
             return {os};
         }
 
-        friend cpx::protobuf::Parse<std::istream> operator>>(std::istream &is, const IO &) {
+        friend Parse<std::istream> operator>>(std::istream &is, const IO &) {
             return {is};
         }
     } io;
 } // namespace cpx::protobuf
+
+#undef SERIALIZE
+#undef DESERIALIZE
+#undef SERIALIZABLE
+#undef DESERIALIZABLE
+#undef DUMP
+#undef PARSE
+#undef SERIALIZER_FIELDS
+#undef DESERIALIZER_FIELDS
+#undef DESERIALIZER_BODY
 #endif

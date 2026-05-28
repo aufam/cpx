@@ -4,7 +4,7 @@
 #include <cpx/toml/toml.h>
 #include <cpx/serde/serialize.h>
 #include <cpx/serde/deserialize.h>
-#include <cpx/reflect.h>
+#include <cpx/reflect_builtin.h>
 #include <cpx/extend.h>
 #include <array>
 #include <tuple>
@@ -302,6 +302,8 @@ struct SERIALIZE(std::tuple<Ts...>) {
         std::unique_ptr<__tomlpp::node> node =
             is_tbl ? std::unique_ptr<__tomlpp::node>(new __tomlpp::table) : std::unique_ptr<__tomlpp::node>(new __tomlpp::array);
 
+        std::array<std::string_view, std::tuple_size_v<Tpl>> oneofs = {};
+
         size_t idx = 0;
         tuple_for_each(flattened, [&](auto &item, const size_t) {
             const cpx::TagInfo &t = cpx::toml::get_tag_info(item);
@@ -312,7 +314,7 @@ struct SERIALIZE(std::tuple<Ts...>) {
                 return;
 
             size_t i = idx++;
-            if (t.omitempty && cpx::detail::is_empty_value(v) && is_tbl)
+            if ((t.omitempty || !t.oneof.empty()) && cpx::detail::is_empty_value(v) && is_tbl)
                 return;
 
             std::unique_ptr<__tomlpp::node> val;
@@ -337,7 +339,18 @@ struct SERIALIZE(std::tuple<Ts...>) {
                 node->as_table()->insert_or_assign(t.key, std::move(*val));
             else
                 node->as_array()->push_back(std::move(*val));
+
+            oneofs[i] = t.oneof;
         });
+
+        for (const auto &oneof : oneofs) {
+            if (oneof.empty())
+                continue;
+
+            for (const auto &existing : oneofs)
+                if (existing == oneof && &existing != &oneof)
+                    throw duplicate_oneof_error(oneof);
+        }
 
         return node;
     }
@@ -362,6 +375,8 @@ struct DESERIALIZE(std::tuple<Ts...>) {
         if (is_tbl && !tbl)
             throw type_mismatch_error("table", std::string(__tomlpp::impl::node_type_friendly_names[(int)node->type()]));
 
+        std::array<std::string_view, std::tuple_size_v<Tpl>> oneofs = {};
+
         size_t idx = 0;
         tuple_for_each(flattened, [&](auto &item, const size_t) {
             const cpx::TagInfo &t         = cpx::toml::get_tag_info(item);
@@ -374,7 +389,7 @@ struct DESERIALIZE(std::tuple<Ts...>) {
 
             const size_t          i   = idx++;
             const __tomlpp::node *val = is_tbl ? tbl->get(t.key) : arr->get(i);
-            if (!val && t.skipmissing)
+            if (!val && (t.skipmissing || !t.oneof.empty()))
                 return;
 
             try {
@@ -394,7 +409,17 @@ struct DESERIALIZE(std::tuple<Ts...>) {
                     e.add_context(i);
                 throw;
             }
+            oneofs[i] = t.oneof;
         });
+
+        for (const auto &oneof : oneofs) {
+            if (oneof.empty())
+                continue;
+
+            for (const auto &existing : oneofs)
+                if (existing == oneof && &existing != &oneof)
+                    throw duplicate_oneof_error(oneof);
+        }
     }
 };
 
@@ -433,7 +458,8 @@ protected:
                     type_names += e.expected_type + '|';
                 }
             }(),
-            ...);
+            ...
+        );
         if (!done) {
             type_names.pop_back();
             throw type_mismatch_error(type_names, std::string(__tomlpp::impl::node_type_friendly_names[(int)node->type()]));
@@ -453,9 +479,8 @@ struct SERIALIZE(std::unordered_map<std::string, T, H, P, A>, std::enable_if_t<S
 };
 
 template <typename T, typename H, typename P, typename A>
-struct DESERIALIZE(
-    std::unordered_map<std::string, T, H, P, A>, std::enable_if_t<std::is_default_constructible_v<T> && DESERIALIZABLE(T)>
-) {
+struct
+    DESERIALIZE(std::unordered_map<std::string, T, H, P, A>, std::enable_if_t<std::is_default_constructible_v<T> && DESERIALIZABLE(T)>) {
     const __tomlpp::node *node;
 
     void into(std::unordered_map<std::string, T, H, P, A> &v) const {
@@ -522,6 +547,8 @@ struct DESERIALIZE(std::tm) {
             to_tm(val->get(), v);
         } else if (auto val = node->as_time()) {
             to_tm(val->get(), v, nanos);
+        } else if (auto val = node->as_string()) {
+            v = cpx::tm_from_string(val->get(), nullptr, nanos);
         } else
             throw type_mismatch_error("time", std::string(__tomlpp::impl::node_type_friendly_names[(int)node->type()]));
     }
@@ -546,6 +573,47 @@ struct DESERIALIZE(std::tm) {
             *nanos = t.nanosecond;
     }
 };
+
+// timespce
+template <>
+struct SERIALIZE(std::timespec) {
+    std::unique_ptr<__tomlpp::node> from(const std::timespec &ts) const {
+        constexpr auto ten_years = 24l * 3600 * 365;
+
+        time_t    seconds     = ts.tv_sec;
+        long long nanoseconds = ts.tv_nsec;
+        seconds += nanoseconds / 1'000'000'000;
+        nanoseconds %= 1'000'000'000;
+        if (nanoseconds < 0) {
+            nanoseconds += 1'000'000'000;
+            --seconds;
+        }
+
+        if (seconds > ten_years || seconds < 0) {
+            time_t  t  = ts.tv_sec;
+            std::tm tm = *std::gmtime(&t);
+            return SERIALIZE(std::tm){}.from(tm, ts.tv_nsec);
+        }
+
+        return SERIALIZE(std::string){}.from(cpx::ts_to_string(ts));
+    }
+};
+
+template <>
+struct DESERIALIZE(std::timespec) {
+    const __tomlpp::node *node;
+
+    void into(std::timespec &v) const {
+        if (!node) {
+            throw type_mismatch_error("time", "null");
+        } else {
+            std::tm tm = {};
+            DESERIALIZE(std::tm){node}.into(tm, &v.tv_nsec);
+            v.tv_sec = timegm(&tm);
+        }
+    }
+};
+
 
 // generic reflection
 template <typename T>
@@ -706,10 +774,10 @@ void cpx::toml::marzer_toml::dump(std::ostream &os, const T &val) {
 
 namespace cpx::toml::marzer_toml {
     constexpr struct IO {
-        friend DUMP(std::ostream) operator<<(std::ostream &os, const IO &) {
+        friend DUMP(std::ostream) operator<<(std::ostream & os, const IO &) {
             return {os};
         }
-        friend PARSE(std::istream) operator>>(std::istream &is, const IO &) {
+        friend PARSE(std::istream) operator>>(std::istream & is, const IO &) {
             return {is};
         }
     } io{};

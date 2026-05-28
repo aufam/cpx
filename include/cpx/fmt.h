@@ -1,7 +1,7 @@
 #ifndef CPX_FMT_H
 #define CPX_FMT_H
 
-#include <cpx/reflect.h>
+#include <cpx/reflect_builtin.h>
 #include <cpx/extend.h>
 #include <optional>
 #include <variant>
@@ -137,7 +137,6 @@ struct fmt::formatter<
     }
 };
 
-#ifdef BOOST_PFR_HPP
 template <typename T>
 struct fmt::formatter<
     T,
@@ -160,5 +159,4 @@ struct fmt::formatter<
         return fmt::format_to(out, "{}", formattable_tpl);
     }
 };
-#endif
 #endif

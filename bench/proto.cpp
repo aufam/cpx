@@ -1,20 +1,19 @@
 #include <benchmark/benchmark.h>
 #include <cpx/protobuf.h>
-#include <cpx/fmt.h>
-#include <cpx/fields.h>
+#include <cpx/msgpack.h>
 #include "bench/person.pb.h"
 
 using namespace cpx;
 
 namespace {
     struct Person {
-        Tag<std::string>      name  = "protobuf:`1`";
-        Tag<int>              id    = "protobuf:`2`";
-        Tag<std::string>      email = "protobuf:`3`";
-        Tag<int>              num1  = "protobuf:`4,fixed`";
-        Tag<int>              num2  = "protobuf:`5,zigzag`";
-        Tag<int>              num3  = "protobuf:`6`";
-        Tag<std::vector<int>> nums  = "protobuf:`7`";
+        Tag<std::string>      name  = "protobuf,msgpack:`1`";
+        Tag<int>              id    = "protobuf,msgpack:`2`";
+        Tag<std::string>      email = "protobuf,msgpack:`3`";
+        Tag<int>              num1  = "protobuf,msgpack:`4,fixed`";
+        Tag<int>              num2  = "protobuf,msgpack:`5,zigzag`";
+        Tag<int>              num3  = "protobuf,msgpack:`6`";
+        Tag<std::vector<int>> nums  = "protobuf,msgpack:`7`";
     };
 
     struct Person3 {
@@ -31,8 +30,8 @@ namespace {
 static constexpr cpx::TagInfo name  = "name,field_number=1";
 static constexpr cpx::TagInfo id    = "id,field_number=2";
 static constexpr cpx::TagInfo email = "email,field_number=3";
-static constexpr cpx::TagInfo num1  = "num1,field_number=4";
-static constexpr cpx::TagInfo num2  = "num2,field_number=5";
+static constexpr cpx::TagInfo num1  = "num1,field_number=4,fixed";
+static constexpr cpx::TagInfo num2  = "num2,field_number=5,zigzag";
 static constexpr cpx::TagInfo num3  = "num3,field_number=6";
 static constexpr cpx::TagInfo nums  = "7";
 
@@ -59,6 +58,15 @@ static const char data[] = "\x0a\x07Sucipto"
                            ""
                            "\x3a\x03\x00\x00\x00";
 
+const char msgpack_data[] = "\x87"
+                            "\x01\xA7Sucipto"
+                            "\x02\x2a"
+                            "\x03\xBDsucipto@makmursejahtera.co.id"
+                            "\x04\x01"
+                            "\x05\x01"
+                            "\x06\x00"
+                            "\x07\x93\x00\x00\x00";
+
 static void cpx_tag_protobuf_serialization(benchmark::State &state) {
     std::string buf = std::string(data, sizeof(data) - 1);
     Person1     p;
@@ -80,6 +88,28 @@ static void cpx_reflect_protobuf_serialization(benchmark::State &state) {
     }
 }
 BENCHMARK(cpx_reflect_protobuf_serialization);
+
+static void cpx_tag_msgpack_serialization(benchmark::State &state) {
+    std::string buf = std::string(msgpack_data, sizeof(msgpack_data) - 1);
+    Person1     p;
+    cpx::msgpack::parse(buf, p);
+    for (auto _ : state) {
+        std::string s = cpx::msgpack::dump(p);
+        benchmark::DoNotOptimize(s);
+    }
+}
+BENCHMARK(cpx_tag_msgpack_serialization);
+
+static void cpx_reflect_msgpack_serialization(benchmark::State &state) {
+    std::string buf = std::string(msgpack_data, sizeof(msgpack_data) - 1);
+    Person3     p;
+    cpx::msgpack::parse(buf, p);
+    for (auto _ : state) {
+        std::string s = cpx::msgpack::dump(p);
+        benchmark::DoNotOptimize(s);
+    }
+}
+BENCHMARK(cpx_reflect_msgpack_serialization);
 
 static void compiled_protobuf_serialization(benchmark::State &state) {
     std::string buf = std::string(data, sizeof(data) - 1);
@@ -112,6 +142,26 @@ static void cpx_reflect_protobuf_deserialization(benchmark::State &state) {
     }
 }
 BENCHMARK(cpx_reflect_protobuf_deserialization);
+
+static void cpx_tag_msgpack_deserialization(benchmark::State &state) {
+    std::string buf = std::string(msgpack_data, sizeof(msgpack_data) - 1);
+    for (auto _ : state) {
+        Person1 p;
+        cpx::msgpack::parse(buf, p);
+        benchmark::DoNotOptimize(p);
+    }
+}
+BENCHMARK(cpx_tag_msgpack_deserialization);
+
+static void cpx_reflect_msgpack_deserialization(benchmark::State &state) {
+    std::string buf = std::string(msgpack_data, sizeof(msgpack_data) - 1);
+    for (auto _ : state) {
+        Person3 p;
+        cpx::msgpack::parse(buf, p);
+        benchmark::DoNotOptimize(p);
+    }
+}
+BENCHMARK(cpx_reflect_msgpack_deserialization);
 
 static void compiled_protobuf_deserialization(benchmark::State &state) {
     std::string buf = std::string(data, sizeof(data) - 1);

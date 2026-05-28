@@ -5,6 +5,7 @@
 #include <cpx/serde/deserialize.h>
 #include <cpx/serde/error.h>
 #include <cpx/extend.h>
+#include <cpx/reflect_builtin.h>
 #include <variant>
 
 #include <CLI/CLI.hpp>
@@ -36,15 +37,13 @@ namespace cpx::cli::cli11 {
 } // namespace cpx::cli::cli11
 
 namespace cpx::cli::cli11::detail {
-    inline std::string convert_flag_format(std::string_view input, bool positional, bool subcommand) {
-        if (subcommand)
-            return std::string(input);
-        else if (input.size() <= 1 || input[1] != '|')
-            return (positional ? "" : "--") + std::string(input);
-        else if (positional)
-            return std::string(input.substr(2));
+    inline std::string generate_option_name(const cpx::TagInfo &ti, bool subcommand = false) {
+        if (ti.positional || subcommand)
+            return std::string(ti.key);
+        else if (ti.short_.empty())
+            return "--" + std::string(ti.key);
         else
-            return "-" + std::string(input.substr(0, 1)) + ",--" + std::string(input.substr(2));
+            return "-" + std::string(ti.short_) + ",--" + std::string(ti.key);
     }
 
     template <typename T>
@@ -56,399 +55,354 @@ namespace cpx::cli::cli11::detail {
                                    cpx::cli::has_reflect_v<T> && std::is_same_v<cpx::cli::reflect_t<T>, std::string> &&
                                    (std::is_same_v<cpx::cli::const_reflect_t<T>, std::string> ||
                                     std::is_same_v<cpx::cli::const_reflect_t<T>, std::string_view>)> {};
-
-    class DeserializeDispatcher {
-    public:
-        explicit DeserializeDispatcher(CLI::App &app, bool is_root = false)
-            : app(app)
-            , is_root(is_root) {}
-
-        CLI::App   &app;
-        bool        is_root;
-        std::string option_name;
-        std::string help_string;
-        std::string env;
-        bool        positional = false;
-        bool        required   = false;
-    };
-
-    template <typename T>
-    class DeserializeDispatcherFor : public DeserializeDispatcher {
-        using DeserializeDispatcher::DeserializeDispatcher;
-
-    public:
-        virtual void into(T &v) const = 0;
-
-        DeserializeDispatcherFor<T> &configure(const TagInfo &ti) {
-            option_name = cpx::cli::cli11::detail::
-                convert_flag_format(ti.key, ti.positional, is_tuple_v<T> || is_tuple_v<cpx::cli::reflect_t<T>>);
-            help_string = std::string(ti.help);
-            positional  = ti.positional;
-            required    = !ti.skipmissing;
-            env         = std::string(ti.env);
-            return *this;
-        }
-
-        DeserializeDispatcherFor<T> &configure(const DeserializeDispatcher &other) {
-            is_root     = other.is_root;
-            option_name = other.option_name;
-            help_string = other.help_string;
-            positional  = other.positional;
-            required    = other.required;
-            env         = other.env;
-            return *this;
-        }
-    };
 } // namespace cpx::cli::cli11::detail
 
 
-namespace cpx::serde {
-    template <>
-    struct Parse<CLI::App, std::pair<int, char **>> {
-        std::string               app_desc;
-        int                       argc;
-        mutable char            **argv;
-        std::vector<std::string> *parsed_subcommands = nullptr;
+template <>
+struct cpx::serde::Parse<CLI::App, std::pair<int, char **>> {
+    std::string               app_desc;
+    int                       argc;
+    mutable char            **argv;
+    std::vector<std::string> *parsed_subcommands = nullptr;
 
-        template <typename T>
-        void into(T &tpl) const {
-            auto       app     = CLI::App(app_desc, argv[0]);
-            const bool is_root = true;
+    template <typename T>
+    void into(T &tpl) const {
+        auto          app = CLI::App(app_desc, argv[0]);
+        const TagInfo ti  = {};
 
-            Deserialize<CLI::App, T> d(app, is_root);
-            d.into(tpl);
+        Deserialize<CLI::App, T>{app, ti}.into(tpl);
 
-            argv = app.ensure_utf8(argv);
+        argv = app.ensure_utf8(argv);
 #ifdef _WIN32
-            app.allow_windows_style_options();
+        app.allow_windows_style_options();
 #endif
-            try {
-                app.parse(argc, argv);
-            } catch (const CLI::ParseError &e) {
-                ::exit(app.exit(e));
-            };
+        try {
+            app.parse(argc, argv);
+        } catch (const CLI::ParseError &e) {
+            ::exit(app.exit(e));
+        };
 
-            if (parsed_subcommands)
-                for (auto *sub : app.get_subcommands())
-                    parsed_subcommands->push_back(sub->get_name());
-        }
-
-        template <typename T>
-        std::string help(T &v) const {
-            auto       app     = CLI::App(app_desc, argv[0]);
-            const bool is_root = true;
-
-            Deserialize<CLI::App, T> d(app, is_root);
-            d.into(v);
-
-            return app.help();
-        }
-    };
-
-    template <>
-    struct Deserialize<CLI::App, bool> : public cli::cli11::detail::DeserializeDispatcherFor<bool> {
-        using cli::cli11::detail::DeserializeDispatcherFor<bool>::DeserializeDispatcherFor;
-
-        void into(bool &v) const override {
-            this->app.add_flag(this->option_name, v, this->help_string);
-        }
-    };
+        if (parsed_subcommands)
+            for (auto *sub : app.get_subcommands())
+                parsed_subcommands->push_back(sub->get_name());
+    }
 
     template <typename T>
-    struct Deserialize<CLI::App, T, std::enable_if_t<cpx::cli::cli11::detail::is_primitive_type<T>::value>>
-        : public cli::cli11::detail::DeserializeDispatcherFor<T> {
-        using cli::cli11::detail::DeserializeDispatcherFor<T>::DeserializeDispatcherFor;
+    std::string help(T &v) const {
+        auto       app     = CLI::App(app_desc, argv[0]);
+        const bool is_root = true;
 
-        void into(T &v) const override {
-            CLI::Option *opt = this->app.add_option(this->option_name, v, this->help_string);
-            if (!this->env.empty())
-                opt->envname(this->env);
-            if (this->required)
-                opt->required(this->required);
-            else
-                opt->default_val(v);
-        }
-    };
+        Deserialize<CLI::App, T> d(app, is_root);
+        d.into(v);
 
-    template <typename T>
-    struct Deserialize<CLI::App, std::vector<T>, std::enable_if_t<cpx::cli::cli11::detail::is_primitive_type<T>::value>>
-        : public cli::cli11::detail::DeserializeDispatcherFor<std::vector<T>> {
-        using cli::cli11::detail::DeserializeDispatcherFor<std::vector<T>>::DeserializeDispatcherFor;
+        return app.help();
+    }
+};
 
-        void into(std::vector<T> &v) const override {
-            CLI::Option *opt = this->app.add_option(this->option_name, v, this->help_string);
-            if (!this->env.empty())
-                opt->envname(this->env);
-            if (!v.empty())
-                opt->default_val(v);
-        }
-    };
+// bool
+template <>
+struct cpx::serde::Deserialize<CLI::App, bool> {
+    CLI::App      &app;
+    const TagInfo &ti;
 
-    template <typename T>
-    struct Deserialize<CLI::App, std::optional<T>, std::enable_if_t<cpx::cli::cli11::detail::is_primitive_type<T>::value>>
-        : public cli::cli11::detail::DeserializeDispatcherFor<std::optional<T>> {
-        using cli::cli11::detail::DeserializeDispatcherFor<std::optional<T>>::DeserializeDispatcherFor;
+    void into(bool &v) const {
+        this->app.add_flag(cpx::cli::cli11::detail::generate_option_name(ti), v, std::string(ti.help));
+    }
+};
 
-        void into(std::optional<T> &v) const override {
-            CLI::Option *opt = this->app.template add_option<std::optional<T>, T>(this->option_name, v, this->help_string);
-            if (!this->env.empty())
-                opt->envname(this->env);
-            if (v.has_value())
-                opt->default_val(*v);
-        }
-    };
+// primitive types
+template <typename T>
+struct cpx::serde::Deserialize<CLI::App, T, std::enable_if_t<cpx::cli::cli11::detail::is_primitive_type<T>::value>> {
+    CLI::App      &app;
+    const TagInfo &ti;
 
+    void into(T &v) const {
+        CLI::Option *opt = this->app.add_option(cpx::cli::cli11::detail::generate_option_name(ti), v, std::string(ti.help));
+        if (!ti.env.empty())
+            opt->envname(std::string(ti.env));
+        if (!ti.skipmissing)
+            opt->required();
+        else
+            opt->default_val(v);
+    }
+};
 
-    template <typename... T>
-    struct Deserialize<
-        CLI::App,
-        std::variant<T...>,
-        std::enable_if_t<(cpx::cli::cli11::detail::is_primitive_type<T>::value && ...)>>
-        : public cli::cli11::detail::DeserializeDispatcherFor<std::variant<T...>> {
-        using cli::cli11::detail::DeserializeDispatcherFor<std::variant<T...>>::DeserializeDispatcherFor;
+// vector of primitive
+template <typename T>
+struct cpx::serde::Deserialize<CLI::App, std::vector<T>, std::enable_if_t<cpx::cli::cli11::detail::is_primitive_type<T>::value>> {
+    CLI::App      &app;
+    const TagInfo &ti;
 
-        void into(std::variant<T...> &v) const override {
-            CLI::Option *opt = this->app.template add_option_function<std::string>(
-                this->option_name,
-                [&v, this](const std::string &str) {
-                    bool done = false;
-                    (
-                        [&]() {
-                            if (!done) {
-                                auto element = T{};
-                                done         = CLI::detail::lexical_cast(str, element);
-                                if (done)
-                                    v = std::move(element);
-                            }
-                        }(),
-                        ...
-                    );
-                    if (!done)
-                        throw type_mismatch_error("variant", "unknown"); // TODO
-                },
-                this->help_string
-            );
+    void into(std::vector<T> &v) const {
+        CLI::Option *opt = this->app.add_option(cpx::cli::cli11::detail::generate_option_name(ti), v, std::string(ti.help));
+        if (!ti.env.empty())
+            opt->envname(std::string(ti.env));
+        if (!v.empty())
+            opt->default_val(v);
+    }
+};
 
-            if (!this->env.empty())
-                opt->envname(this->env);
-            if (this->required)
-                opt->required(this->required);
-            else
-                std::visit([opt](auto &val) { opt->default_val(val); }, v);
-        }
-    };
+// optional primitive
+template <typename T>
+struct cpx::serde::
+    Deserialize<CLI::App, std::optional<T>, std::enable_if_t<cpx::cli::cli11::detail::is_primitive_type<T>::value>> {
+    CLI::App      &app;
+    const TagInfo &ti;
 
-    template <typename... Ts>
-    struct Deserialize<CLI::App, std::tuple<Ts...>> : public cli::cli11::detail::DeserializeDispatcherFor<std::tuple<Ts...>> {
-        using cli::cli11::detail::DeserializeDispatcherFor<std::tuple<Ts...>>::DeserializeDispatcherFor;
+    void into(std::optional<T> &v) const {
+        CLI::Option *opt = this->app.template add_option<std::optional<T>, T>(
+            cpx::cli::cli11::detail::generate_option_name(ti), v, std::string(ti.help)
+        );
+        if (!ti.env.empty())
+            opt->envname(std::string(ti.env));
+        if (v.has_value())
+            opt->default_val(*v);
+    }
+};
 
-        void into(std::tuple<Ts...> &tpl) const override {
-            into(tpl, nullptr);
-        }
+// variant primitive
+template <typename... T>
+struct cpx::serde::
+    Deserialize<CLI::App, std::variant<T...>, std::enable_if_t<(cpx::cli::cli11::detail::is_primitive_type<T>::value && ...)>> {
+    CLI::App      &app;
+    const TagInfo &ti;
 
-        void into(std::tuple<Ts...> &tpl, std::function<void()> cb) const {
-            CLI::App *sub = nullptr;
-            if (!this->is_root) {
-                sub = this->app.add_subcommand(this->option_name, this->help_string);
-                if (cb)
-                    sub->callback(std::move(cb));
-            }
-
-            cpx::tuple_for_each(cpx::flatten(tpl), [&](auto &item, size_t) {
-                const cpx::TagInfo &t         = cpx::cli::get_tag_info(item);
-                auto               &v         = cpx::detail::get_underlying_value(item);
-                using T                       = std::decay_t<decltype(v)>;
-                constexpr bool deserializable = cpx::serde::is_deserializable_v<CLI::App, T>;
-
-                if (!deserializable || t.key == "")
-                    return;
-
-                if constexpr (deserializable) {
-                    Deserialize<CLI::App, T> d(sub ? *sub : this->app);
-                    d.configure(t).into(v);
-                }
-            });
-        }
-    };
-
-    template <typename T>
-    struct Deserialize<CLI::App, T, std::enable_if_t<cpx::cli::has_reflect_v<T> && cpx::is_tuple_v<cpx::cli::reflect_t<T>>>>
-        : public cli::cli11::detail::DeserializeDispatcherFor<T> {
-        using cli::cli11::detail::DeserializeDispatcherFor<T>::DeserializeDispatcherFor;
-
-        void into(T &v) const override {
-            Deserialize<CLI::App, cpx::cli::reflect_t<T>> d(this->app);
-
-            decltype(auto) r = cpx::cli::reflect_of(v);
-            d.configure(*this).into(r);
-        }
-    };
-
-    template <typename T>
-    struct Deserialize<
-        CLI::App,
-        std::optional<T>,
-        std::enable_if_t<cpx::cli::has_reflect_v<T> && cpx::is_tuple_v<cpx::cli::reflect_t<T>>>>
-        : public cli::cli11::detail::DeserializeDispatcherFor<std::optional<T>> {
-        using cli::cli11::detail::DeserializeDispatcherFor<std::optional<T>>::DeserializeDispatcherFor;
-
-        void into(std::optional<T> &v) const override {
-            Deserialize<CLI::App, cpx::cli::reflect_t<T>> d(this->app);
-
-            auto val = std::make_shared<T>(); // TODO
-
-            decltype(auto) r = cpx::cli::reflect_of(*val);
-            d.configure(*this);
-
-            std::string &name = d.option_name;
-            while (name.size() > 1) {
-                if (name.front() == '-')
-                    name = name.substr(1);
-                else
-                    break;
-            }
-
-            d.into(r, [val, &v]() { v = *val; });
-        }
-    };
-
-    template <typename T>
-    struct Deserialize<CLI::App, T, std::enable_if_t<cpx::cli::cli11::detail::is_string_reflect<T>::value>>
-        : public cli::cli11::detail::DeserializeDispatcherFor<T> {
-        using cli::cli11::detail::DeserializeDispatcherFor<T>::DeserializeDispatcherFor;
-
-        void into(T &v) const override {
-            CLI::Option *opt = this->app.template add_option_function<std::string>(
-                this->option_name,
-                [&v](const std::string &str) {
-                    try {
-                        decltype(auto) proxy = cpx::cli::reflect_of(v);
-                        decltype(auto) p     = (std::string &)proxy;
-                        p                    = str;
-                    } catch (std::exception &e) {
-                        throw CLI::ParseError("Failed to parse " + str + ": " + e.what(), 1);
-                    }
-                    return true;
-                },
-                this->help_string
-            );
-
-            if (!this->env.empty())
-                opt->envname(this->env);
-            if (this->required)
-                opt->required(this->required);
-            else {
-                const auto    &cv  = v;
-                decltype(auto) str = cpx::cli::reflect_of(cv);
-                opt->default_str(std::string(str));
-            }
-        }
-    };
-
-    template <typename T>
-    struct Deserialize<CLI::App, std::optional<T>, std::enable_if_t<cpx::cli::cli11::detail::is_string_reflect<T>::value>>
-        : public cli::cli11::detail::DeserializeDispatcherFor<std::optional<T>> {
-        using cli::cli11::detail::DeserializeDispatcherFor<std::optional<T>>::DeserializeDispatcherFor;
-
-        void into(std::optional<T> &v) const override {
-            CLI::Option *opt = this->app.template add_option_function<std::string>(
-                this->option_name,
-                [&v](const std::string &str) {
-                    v = T{};
-                    try {
-                        decltype(auto) proxy = cpx::cli::reflect_of(v);
-                        decltype(auto) p     = (std::string &)proxy;
-                        p                    = str;
-                    } catch (std::exception &e) {
-                        throw CLI::ParseError("Failed to parse " + str + ": " + e.what(), 1);
-                    }
-                    return true;
-                },
-                this->help_string
-            );
-
-            if (!this->env.empty())
-                opt->envname(this->env);
-            if (v.has_value()) {
-                const auto    &cv  = *v;
-                decltype(auto) str = cpx::cli::reflect_of(cv);
-                opt->default_str(std::string(str));
-            }
-        }
-    };
-
-    template <typename T>
-    struct Deserialize<CLI::App, std::vector<T>, std::enable_if_t<cpx::cli::cli11::detail::is_string_reflect<T>::value>>
-        : public cli::cli11::detail::DeserializeDispatcherFor<std::vector<T>> {
-        using cli::cli11::detail::DeserializeDispatcherFor<std::vector<T>>::DeserializeDispatcherFor;
-
-        void into(std::vector<T> &v) const override {
-            CLI::Option *opt = this->app.template add_option_function<std::vector<std::string>>(
-                this->option_name,
-                [&v](const std::vector<std::string> &strs) {
-                    v.resize(strs.size());
-                    for (size_t i = 0; i < strs.size(); i++) {
-                        auto &dest = v[i];
-                        auto &src  = strs[i];
-                        try {
-                            decltype(auto) proxy = cpx::cli::reflect_of(dest);
-                            decltype(auto) p     = (std::string &)proxy;
-                            p                    = src;
-                        } catch (std::exception &e) {
-                            throw CLI::ParseError("Failed to parse " + src + ": " + e.what(), 1);
+    void into(std::variant<T...> &v) const {
+        CLI::Option *opt = this->app.template add_option_function<std::string>(
+            cpx::cli::cli11::detail::generate_option_name(ti),
+            [&v, this](const std::string &str) {
+                bool done = false;
+                (
+                    [&]() {
+                        if (!done) {
+                            auto element = T{};
+                            done         = CLI::detail::lexical_cast(str, element);
+                            if (done)
+                                v = std::move(element);
                         }
-                    }
-                    return true;
-                },
-                this->help_string
-            );
+                    }(),
+                    ...
+                );
+                if (!done)
+                    throw type_mismatch_error("variant", "unknown"); // TODO
+            },
+            std::string(ti.help)
+        );
 
-            if (!this->env.empty())
-                opt->envname(this->env);
-            if (!v.empty()) {
-                std::vector<std::string> enum_names;
-                for (const auto &cv : v) {
-                    decltype(auto) str = cpx::cli::reflect_of(cv);
-                    enum_names.push_back(std::string(str));
-                }
-                opt->default_val(enum_names);
-            }
+        if (!ti.env.empty())
+            opt->envname(std::string(ti.env));
+        if (!ti.skipmissing)
+            opt->required();
+        else
+            std::visit([opt](auto &val) { opt->default_val(val); }, v);
+    }
+};
+
+// tuple
+template <typename... Ts>
+struct cpx::serde::Deserialize<CLI::App, std::tuple<Ts...>> {
+    CLI::App      &app;
+    const TagInfo &ti;
+
+    void into(std::tuple<Ts...> &tpl) const {
+        into(tpl, nullptr);
+    }
+
+    void into(std::tuple<Ts...> &tpl, std::function<void()> cb) const {
+        CLI::App *sub = nullptr;
+        if (!ti.key.empty()) {
+            sub = this->app.add_subcommand(cpx::cli::cli11::detail::generate_option_name(ti, true), std::string(ti.help));
+            if (cb)
+                sub->callback(std::move(cb));
         }
-    };
-} // namespace cpx::serde
 
-namespace cpx::cli::cli11 {
-    template <typename T>
-    void parse(const std::string &app_desc, int argc, char **argv, T &v) {
-        Parse{app_desc, argc, argv}.into(v);
-    }
+        cpx::tuple_for_each(cpx::flatten(tpl), [&](auto &item, size_t) {
+            const cpx::TagInfo &t         = cpx::cli::get_tag_info(item);
+            auto               &v         = cpx::detail::get_underlying_value(item);
+            using T                       = std::decay_t<decltype(v)>;
+            constexpr bool deserializable = cpx::serde::is_deserializable_v<CLI::App, T>;
 
-    template <typename T>
-    std::enable_if_t<std::is_default_constructible_v<T>, T> parse(const std::string &app_desc, int argc, char **argv) {
-        T v;
-        Parse{app_desc, argc, argv}.into(v);
-        return v;
-    }
+            if (!deserializable || t.key == "")
+                return;
 
-    template <typename T>
-    std::vector<std::string> parse_with_subcommands(const std::string &app_desc, int argc, char **argv, T &v) {
-        std::vector<std::string> parsed_subcommands;
-        Parse{app_desc, argc, argv, &parsed_subcommands}.into(v);
-        return parsed_subcommands;
+            if constexpr (deserializable)
+                Deserialize<CLI::App, T>{sub ? *sub : this->app, t}.into(v);
+        });
     }
+};
 
-    template <typename T>
-    std::enable_if_t<std::is_default_constructible_v<T>, std::pair<T, std::vector<std::string>>>
-    parse_with_subcommands(const std::string &app_desc, int argc, char **argv) {
-        T                        v;
-        std::vector<std::string> parsed_subcommands;
-        Parse{app_desc, argc, argv, &parsed_subcommands}.into(v);
-        return std::make_pair(std::move(v), std::move(parsed_subcommands));
-    }
+// reflect to tuple
+template <typename T>
+struct cpx::serde::
+    Deserialize<CLI::App, T, std::enable_if_t<cpx::cli::has_reflect_v<T> && cpx::is_tuple_v<cpx::cli::reflect_t<T>>>> {
+    CLI::App      &app;
+    const TagInfo &ti;
 
-    template <typename T>
-    std::string help(const std::string &app_desc, int argc, char **argv, T &v) {
-        return Parse{app_desc, argc, argv}.help(v);
+    void into(T &v) const {
+        decltype(auto) r = cpx::cli::reflect_of(v);
+        Deserialize<CLI::App, cpx::cli::reflect_t<T>>{app, ti}.into(r);
     }
-} // namespace cpx::cli::cli11
+};
+
+// optional reflect to tuple
+template <typename T>
+struct cpx::serde::Deserialize<
+    CLI::App,
+    std::optional<T>,
+    std::enable_if_t<cpx::cli::has_reflect_v<T> && cpx::is_tuple_v<cpx::cli::reflect_t<T>>>> {
+    CLI::App      &app;
+    const TagInfo &ti;
+
+    void into(std::optional<T> &v) const {
+        if (v.has_value())
+            throw error("subcommand optional type must be empty");
+
+        auto val = std::make_shared<T>();
+
+        decltype(auto) r = cpx::cli::reflect_of(*val);
+        Deserialize<CLI::App, cpx::cli::reflect_t<T>>{app, ti}.into(r, [val, &v]() { v = *val; });
+    }
+};
+
+// reflect to string
+template <typename T>
+struct cpx::serde::Deserialize<CLI::App, T, std::enable_if_t<cpx::cli::cli11::detail::is_string_reflect<T>::value>> {
+    CLI::App      &app;
+    const TagInfo &ti;
+
+    void into(T &v) const {
+        CLI::Option *opt = this->app.template add_option_function<std::string>(
+            cpx::cli::cli11::detail::generate_option_name(ti),
+            [&v](const std::string &str) {
+                try {
+                    decltype(auto) proxy = cpx::cli::reflect_of(v);
+                    decltype(auto) p     = (std::string &)proxy;
+                    p                    = str;
+                } catch (std::exception &e) {
+                    throw CLI::ParseError("Failed to parse " + str + ": " + e.what(), 1);
+                }
+                return true;
+            },
+            std::string(ti.help)
+        );
+
+        if (!ti.env.empty())
+            opt->envname(std::string(ti.env));
+        if (!ti.skipmissing)
+            opt->required();
+        else {
+            const auto    &cv  = v;
+            decltype(auto) str = cpx::cli::reflect_of(cv);
+            opt->default_str(std::string(str));
+        }
+    }
+};
+
+// optional reflect to string
+template <typename T>
+struct cpx::serde::
+    Deserialize<CLI::App, std::optional<T>, std::enable_if_t<cpx::cli::cli11::detail::is_string_reflect<T>::value>> {
+    CLI::App      &app;
+    const TagInfo &ti;
+
+    void into(std::optional<T> &v) const {
+        CLI::Option *opt = this->app.template add_option_function<std::string>(
+            cpx::cli::cli11::detail::generate_option_name(ti),
+            [&v](const std::string &str) {
+                v = T{};
+                try {
+                    decltype(auto) proxy = cpx::cli::reflect_of(v);
+                    decltype(auto) p     = (std::string &)proxy;
+                    p                    = str;
+                } catch (std::exception &e) {
+                    throw CLI::ParseError("Failed to parse " + str + ": " + e.what(), 1);
+                }
+                return true;
+            },
+            std::string(ti.help)
+        );
+
+        if (!ti.env.empty())
+            opt->envname(std::string(ti.env));
+        if (v.has_value()) {
+            const auto    &cv  = *v;
+            decltype(auto) str = cpx::cli::reflect_of(cv);
+            opt->default_str(std::string(str));
+        }
+    }
+};
+
+// vector reflect to string
+template <typename T>
+struct cpx::serde::Deserialize<CLI::App, std::vector<T>, std::enable_if_t<cpx::cli::cli11::detail::is_string_reflect<T>::value>> {
+    CLI::App      &app;
+    const TagInfo &ti;
+
+    void into(std::vector<T> &v) const {
+        CLI::Option *opt = this->app.template add_option_function<std::vector<std::string>>(
+            cpx::cli::cli11::detail::generate_option_name(ti),
+            [&v](const std::vector<std::string> &strs) {
+                v.resize(strs.size());
+                for (size_t i = 0; i < strs.size(); i++) {
+                    auto &dest = v[i];
+                    auto &src  = strs[i];
+                    try {
+                        decltype(auto) proxy = cpx::cli::reflect_of(dest);
+                        decltype(auto) p     = (std::string &)proxy;
+                        p                    = src;
+                    } catch (std::exception &e) {
+                        throw CLI::ParseError("Failed to parse " + src + ": " + e.what(), 1);
+                    }
+                }
+                return true;
+            },
+            std::string(ti.help)
+        );
+
+        if (!ti.env.empty())
+            opt->envname(std::string(ti.env));
+        if (!v.empty()) {
+            std::vector<std::string> enum_names;
+            for (const auto &cv : v) {
+                decltype(auto) str = cpx::cli::reflect_of(cv);
+                enum_names.push_back(std::string(str));
+            }
+            opt->default_val(enum_names);
+        }
+    }
+};
+
+template <typename T>
+void cpx::cli::cli11::parse(const std::string &app_desc, int argc, char **argv, T &v) {
+    Parse{app_desc, argc, argv}.into(v);
+}
+
+template <typename T>
+std::enable_if_t<std::is_default_constructible_v<T>, T>
+cpx::cli::cli11::parse(const std::string &app_desc, int argc, char **argv) {
+    T v = {};
+    Parse{app_desc, argc, argv}.into(v);
+    return v;
+}
+
+template <typename T>
+std::vector<std::string> cpx::cli::cli11::parse_with_subcommands(const std::string &app_desc, int argc, char **argv, T &v) {
+    std::vector<std::string> parsed_subcommands;
+    Parse{app_desc, argc, argv, &parsed_subcommands}.into(v);
+    return parsed_subcommands;
+}
+
+template <typename T>
+std::enable_if_t<std::is_default_constructible_v<T>, std::pair<T, std::vector<std::string>>>
+cpx::cli::cli11::parse_with_subcommands(const std::string &app_desc, int argc, char **argv) {
+    T                        v = {};
+    std::vector<std::string> parsed_subcommands;
+    Parse{app_desc, argc, argv, &parsed_subcommands}.into(v);
+    return std::make_pair(std::move(v), std::move(parsed_subcommands));
+}
+
+template <typename T>
+std::string cpx::cli::cli11::help(const std::string &app_desc, int argc, char **argv, T &v) {
+    return Parse{app_desc, argc, argv}.help(v);
+}
 #endif

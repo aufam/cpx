@@ -4,7 +4,7 @@
 #include <cpx/json/json.h>
 #include <cpx/serde/serialize.h>
 #include <cpx/serde/deserialize.h>
-#include <cpx/reflect.h>
+#include <cpx/reflect_builtin.h>
 #include <cpx/extend.h>
 #include <cpx/defer.h>
 #include <array>
@@ -329,6 +329,8 @@ struct SERIALIZE(std::tuple<Ts...>) {
         constexpr bool  is_obj     = cpx::detail::tuple_has_any_tagged_type_v<Tpl>;
         yyjson_mut_val *obj_or_arr = is_obj ? yyjson_mut_obj(doc) : yyjson_mut_arr(doc);
 
+        std::array<std::string_view, std::tuple_size_v<Tpl>> oneofs = {};
+
         size_t idx = 0;
         tuple_for_each(flattened, [&](auto &item, const size_t) {
             const cpx::TagInfo &t = cpx::json::get_tag_info(item);
@@ -339,7 +341,7 @@ struct SERIALIZE(std::tuple<Ts...>) {
                 return;
 
             size_t i = idx++;
-            if (t.omitempty && cpx::detail::is_empty_value(v)) {
+            if ((t.omitempty || !t.oneof.empty()) && cpx::detail::is_empty_value(v)) {
                 if constexpr (!is_obj)
                     yyjson_mut_arr_append(obj_or_arr, yyjson_mut_null(doc));
                 return;
@@ -367,7 +369,18 @@ struct SERIALIZE(std::tuple<Ts...>) {
                 yyjson_mut_obj_add(obj_or_arr, yyjson_mut_strn(doc, t.key.data(), t.key.size()), val);
             else
                 yyjson_mut_arr_append(obj_or_arr, val);
+
+            oneofs[i] = t.oneof;
         });
+
+        for (const auto &oneof : oneofs) {
+            if (oneof.empty())
+                continue;
+
+            for (const auto &existing : oneofs)
+                if (existing == oneof && &existing != &oneof)
+                    throw duplicate_oneof_error(oneof);
+        }
         return obj_or_arr;
     }
 };
@@ -388,6 +401,8 @@ struct DESERIALIZE(std::tuple<Ts...>) {
         if (!is_obj && !yyjson_is_arr(arr))
             throw type_mismatch_error("array", yyjson_get_type_desc(arr));
 
+        std::array<std::string_view, std::tuple_size_v<Tpl>> oneofs = {};
+
         size_t idx = 0;
         tuple_for_each(flattened, [&](auto &item, const size_t) {
             const cpx::TagInfo &t = cpx::json::get_tag_info(item);
@@ -399,7 +414,7 @@ struct DESERIALIZE(std::tuple<Ts...>) {
 
             const size_t i   = idx++;
             yyjson_val  *val = is_obj ? yyjson_obj_getn(obj, t.key.data(), t.key.size()) : yyjson_arr_get(arr, i);
-            if (!val && t.skipmissing)
+            if (!val && (t.skipmissing || !t.oneof.empty()))
                 return;
 
             try {
@@ -419,7 +434,17 @@ struct DESERIALIZE(std::tuple<Ts...>) {
                     e.add_context(i);
                 throw;
             }
+            oneofs[i] = t.oneof;
         });
+
+        for (const auto &oneof : oneofs) {
+            if (oneof.empty())
+                continue;
+
+            for (const auto &existing : oneofs)
+                if (existing == oneof && &existing != &oneof)
+                    throw duplicate_oneof_error(oneof);
+        }
     }
 };
 
@@ -453,7 +478,8 @@ struct DESERIALIZE(std::variant<T...>, std::enable_if_t<((std::is_default_constr
                     type_names += e.expected_type + '|';
                 }
             }(),
-            ...);
+            ...
+        );
         if (!done) {
             type_names.pop_back();
             throw type_mismatch_error(type_names, yyjson_get_type_desc(val));
@@ -482,10 +508,8 @@ struct SERIALIZE(std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A>
 };
 
 template <typename CT, typename CA, typename T, typename H, typename P, typename A>
-struct DESERIALIZE(
-    std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A>,
-    std::enable_if_t<std::is_default_constructible_v<T> && DESERIALIZABLE(T)>
-) {
+struct
+    DESERIALIZE(std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A>, std::enable_if_t<std::is_default_constructible_v<T> && DESERIALIZABLE(T)>) {
     yyjson_val *val;
 
     void into(std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A> &v) {

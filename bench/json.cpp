@@ -2,7 +2,6 @@
 #include <cpx/json/rapid_json.h>
 #include <cpx/json/nlohmann_json.h>
 #include <cpx/reflect.h>
-#include <cpx/fields.h>
 #include <benchmark/benchmark.h>
 
 

@@ -56,6 +56,12 @@ namespace cpx::serde {
         size_mismatch_error(size_t expect, size_t got)
             : error("Size mismatch error: expect `" + std::to_string(expect) + "` got `" + std::to_string(got) + "`") {}
     };
+
+    class duplicate_oneof_error : public error {
+    public:
+        duplicate_oneof_error(std::string_view oneof_signature)
+            : error("multiple oneof fields set: `" + std::string(oneof_signature) + "`") {}
+    };
 } // namespace cpx::serde
 
 #endif

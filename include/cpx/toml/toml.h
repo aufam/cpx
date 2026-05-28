@@ -2,6 +2,7 @@
 #define CPX_TOML_TOML_H
 
 #include <cpx/reflect.h>
+#include <cpx/time.h>
 
 namespace cpx::toml {
     template <typename T>

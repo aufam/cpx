@@ -128,7 +128,9 @@ namespace cpx {
         return str;
     }
 
-    inline std::tm tm_from_string(const std::string &str, const std::tm *default_value = nullptr, long long *nanos = nullptr) {
+    inline std::tm tm_from_string(
+        const std::string &str, const std::tm *default_value = nullptr, decltype(std::timespec::tv_nsec) *nanos = nullptr
+    ) {
         if (nanos)
             *nanos = 0;
 
@@ -198,8 +200,8 @@ namespace cpx {
         }
 
         try {
-            long long ns;
-            std::tm   tm = tm_from_string(str, nullptr, &ns);
+            decltype(std::timespec::tv_nsec) ns;
+            std::tm                          tm = tm_from_string(str, nullptr, &ns);
 #ifdef _WIN32
             time_t sec = _mkgmtime(&tm);
 #else

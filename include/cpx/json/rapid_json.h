@@ -5,7 +5,7 @@
 #include <cpx/json/json.h>
 #include <cpx/serde/serialize.h>
 #include <cpx/serde/deserialize.h>
-#include <cpx/reflect.h>
+#include <cpx/reflect_builtin.h>
 #include <cpx/extend.h>
 #include <cpx/defer.h>
 #include <array>
@@ -362,7 +362,8 @@ struct DESERIALIZE(std::variant<T...>, std::enable_if_t<((std::is_default_constr
                     type_names += e.expected_type + '|';
                 }
             }(),
-            ...);
+            ...
+        );
         if (!done) {
             type_names.pop_back();
             throw type_mismatch_error(type_names, cpx::json::rapid_json::detail::type(val));
@@ -452,10 +453,8 @@ struct SERIALIZE(std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A>
 };
 
 template <typename CT, typename CA, typename T, typename H, typename P, typename A>
-struct DESERIALIZE(
-    std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A>,
-    std::enable_if_t<std::is_default_constructible_v<T> && DESERIALIZABLE(T)>
-) {
+struct
+    DESERIALIZE(std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A>, std::enable_if_t<std::is_default_constructible_v<T> && DESERIALIZABLE(T)>) {
     const rapidjson::Value &val;
 
     void into(std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A> &v) const {
@@ -493,6 +492,8 @@ struct SERIALIZE(std::tuple<Ts...>) {
         is_obj ? val.MemberReserve(std::tuple_size_v<Tpl>, doc.GetAllocator())
                : val.Reserve(std::tuple_size_v<Tpl>, doc.GetAllocator());
 
+        std::array<std::string_view, std::tuple_size_v<Tpl>> oneofs = {};
+
         size_t idx = 0;
         tuple_for_each(flatten, [&](auto &item, const size_t) {
             const cpx::TagInfo &t       = cpx::json::get_tag_info(item);
@@ -504,7 +505,7 @@ struct SERIALIZE(std::tuple<Ts...>) {
                 return;
 
             size_t i = idx++;
-            if (t.omitempty && detail::is_empty_value(v) && is_obj)
+            if ((t.omitempty || !t.oneof.empty()) && detail::is_empty_value(v) && is_obj)
                 return;
 
             rapidjson::Value sub;
@@ -532,7 +533,18 @@ struct SERIALIZE(std::tuple<Ts...>) {
                 auto arr = val.GetArray();
                 arr.PushBack(std::move(sub), doc.GetAllocator());
             }
+
+            oneofs[i] = t.oneof;
         });
+
+        for (const auto &oneof : oneofs) {
+            if (oneof.empty())
+                continue;
+
+            for (const auto &existing : oneofs)
+                if (existing == oneof && &existing != &oneof)
+                    throw duplicate_oneof_error(oneof);
+        }
 
         return val;
     }
@@ -551,6 +563,8 @@ struct DESERIALIZE(std::tuple<Ts...>) {
             throw type_mismatch_error("array", cpx::json::rapid_json::detail::type(val));
         if (is_obj && !val.IsObject())
             throw type_mismatch_error("table", cpx::json::rapid_json::detail::type(val));
+
+        std::array<std::string_view, std::tuple_size_v<Tpl>> oneofs = {};
 
         size_t idx = 0;
         tuple_for_each(flattened, [&](auto &item, const size_t) {
@@ -577,7 +591,7 @@ struct DESERIALIZE(std::tuple<Ts...>) {
                 if (i < arr.Size())
                     ptr = &arr[i];
             }
-            if (ptr == &empty && t.skipmissing)
+            if (ptr == &empty && (t.skipmissing || !t.oneof.empty()))
                 return;
 
             try {
@@ -597,7 +611,18 @@ struct DESERIALIZE(std::tuple<Ts...>) {
                     e.add_context(i);
                 throw;
             }
+
+            oneofs[i] = t.oneof;
         });
+
+        for (const auto &oneof : oneofs) {
+            if (oneof.empty())
+                continue;
+
+            for (const auto &existing : oneofs)
+                if (existing == oneof && &existing != &oneof)
+                    throw duplicate_oneof_error(oneof);
+        }
     }
 };
 
@@ -792,9 +817,8 @@ struct SERIALIZE_SAX(OS, std::vector<T>, std::enable_if_t<SERIALIZABLE_SAX(OS, T
 
 // map
 template <typename OS, typename CT, typename CA, typename T, typename H, typename P, typename A>
-struct SERIALIZE_SAX(
-    OS, std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A>, std::enable_if_t<SERIALIZABLE_SAX(OS, T)>
-) {
+struct
+    SERIALIZE_SAX(OS, std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A>, std::enable_if_t<SERIALIZABLE_SAX(OS, T)>) {
     rapidjson::Writer<OS> &writer;
 
     void from(const std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A> &v) const {
