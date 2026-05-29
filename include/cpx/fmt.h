@@ -14,7 +14,13 @@
 #    include <fmt/chrono.h>
 #endif
 
-namespace cpx::fmt {
+#ifdef CPX_MODULE
+#    define CPX_EXPORT export
+#else
+#    define CPX_EXPORT
+#endif
+
+CPX_EXPORT namespace cpx::fmt {
     template <typename T, typename Enable = void>
     struct Reflect : std::false_type {
         using const_type = type;
@@ -33,7 +39,7 @@ namespace cpx::fmt {
     using const_reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::const_type, cpx::const_reflect_t<T>>;
 
     template <typename T>
-    constexpr decltype(auto) reflect_of(T &v) {
+    constexpr decltype(auto) reflect_of(T & v) {
         if constexpr (Reflect<std::remove_const_t<T>>::value)
             return Reflect<std::remove_const_t<T>>::of(v);
         else

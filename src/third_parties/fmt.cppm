@@ -13,4 +13,5 @@ export module cpx.fmt;
 export import fmt;
 import cpx;
 
+#define CPX_MODULE
 #include "cpx/fmt.h"

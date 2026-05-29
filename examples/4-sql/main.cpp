@@ -3,63 +3,77 @@
 
 namespace sql = cpx::sql;
 
+template <typename Table, typename T>
+struct Column {};
+
+
 struct User {
     static constexpr const char *TableName = "Users";
 
-    sql::Column<int>         id   = "sql:`id integer primary key`";
-    sql::Column<std::string> name = "sql:`name varchar(32) not null`";
-    sql::Column<int>         age  = "sql:`age integer`";
+    Column<User, int> asd;
+
+    sql::Column<int>         id   = "id integer primary key";
+    sql::Column<std::string> name = "name varchar(32) not null";
+    sql::Column<int>         age  = "age integer";
 };
+static constexpr User users;
 
 struct Product {
     static constexpr const char *TableName = "Products";
 
-    sql::Column<int>    id    = "sql:`id integer primary key`";
-    sql::Column<double> price = "sql:`price real`";
-    sql::Column<int>    stock = "sql:`stock integer`";
+    sql::Column<int>    id    = "id integer primary key";
+    sql::Column<double> price = "price real";
+    sql::Column<int>    stock = "stock integer";
 };
+static constexpr Product products;
 
 int main() {
     {
-        auto stmt = sql::create_table<Product>;
+        auto stmt = sql::create_table<products>(products.id, products.price, products.stock);
         fmt::println("{}", stmt);
     }
     {
-        auto stmt = sql::create_table<User>;
+        auto stmt = sql::create_table<users>(users.id, users.name, users.age);
         fmt::println("{}", stmt);
     }
 
-    // just placeholders
-    const Product products;
-    const User    users;
-
     {
-        auto stmt = sql::update<Product> //
+        auto stmt = sql::update<products> //
                         .set(products.price = 9.99, products.stock = products.stock - 10)
                         .where(products.id == 42);
         fmt::println("{}", stmt);
     }
     {
-        auto stmt = sql::insert_into<User>(users.name, users.age) //
+        auto stmt = sql::insert_into<users>(users.name, users.age) //
                         .values(std::tuple{"Sucipto", 20}, std::tuple{"Sugeng", 25});
         fmt::println("{}", stmt);
     }
     {
-        auto stmt = sql::select_all_from(users).where(users.name == "Sugeng");
+        auto stmt = sql::select(users.id, users.name, users.age) //
+                        .from(users)
+                        .where(users.name == "Sugeng");
         fmt::println("{}", stmt);
     }
     {
         auto stmt = sql::select(products.price, products.stock)
                         .from(products)
-                        .where(products.price > 4.99 or products.stock <= 10)
-                        .order_by(products.stock, products.price.desc);
+                        .where(products.price > 4.99 || products.stock <= 10)
+                        .order_by(products.stock, products.price.desc());
         fmt::println("{}", stmt);
     }
     {
-        auto stmt = sql::insert_into<User>(users.id, users.age)
+        auto stmt = sql::insert_into<users>(users.id, users.age)
                         .select(products.id, products.stock)
                         .from(products)
                         .where(products.id == 42);
+        fmt::println("{}", stmt);
+    }
+    {
+        auto asdf = products.id;
+        auto stmt = sql::select(users.name, products.stock) //
+                        .from(users)
+                        .left_join(products)
+                        .on(users.id == asdf);
         fmt::println("{}", stmt);
     }
 }

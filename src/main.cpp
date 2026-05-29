@@ -1,8 +1,8 @@
 #include <string>
-#include <iostream>
 #include <ctime>
 
 import cpx;
+import cpx.fmt;
 
 struct Address {
     std::string city;
@@ -18,7 +18,6 @@ struct User {
 
 constexpr cpx::TagInfo name_tag    = "name";
 constexpr cpx::TagInfo age_tag     = "age";
-constexpr cpx::TagInfo joined_tag  = "joined";
 constexpr cpx::TagInfo address_tag = "address";
 constexpr cpx::TagInfo city_tag    = "city";
 constexpr cpx::TagInfo zip_tag     = "zip";
@@ -28,7 +27,6 @@ struct cpx::Reflect<User>                    //
     : Fields<                                //
           Field<&User::name, name_tag>,      //
           Field<&User::age, age_tag>,        //
-          Field<&User::joined, joined_tag>,  //
           Field<&User::address, address_tag> //
           > {};
 
@@ -41,6 +39,6 @@ struct cpx::Reflect<Address>               //
 
 int main(int argc, char **argv) {
     User user;
-    std::cout << cpx::has_reflect_v<User> << std::endl;
+    fmt::println("user = {}", user);
     return 1;
 }

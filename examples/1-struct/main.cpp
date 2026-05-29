@@ -5,36 +5,47 @@
 struct Address {
     std::string        city;
     std::optional<int> zip;
+
+    static constexpr cpx::TagInfo _city = "city";
+    static constexpr cpx::TagInfo _zip  = "zip";
 };
 
 struct User {
     std::string name;
     int         age;
-    std::tm     joined;
+    std::tm     created_at;
     Address     address;
+
+    static constexpr cpx::TagInfo _name            = "name";
+    static constexpr cpx::TagInfo _age             = "age";
+    static constexpr cpx::TagInfo _created_at      = "created-at";
+    static constexpr cpx::TagInfo _created_at_json = "createdAt";
+    static constexpr cpx::TagInfo _address         = "address";
 };
 
-constexpr cpx::TagInfo name_tag    = "name";
-constexpr cpx::TagInfo age_tag     = "age";
-constexpr cpx::TagInfo joined_tag  = "joined";
-constexpr cpx::TagInfo address_tag = "address";
-constexpr cpx::TagInfo city_tag    = "city";
-constexpr cpx::TagInfo zip_tag     = "zip";
-
 template <>
-struct cpx::Reflect<User>                    //
-    : Fields<                                //
-          Field<&User::name, name_tag>,      //
-          Field<&User::age, age_tag>,        //
-          Field<&User::joined, joined_tag>,  //
-          Field<&User::address, address_tag> //
+struct cpx::Reflect<User>                              //
+    : Fields<                                          //
+          Field<&User::name, User::_name>,             //
+          Field<&User::age, User::_age>,               //
+          Field<&User::created_at, User::_created_at>, //
+          Field<&User::address, User::_address>        //
           > {};
 
 template <>
-struct cpx::Reflect<Address>               //
-    : Fields<                              //
-          Field<&Address::city, city_tag>, //
-          Field<&Address::zip, zip_tag>    //
+struct cpx::json::Reflect<User>                             //
+    : Fields<                                               //
+          Field<&User::name, User::_name>,                  //
+          Field<&User::age, User::_age>,                    //
+          Field<&User::created_at, User::_created_at_json>, //
+          Field<&User::address, User::_address>             //
+          > {};
+
+template <>
+struct cpx::Reflect<Address>                     //
+    : Fields<                                    //
+          Field<&Address::city, Address::_city>, //
+          Field<&Address::zip, Address::_zip>    //
           > {};
 
 
@@ -44,7 +55,7 @@ int main() {
     const char *jdoc = R"json({
         "name": "Sucipto",
         "age": 42,
-        "joined": "2023-10-27T10:00:00Z",
+        "createdAt": "2023-10-27T10:00:00Z",
         "address": {
             "city": "Oslo"
         }
@@ -60,7 +71,7 @@ int main() {
     const char *tdoc = R"toml(
         name = "Marwoto"
         age = 32
-        joined = 2023-10-27T10:30:00Z
+        created-at = 2023-10-27T10:30:00Z
 
         [address]
         city = "Hamburg"

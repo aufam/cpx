@@ -15,9 +15,6 @@ module;
 
 export module cpx;
 
-export using std::tm;
-export using std::timespec;
-
 export namespace cpx {
     using ::cpx::defer;
 

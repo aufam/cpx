@@ -3,6 +3,52 @@
 
 #include <string_view>
 
+namespace cpx::detail {
+    inline constexpr std::string_view get_tag(std::string_view tags, std::string_view key) {
+        const std::string_view tag = tags;
+
+        for (size_t pos = 0;;) {
+            // skip whitespace if any
+            while (pos < tag.size() && tag[pos] == ' ')
+                pos++;
+            if (pos >= tag.size())
+                break;
+
+            // find next ":`"
+            const size_t sep = tag.find(":`", pos);
+            if (sep == std::string_view::npos)
+                break;
+
+            // left part before ":`"
+            std::string_view keys = tag.substr(pos, sep - pos);
+
+            // right part until next backtick
+            size_t end = tag.find('`', sep + 2);
+            if (end == std::string_view::npos)
+                break;
+
+            std::string_view value = tag.substr(sep + 2, end - (sep + 2));
+            for (size_t start = 0; start < keys.size();) {
+                size_t comma = keys.find(',', start);
+
+                std::string_view one = keys.substr(start, (comma == std::string_view::npos ? keys.size() : comma) - start);
+                if (one == key)
+                    return value;
+
+                if (comma == std::string_view::npos)
+                    break;
+
+                start = comma + 1;
+            }
+
+            // advance past this key–value pair
+            pos = end + 1;
+        }
+
+        return {};
+    }
+} // namespace cpx::detail
+
 namespace cpx {
     /// A lightweight metadata wrapper for struct fields, inspired by Go-style struct tags.
     ///
@@ -58,47 +104,7 @@ namespace cpx {
         }
 
         constexpr std::string_view get_tag(std::string_view key) const {
-            const std::string_view tag = this->tag;
-
-            for (size_t pos = 0;;) {
-                // skip whitespace if any
-                while (pos < tag.size() && tag[pos] == ' ')
-                    pos++;
-                if (pos >= tag.size())
-                    break;
-
-                // find next ":`"
-                const size_t sep = tag.find(":`", pos);
-                if (sep == std::string_view::npos)
-                    break;
-
-                // left part before ":`"
-                std::string_view keys = tag.substr(pos, sep - pos);
-
-                // right part until next backtick
-                size_t end = tag.find('`', sep + 2);
-                if (end == std::string_view::npos)
-                    break;
-
-                std::string_view value = tag.substr(sep + 2, end - (sep + 2));
-                for (size_t start = 0; start < keys.size();) {
-                    size_t comma = keys.find(',', start);
-
-                    std::string_view one = keys.substr(start, (comma == std::string_view::npos ? keys.size() : comma) - start);
-                    if (one == key)
-                        return value;
-
-                    if (comma == std::string_view::npos)
-                        break;
-
-                    start = comma + 1;
-                }
-
-                // advance past this key–value pair
-                pos = end + 1;
-            }
-
-            return {};
+            return cpx::detail::get_tag(tag, key);
         }
     };
 
@@ -137,49 +143,7 @@ namespace cpx {
         }
 
         constexpr std::string_view get_tag(std::string_view key) const {
-            const std::string_view tag = this->tag;
-
-            for (size_t pos = 0;;) {
-                // skip whitespace if any
-                while (pos < tag.size() && tag[pos] == ' ')
-                    pos++;
-                if (pos >= tag.size())
-                    break;
-
-                // find next ":`"
-                const size_t sep = tag.find(":`", pos);
-                if (sep == std::string_view::npos)
-                    break;
-
-                // left part before ":`"
-                std::string_view keys = tag.substr(pos, sep - pos);
-
-                // right part until next backtick
-                size_t end = tag.find('`', sep + 2);
-                if (end == std::string_view::npos)
-                    break;
-
-                std::string_view value = tag.substr(sep + 2, end - (sep + 2));
-
-                for (size_t start = 0; start < keys.size();) {
-                    size_t comma = keys.find(',', start);
-
-                    std::string_view one = keys.substr(start, (comma == std::string_view::npos ? keys.size() : comma) - start);
-
-                    if (one == key)
-                        return value;
-
-                    if (comma == std::string_view::npos)
-                        break;
-
-                    start = comma + 1;
-                }
-
-                // advance past this key–value pair
-                pos = end + 1;
-            }
-
-            return {};
+            return cpx::detail::get_tag(tag, key);
         }
     };
 

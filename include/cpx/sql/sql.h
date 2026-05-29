@@ -1,7 +1,6 @@
 #ifndef CPX_SQL_SQL_H
 #define CPX_SQL_SQL_H
 
-#include <cpx/tag.h>
 #include <cpx/tuple.h>
 #include <optional>
 #include <string>
@@ -36,29 +35,27 @@ namespace cpx::sql {
     class Alias;
 } // namespace cpx::sql
 
-
 /*
- * Specialization of tag traits for sql::Column
- */
-namespace cpx {
-    template <typename T>
-    struct is_tagged<sql::Column<T>> : std::true_type {};
-
-    template <typename T>
-    struct remove_tag<sql::Column<T>> {
-        using type = typename sql::Column<T>::type;
-    };
-} // namespace cpx
-
-
-/*
- * Forward declarations of helpers
+ * helper detail
  */
 namespace cpx::sql::detail {
     // TODO: implement generic?
     struct GenericStatement {};
     struct GenericRows {};
 
+    // column type
+    template <typename T>
+    struct column;
+
+    template <typename T>
+    struct column<sql::Column<T>> {
+        using type = typename sql::Column<T>::type;
+    };
+
+    template <typename T>
+    using column_t = typename column<T>::type;
+
+    // is_column
     template <typename T>
     struct is_column : std::false_type {};
 
@@ -68,8 +65,41 @@ namespace cpx::sql::detail {
     template <typename T>
     inline constexpr bool is_column_v = is_column<T>::value;
 
+    // repeated placeholders
     template <size_t i>
-    struct repeated_placeholders;
+    struct repeated_placeholders {
+        static std::string value() {
+            return repeated_placeholders<i - 1>::value() + ", ?";
+        }
+    };
+
+    template <>
+    struct repeated_placeholders<0> {
+        static std::string value() {
+            return "";
+        }
+    };
+
+    template <>
+    struct repeated_placeholders<1> {
+        static std::string value() {
+            return "?";
+        }
+    };
+
+    // string cat
+    template <typename Sep>
+    std::string string_cat(const std::string &) {
+        return "";
+    }
+
+    template <typename Arg, typename... Args>
+    std::string string_cat(const std::string &separator, Arg &&arg, Args &&...args) {
+        if constexpr (sizeof...(Args) > 0)
+            return arg + ((separator + args) + ...);
+        else
+            return std::forward<Arg>(arg);
+    }
 } // namespace cpx::sql::detail
 
 
@@ -111,6 +141,7 @@ namespace cpx::sql {
         }
     };
 
+    // TODO: tuple reference?
     template <typename Params = std::tuple<>, typename Row = std::tuple<>>
     struct Statement {
         using params_type = Params;
@@ -142,13 +173,10 @@ namespace cpx::sql {
             return Statement<>{"not ("} + *this + Statement<>{")"};
         }
 
-        template <typename Col, typename... Cols>
-        auto select(const Col &col, const Cols &...cols) const {
-            static_assert(sizeof...(cols) + 1 == std::tuple_size_v<Params>, "Number of values must match the number of columns");
-            if constexpr (sizeof...(Cols) == 0)
-                return Statement<>{query + " select " + col.name()};
-            else
-                return Statement<>{query + " select " + col.name() + ((std::string(", ") + cols.name()) + ...)};
+        template <typename... Cols>
+        auto select(const Cols &...cols) const {
+            static_assert(sizeof...(cols) == std::tuple_size_v<Params>, "Number of columns must match the number of params");
+            return Statement<>{query + " select " + cpx::sql::detail::string_cat(", ", cols.name()...)};
         };
 
         template <typename Other, typename... Rest>
@@ -160,13 +188,28 @@ namespace cpx::sql {
         }
 
         template <typename Table>
-        auto from(const Table &) const {
-            return *this + Statement<>{std::string(" from ") + Table::TableName};
+        auto from(const Table &table) const {
+            return *this + Statement<>{std::string(" from ") + table.TableName};
         }
 
         template <typename Table>
-        auto left_join(const Table &) const {
-            return *this + Statement<>{std::string(" left join ") + Table::TableName};
+        auto join(const Table &table) const {
+            return *this + Statement<>{std::string(" join ") + table.TableName};
+        }
+
+        template <typename Table>
+        auto left_join(const Table &table) const {
+            return *this + Statement<>{std::string(" left join ") + table.TableName};
+        }
+
+        template <typename Table>
+        auto inner_join(const Table &table) const {
+            return *this + Statement<>{std::string(" inner join ") + table.TableName};
+        }
+
+        template <typename Table>
+        auto right_join(const Table &table) const {
+            return *this + Statement<>{std::string(" right join ") + table.TableName};
         }
 
         template <typename Col>
@@ -245,16 +288,16 @@ namespace cpx::sql {
     };
 
     template <typename T = void>
-    class Constant; // TODO
-
-    template <typename T = void>
     class Alias {
+    protected:
         std::string name_;
 
     public:
         using type = T;
+
         explicit Alias(std::string name)
             : name_(std::move(name)) {}
+
         const std::string name() const {
             return name_;
         }
@@ -265,19 +308,35 @@ namespace cpx::sql {
         }
     };
 
+    Alias(std::string) -> Alias<void>;
+
     template <typename T>
-    class Column : public Tag<T> {
+    class Column {
+    protected:
+        std::string_view name_;
+        std::string_view column_;
+
     public:
-        using Tag<T>::Tag;
+        using type = T;
+
+        constexpr Column(std::string_view column)
+            : column_(column) {
+            auto pos = column.find(' ');
+            name_    = pos == std::string::npos ? column : column.substr(0, pos);
+        }
+
+        template <size_t N>
+        constexpr Column(const char (&column)[N])
+            : Column(std::string_view(column, N - 1)) {}
+
+        void operator=(const char *) = delete;
 
         std::string column() const {
-            return std::string(this->get_tag("sql"));
+            return std::string(column_);
         }
 
         std::string name() const {
-            auto col = column();
-            auto pos = col.find(' ');
-            return pos == std::string::npos ? col : col.substr(0, pos);
+            return std::string(name_);
         }
 
         template <typename U>
@@ -400,167 +459,80 @@ namespace cpx::sql {
             return Statement<>{name() + " = " + other.name()};
         }
 
-        const struct Asc {
+        struct Asc {
             const Column *col;
             std::string   name() const {
                 return col->name() + " asc";
             }
-        } asc{this};
+        };
+        Asc asc() const {
+            return {this};
+        }
 
-        const struct Desc {
+        struct Desc {
             const Column *col;
             std::string   name() const {
                 return col->name() + " desc";
             }
-        } desc{this};
-    };
-
-    template <
-        typename Table,
-        typename Fields
-#ifdef BOOST_PFR_HPP
-        = decltype(boost::pfr::structure_to_tuple(std::declval<Table>()))
-#endif
-        >
-    struct Schema {
-        static_assert(std::is_aggregate_v<Table>, "Table must be an agregate");
-        static_assert(cpx::is_tuple_v<Fields>, "Fields must be a tuple");
-
-        using columns_type = cpx::apply_tuple_t<cpx::filter_tuple_t<Fields, detail::is_column>, cpx::remove_tag>;
-
-        static std::string name() {
-            return Table::TableName;
+        };
+        Desc desc() const {
+            return {this};
         }
-
-#ifdef BOOST_PFR_HPP
-        static std::string columns() {
-            std::string res = "(";
-            boost::pfr::for_each_field(Table{}, [&](auto &&field, size_t i) {
-                if constexpr (is_tagged_v<std::decay_t<decltype(field)>>) {
-                    if (i == 0)
-                        res += std::string(field.get_tag("sql"));
-                    else
-                        res += std::string(", ") + std::string(field.get_tag("sql"));
-                }
-            });
-            res += ")";
-            return res;
-        }
-#endif
     };
 
-#ifdef BOOST_PFR_HPP
-    template <typename Table>
-    inline const Statement<> create_table = {
-        std::string("create table ") + Schema<Table>::name() + " " + Schema<Table>::columns()
-    };
-
-    template <typename Table>
-    inline const Statement<> create_table_if_not_exists = {
-        std::string("create table if not exists ") + Schema<Table>::name() + " " + Schema<Table>::columns()
-    };
-#endif
-
-    template <
-        typename Table,
-        typename Fields
-#ifdef BOOST_PFR_HPP
-        = decltype(boost::pfr::structure_to_tuple(std::declval<Table>()))
-#endif
-        >
-    inline const Statement<> alter_table = {std::string("alter table ") + Schema<Table, Fields>::name()};
-
-    template <
-        typename Table,
-        typename Fields
-#ifdef BOOST_PFR_HPP
-        = decltype(boost::pfr::structure_to_tuple(std::declval<Table>()))
-#endif
-        >
-    inline const Statement<> update = {std::string("update ") + Schema<Table, Fields>::name()};
-
-    template <
-        typename Table,
-        typename Fields
-#ifdef BOOST_PFR_HPP
-        = decltype(boost::pfr::structure_to_tuple(std::declval<Table>()))
-#endif
-            ,
-        typename Col,
-        typename... Cols>
-    auto insert_into(const Col &col, const Cols &...cols) {
-        if constexpr (sizeof...(Cols) == 0)
-            return Statement<std::tuple<typename Col::type>>{
-                std::string("insert into ") + Schema<Table, Fields>::name() + " (" + col.name() + ")"
-            };
-        else
-            return Statement<std::tuple<typename Col::type, typename Cols::type...>>{
-                std::string("insert into ") + Schema<Table, Fields>::name() + " (" + col.name() +
-                ((std::string(", ") + cols.name()) + ...) + ")"
-            };
+    template <const auto &table, typename... Cols>
+    auto create_table(const Cols &...cols) {
+        return Statement<>{
+            std::string("create table ") + table.TableName +     //
+            " (" +                                               //
+            cpx::sql::detail::string_cat(", ", cols.column()...) //
+            + ")"
+        };
     }
 
-    template <typename Col, typename... Cols>
-    auto select(const Col &col, const Cols &...cols) {
-        if constexpr (sizeof...(Cols) == 0)
-            return Statement<std::tuple<>, std::tuple<typename Col::type>>{std::string("select ") + col.name()};
-        else
-            return Statement<std::tuple<>, std::tuple<typename Col::type, typename Cols::type...>>{
-                std::string("select ") + col.name() + ((std::string(", ") + cols.name()) + ...)
-            };
-    };
+    template <const auto &table, typename... Cols>
+    auto create_table_if_not_exists(const Cols &...cols) {
+        return Statement<>{
+            std::string("create table if not exists ") + table.TableName + //
+            " (" +                                                         //
+            cpx::sql::detail::string_cat(", ", cols.column()...) +         //
+            ")"
+        };
+    }
 
-    template <
-        typename Table,
-        typename Fields
-#ifdef BOOST_PFR_HPP
-        = decltype(boost::pfr::structure_to_tuple(std::declval<Table>()))
-#endif
-        >
-    auto select_all_from(const Table &) {
-        return Statement<std::tuple<>, typename Schema<Table, Fields>::columns_type>{
-            "select * from " + Schema<Table, Fields>::name()
+    template <const auto &table>
+    inline const Statement<> alter_table = {std::string("alter table ") + table.TableName};
+
+    template <const auto &table>
+    inline const Statement<> update = {std::string("update ") + table.TableName};
+
+    template <const auto &table, typename... Cols>
+    auto insert_into(const Cols &...cols) {
+        return Statement<std::tuple<typename Cols::type...>>{
+            std::string("insert into ") + table.TableName + " (" + cpx::sql::detail::string_cat(", ", cols.name()...) + ")"
+        };
+    }
+
+    template <typename... Cols>
+    auto select(const Cols &...cols) {
+        return Statement<std::tuple<>, std::tuple<typename Cols::type...>>{
+            std::string("select ") + cpx::sql::detail::string_cat(", ", cols.name()...)
         };
     };
 
-    template <
-        typename Table,
-        typename Fields
 #ifdef BOOST_PFR_HPP
-        = decltype(boost::pfr::structure_to_tuple(std::declval<Table>()))
+    template <typename Table>
+    auto select_all_from(const Table &table) {
+        using TupleStruct = decltype(boost::pfr::structure_to_tuple(table));
+        using Filtered    = cpx::filter_tuple_t<TupleStruct, cpx::sql::detail::is_column>;
+        using Tuple       = cpx::apply_tuple_t<Filtered, cpx::sql::detail::column>;
+        return Statement<std::tuple<>, Tuple>{std::string("select * from ") + table.TableName};
+    };
 #endif
-        >
-    auto delete_from(const Table &) {
-        return Statement<std::tuple<>, typename Schema<Table, Fields>::columns_type>{
-            "delete from " + Schema<Table, Fields>::name()
-        };
+
+    template <typename Table>
+    auto delete_from(const Table &table) {
+        return Statement<>{std::string("delete from ") + table.TableName};
     };
 } // namespace cpx::sql
-
-
-/*
- * Helpers Implementations
- */
-namespace cpx::sql::detail {
-    template <size_t i>
-    struct repeated_placeholders {
-        static std::string value() {
-            return repeated_placeholders<i - 1>::value() + ", ?";
-        }
-    };
-
-    template <>
-    struct repeated_placeholders<0> {
-        static std::string value() {
-            return "";
-        }
-    };
-
-    template <>
-    struct repeated_placeholders<1> {
-        static std::string value() {
-            return "?";
-        }
-    };
-} // namespace cpx::sql::detail
 #endif
