@@ -337,9 +337,9 @@ struct DESERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_bytes<T>::value
             if (doc.GetDirectBufferPointer(&ptr, &available)) {
                 if ((int)len != available)
                     throw size_mismatch_error(len, size_t(available));
-                v = std::string_view(static_cast<const char *>(ptr), available);
-                doc.Skip((int)len);
-                ok = true;
+                v           = std::string_view(static_cast<const char *>(ptr), available);
+                std::ignore = doc.Skip((int)len);
+                ok          = true;
             } else {
                 throw error("cannot get bytes view for this reader");
             }
@@ -476,8 +476,9 @@ struct SERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_repeated_serializ
 };
 
 template <typename T>
-struct
-    DESERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_repeated_deserializable<T>::value && cpx::detail::is_std_array<T>::value>) {
+struct DESERIALIZE(
+    T, std::enable_if_t<cpx::protobuf::detail::is_repeated_deserializable<T>::value && cpx::detail::is_std_array<T>::value>
+) {
     DESERIALIZER_FIELDS
 
     void into(T &) const {
@@ -486,8 +487,9 @@ struct
 };
 
 template <typename T>
-struct
-    DESERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_repeated_deserializable<T>::value && !cpx::detail::is_std_array<T>::value>) {
+struct DESERIALIZE(
+    T, std::enable_if_t<cpx::protobuf::detail::is_repeated_deserializable<T>::value && !cpx::detail::is_std_array<T>::value>
+) {
     DESERIALIZER_FIELDS
     using value_type = typename T::value_type;
 
@@ -586,9 +588,9 @@ struct DESERIALIZE(std::tuple<Ts...>) {
                     oneofs.push_back(oneof);
             } else {
                 if (wire_type == google::protobuf::internal::WireFormatLite::WireType::WIRETYPE_LENGTH_DELIMITED)
-                    doc.Skip((int)len);
+                    std::ignore = doc.Skip((int)len);
                 else
-                    google::protobuf::internal::WireFormatLite::SkipField(&doc, tag);
+                    std::ignore = google::protobuf::internal::WireFormatLite::SkipField(&doc, tag);
             }
         }
 
@@ -631,8 +633,11 @@ struct SERIALIZE(std::unordered_map<K, T, H, P, A>, std::enable_if_t<SERIALIZABL
 };
 
 template <typename K, typename T, typename H, typename P, typename A>
-struct
-    DESERIALIZE(std::unordered_map<K, T, H, P, A>, std::enable_if_t<DESERIALIZABLE(K) && DESERIALIZABLE(T) && std::is_default_constructible_v<K> && std::is_default_constructible_v<T>>) {
+struct DESERIALIZE(
+    std::unordered_map<K, T, H, P, A>,
+    std::enable_if_t<
+        DESERIALIZABLE(K) && DESERIALIZABLE(T) && std::is_default_constructible_v<K> && std::is_default_constructible_v<T>>
+) {
     DESERIALIZER_FIELDS
 
     void into(std::unordered_map<K, T, H, P, A> &map) const {
