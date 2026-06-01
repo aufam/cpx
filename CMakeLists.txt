@@ -169,7 +169,11 @@ CPMAddPackage(
     NAME            benchmark
     GIT_REPOSITORY  "https://github.com/google/benchmark"
     GIT_TAG         v1.9.2
-    OPTIONS         "BENCHMARK_ENABLE_INSTALL OFF" "BENCHMARK_INSTALL_DOCS OFF" "BENCHMARK_INSTALL_TOOLS OFF" "BENCHMARK_USE_BUNDLED_GTEST OFF"
+    OPTIONS         "BENCHMARK_ENABLE_INSTALL OFF" 
+                    "BENCHMARK_INSTALL_DOCS OFF" 
+                    "BENCHMARK_INSTALL_TOOLS OFF" 
+                    "BENCHMARK_USE_BUNDLED_GTEST OFF"
+                    "BENCHMARK_ENABLE_TESTING OFF"
     COMPONENTS      benchmark_main
 )
 
@@ -278,7 +282,7 @@ if (CPX_BUILD_EXAMPLES)
         rapidjson
         nlohmann_json
         tomlplusplus::tomlplusplus
-        protobuf::libprotobuf
+        protobuf::libprotobuf-lite
         msgpack-cxx
         CLI11
     )
@@ -335,7 +339,7 @@ if (CPX_BUILD_EXAMPLES)
         cpx
         fmt
         Boost::pfr
-        protobuf::libprotobuf
+        protobuf::libprotobuf-lite
         msgpack-cxx
     )
 endif()
