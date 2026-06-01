@@ -5,7 +5,6 @@
 #include <optional>
 #include <string>
 #include <utility>
-#include <vector>
 
 #ifndef BOOST_PFR_HPP
 #    if __has_include(<boost/pfr.hpp>)
@@ -28,11 +27,20 @@ namespace cpx::sql {
     template <typename Params, typename Row>
     struct Statement;
 
-    template <typename T>
+    template <typename Table, typename T>
     class Column;
 
     template <typename T>
     class Alias;
+
+    template <typename T>
+    class Condition;
+
+    template <typename T>
+    class Operation;
+
+    template <typename T>
+    class Assignment;
 } // namespace cpx::sql
 
 /*
@@ -43,13 +51,17 @@ namespace cpx::sql::detail {
     struct GenericStatement {};
     struct GenericRows {};
 
+    struct NoTable {
+        static constexpr const char *TableName = nullptr;
+    };
+
     // column type
     template <typename T>
     struct column;
 
-    template <typename T>
-    struct column<sql::Column<T>> {
-        using type = typename sql::Column<T>::type;
+    template <typename Table, typename T>
+    struct column<sql::Column<Table, T>> {
+        using type = typename sql::Column<Table, T>::type;
     };
 
     template <typename T>
@@ -59,8 +71,8 @@ namespace cpx::sql::detail {
     template <typename T>
     struct is_column : std::false_type {};
 
-    template <typename T>
-    struct is_column<Column<T>> : std::true_type {};
+    template <typename Table, typename T>
+    struct is_column<Column<Table, T>> : std::true_type {};
 
     template <typename T>
     inline constexpr bool is_column_v = is_column<T>::value;
@@ -89,12 +101,12 @@ namespace cpx::sql::detail {
 
     // string cat
     template <typename Sep>
-    std::string string_cat(const std::string &) {
+    Sep string_cat(const Sep &) {
         return "";
     }
 
-    template <typename Arg, typename... Args>
-    std::string string_cat(const std::string &separator, Arg &&arg, Args &&...args) {
+    template <typename Sep, typename Arg, typename... Args>
+    auto string_cat(const Sep &separator, Arg &&arg, Args &&...args) {
         if constexpr (sizeof...(Args) > 0)
             return arg + ((separator + args) + ...);
         else
@@ -144,28 +156,28 @@ namespace cpx::sql {
     // TODO: tuple reference?
     template <typename Params = std::tuple<>, typename Row = std::tuple<>>
     struct Statement {
+        static_assert(cpx::is_tuple_v<Params> && cpx::is_tuple_v<Row>);
+
         using params_type = Params;
         using row_type    = Row;
 
         std::string query;
         Params      params = {};
 
-        template <typename Other>
-        auto operator+(const Other &other) const {
-            return Statement<
-                decltype(std::tuple_cat(params_type{}, typename Other::params_type{})),
-                decltype(std::tuple_cat(row_type{}, typename Other::row_type{}))>{
-                query + other.query, std::tuple_cat(params, other.params)
-            };
+        template <typename OParams, typename ORow>
+        auto operator+(const Statement<OParams, ORow> &other) const {
+            using P = decltype(std::tuple_cat(std::declval<Params>(), std::declval<OParams>()));
+            using R = decltype(std::tuple_cat(std::declval<Row>(), std::declval<ORow>()));
+            return Statement<P, R>{query + other.query, std::tuple_cat(params, other.params)};
         }
 
-        template <typename Other>
-        auto operator&&(const Other &other) const {
+        template <typename OParams, typename ORow>
+        auto operator&&(const Statement<OParams, ORow> &other) const {
             return Statement<>{"("} + *this + Statement<>{" and "} + other + Statement<>{")"};
         }
 
-        template <typename Other>
-        auto operator||(const Other &other) const {
+        template <typename OParams, typename ORow>
+        auto operator||(const Statement<OParams, ORow> &other) const {
             return Statement<>{"("} + *this + Statement<>{" or "} + other + Statement<>{")"};
         }
 
@@ -173,18 +185,15 @@ namespace cpx::sql {
             return Statement<>{"not ("} + *this + Statement<>{")"};
         }
 
-        template <typename... Cols>
-        auto select(const Cols &...cols) const {
+        template <typename... Tables, typename... Ts>
+        auto select(const Column<Tables, Ts> &...cols) const {
             static_assert(sizeof...(cols) == std::tuple_size_v<Params>, "Number of columns must match the number of params");
-            return Statement<>{query + " select " + cpx::sql::detail::string_cat(", ", cols.name()...)};
+            return Statement<>{query + " select " + cpx::sql::detail::string_cat(", ", cols.qualified_name()...)};
         };
 
-        template <typename Other, typename... Rest>
-        auto set(const Other &other, const Rest &...rest) const {
-            if constexpr (sizeof...(Rest) == 0)
-                return *this + Statement<>{" set "} + other;
-            else
-                return *this + Statement<>{" set "} + other + ((Statement<>{", "} + rest) + ...);
+        template <typename... OParams, typename... ORow>
+        auto set(const Statement<OParams, ORow> &...others) const {
+            return *this + Statement<>{" set "} + cpx::sql::detail::string_cat(Statement<>{", "}, others...);
         }
 
         template <typename Table>
@@ -212,65 +221,52 @@ namespace cpx::sql {
             return *this + Statement<>{std::string(" right join ") + table.TableName};
         }
 
-        template <typename Col>
-        auto to(const Col &col) const {
-            return *this + Statement<>{std::string(" to ") + col.name()};
+        // for alter_table
+        template <typename Table, typename T>
+        auto add_column(const Column<Table, T> &col) const {
+            return *this + Statement<>{std::string(" add ") + col.column()};
         }
 
-        template <typename Col>
-        auto add(const Col &col) const {
-            return *this + Statement<>{std::string(" add ") + col.name()};
-        }
-
-        template <typename Col>
-        auto drop_column(const Col &col) const {
+        template <typename Table, typename T>
+        auto drop_column(const Column<Table, T> &col) const {
             return *this + Statement<>{std::string(" drop column ") + col.name()};
         }
 
-        template <typename Condition>
-        auto where(const Condition &condition) const {
+        template <typename OParams, typename ORow>
+        auto where(const Statement<OParams, ORow> &condition) const {
             return *this + Statement<>{" where "} + condition;
         }
 
-        template <typename Condition>
-        auto on(const Condition &condition) const {
+        template <typename OParams, typename ORow>
+        auto on(const Statement<OParams, ORow> &condition) const {
             return *this + Statement<>{" on "} + condition;
         }
 
-        template <typename... Rest>
-        auto values(const Params &params, const Rest &...res) const {
-            if constexpr (sizeof...(res) == 0)
-                return Statement<Params>{
-                    query + " values (" + detail::repeated_placeholders<std::tuple_size_v<Params>>::value() + ")", params
-                };
-            else
-                return Statement<Params>{
-                           query + " values (" + detail::repeated_placeholders<std::tuple_size_v<Params>>::value() + ")", params
-                       } +
-                       ((Statement<Params>{", (" + detail::repeated_placeholders<std::tuple_size_v<Params>>::value() + ")", res}
-                        ) +
-                        ...);
+        auto values(const Params &params) const {
+            auto pch  = detail::repeated_placeholders<std::tuple_size_v<Params>>::value();
+            auto stmt = Statement<Params>{query + " values (" + pch + ")", params};
+            return stmt;
         }
 
-        template <typename Col, typename... Cols>
-        auto order_by(const Col &col, const Cols &...cols) const {
-            if constexpr (sizeof...(Cols) == 0)
-                return *this + Statement<>{" order by " + col.name()};
-            else
-                return *this + Statement<>{" order by " + col.name() + ((std::string(", ") + cols.name()) + ...)};
+        auto values(const Params &params, const Params &params2) const {
+            auto pch   = detail::repeated_placeholders<std::tuple_size_v<Params>>::value();
+            auto stmt  = Statement<Params>{query + " values (" + pch + ")", params};
+            auto stmt2 = Statement<Params>{", (" + pch + ")", params2};
+            return stmt + stmt2;
+        }
+
+        auto values(const Params &params, const Params &params2, const Params &params3) const {
+            auto pch   = detail::repeated_placeholders<std::tuple_size_v<Params>>::value();
+            auto stmt  = Statement<Params>{query + " values (" + pch + ")", params};
+            auto stmt2 = Statement<Params>{", (" + pch + ")", params2};
+            auto stmt3 = Statement<Params>{", (" + pch + ")", params3};
+            return stmt + stmt2 + stmt3;
+        }
+
+        template <typename... Tables, typename... Ts>
+        auto order_by(const Column<Tables, Ts> &...cols) const {
+            return *this + Statement<>{" order by " + cpx::sql::detail::string_cat(", ", cols.qualified_name()...)};
         };
-
-        auto order_by(const std::vector<std::string> &cols) const {
-            if (!cols.empty()) {
-                std::string clause = " order by " + cols[0];
-                for (size_t i = 1; i < cols.size(); ++i) {
-                    clause += ", " + cols[i];
-                }
-                return *this + Statement<>{clause};
-            } else {
-                return *this;
-            }
-        }
 
         auto limit(std::optional<size_t> val) const {
             if (val.has_value())
@@ -287,34 +283,32 @@ namespace cpx::sql {
         };
     };
 
-    template <typename T = void>
-    class Alias {
+    template <typename T>
+    class Alias : public Column<cpx::sql::detail::NoTable, T> {
     protected:
-        std::string name_;
+        std::string qname;
 
     public:
         using type = T;
 
-        explicit Alias(std::string name)
-            : name_(std::move(name)) {}
-
-        const std::string name() const {
-            return name_;
+        Alias(std::string qualified_name)
+            : Column<cpx::sql::detail::NoTable, T>()
+            , qname(std::move(qualified_name)) {
+            this->name_ = this->qname;
         }
 
-        template <typename U>
-        auto as(const Alias<U> &alias) {
-            return Alias<T>(name() + " as " + alias.name());
-        }
+        template <size_t N>
+        Alias(const char (&qualified_name)[N])
+            : Alias(std::string(qualified_name, N - 1)) {}
     };
 
-    Alias(std::string) -> Alias<void>;
-
-    template <typename T>
+    template <typename Table, typename T>
     class Column {
     protected:
         std::string_view name_;
         std::string_view column_;
+
+        Column() = default;
 
     public:
         using type = T;
@@ -339,64 +333,72 @@ namespace cpx::sql {
             return std::string(name_);
         }
 
-        template <typename U>
-        auto as(const Alias<T> &alias) {
-            return name() + " as " + alias.name();
+        std::string qualified_name() const {
+            const char *table = Table::TableName;
+            return (table ? std::string(Table::TableName) + "." : std::string()) + std::string(name_);
         }
 
-        template <typename U>
-        auto operator+(const Column<U> &other) const {
-            return Alias<decltype(std::declval<T>() + std::declval<U>())>('(' + name() + " + " + other.name() + ')');
+        Alias<T> as(const Alias<T> &alias) const {
+            return qualified_name() + " as " + alias.name();
         }
 
-        template <typename U>
-        auto operator-(const Column<U> &other) const {
-            return Alias<decltype(std::declval<T>() - std::declval<U>())>(name() + " - " + other.name());
+        template <typename Tbl, typename U>
+        auto operator+(const Column<Tbl, U> &other) const {
+            using R = decltype(std::declval<T>() + std::declval<U>());
+            return Alias<R>('(' + qualified_name() + " + " + other.qualified_name() + ')');
         }
 
-        template <typename U>
-        auto operator*(const Column<U> &other) const {
-            return Alias<decltype(std::declval<T>() * std::declval<U>())>(name() + " * " + other.name());
+        template <typename Tbl, typename U>
+        auto operator-(const Column<Tbl, U> &other) const {
+            using R = decltype(std::declval<T>() - std::declval<U>());
+            return Alias<R>('(' + qualified_name() + " - " + other.qualified_name() + ')');
         }
 
-        template <typename U>
-        auto operator/(const Column<U> &other) const {
-            return Alias<decltype(std::declval<T>() / std::declval<U>())>(name() + " / " + other.name());
+        template <typename Tbl, typename U>
+        auto operator*(const Column<Tbl, U> &other) const {
+            using R = decltype(std::declval<T>() - std::declval<U>());
+            return Alias<R>('(' + qualified_name() + " * " + other.qualified_name() + ')');
+        }
+
+        template <typename Tbl, typename U>
+        auto operator/(const Column<Tbl, U> &other) const {
+            using R = decltype(std::declval<T>() - std::declval<U>());
+            return Alias<R>('(' + qualified_name() + " / " + other.qualified_name() + ')');
         }
 
         Statement<std::tuple<T>> operator=(const T &val) const {
             return {name() + " = ?", {val}};
         }
         Statement<std::tuple<T>> operator+(const T &val) const {
-            return {name() + " + ?", {val}};
+            return {qualified_name() + " + ?", {val}};
         }
         Statement<std::tuple<T>> operator-(const T &val) const {
-            return {name() + " - ?", {val}};
+            return {qualified_name() + " - ?", {val}};
         }
         Statement<std::tuple<T>> operator*(const T &val) const {
-            return {name() + " * ?", {val}};
+            return {qualified_name() + " * ?", {val}};
         }
         Statement<std::tuple<T>> operator/(const T &val) const {
-            return {name() + " / ?", {val}};
+            return {qualified_name() + " / ?", {val}};
         }
 
         Statement<std::tuple<T>> operator==(const T &val) const {
-            return {name() + " = ?", {val}};
+            return {qualified_name() + " = ?", {val}};
         }
         Statement<std::tuple<T>> operator!=(const T &val) const {
-            return {name() + " != ?", {val}};
+            return {qualified_name() + " != ?", {val}};
         }
         Statement<std::tuple<T>> operator>(const T &val) const {
-            return {name() + " > ?", {val}};
+            return {qualified_name() + " > ?", {val}};
         }
         Statement<std::tuple<T>> operator<(const T &val) const {
-            return {name() + " < ?", {val}};
+            return {qualified_name() + " < ?", {val}};
         }
         Statement<std::tuple<T>> operator>=(const T &val) const {
-            return {name() + " >= ?", {val}};
+            return {qualified_name() + " >= ?", {val}};
         }
         Statement<std::tuple<T>> operator<=(const T &val) const {
-            return {name() + " <= ?", {val}};
+            return {qualified_name() + " <= ?", {val}};
         }
 
         template <typename Params, typename Row>
@@ -406,98 +408,81 @@ namespace cpx::sql {
 
         template <typename Params, typename Row>
         auto operator+(const Statement<Params, Row> &stmt) const {
-            return Statement<>{name() + " + "} + stmt;
+            return Statement<>{qualified_name() + " + "} + stmt;
         }
 
         template <typename Params, typename Row>
         auto operator-(const Statement<Params, Row> &stmt) const {
-            return Statement<>{name() + " - "} + stmt;
+            return Statement<>{qualified_name() + " - "} + stmt;
         }
 
         template <typename Params, typename Row>
         auto operator*(const Statement<Params, Row> &stmt) const {
-            return Statement<>{name() + " * "} + stmt;
+            return Statement<>{qualified_name() + " * "} + stmt;
         }
 
         template <typename Params, typename Row>
         auto operator/(const Statement<Params, Row> &stmt) const {
-            return Statement<>{name() + " / "} + stmt;
+            return Statement<>{qualified_name() + " / "} + stmt;
         }
 
         template <typename Params, typename Row>
         auto operator==(const Statement<Params, Row> &stmt) const {
-            return Statement<>{name() + " = "} + stmt;
+            return Statement<>{qualified_name() + " = "} + stmt;
         }
 
         template <typename Params, typename Row>
         auto operator!=(const Statement<Params, Row> &stmt) const {
-            return Statement<>{name() + " != "} + stmt;
+            return Statement<>{qualified_name() + " != "} + stmt;
         }
 
         template <typename Params, typename Row>
         auto operator>(const Statement<Params, Row> &stmt) const {
-            return Statement<>{name() + " > "} + stmt;
+            return Statement<>{qualified_name() + " > "} + stmt;
         }
 
         template <typename Params, typename Row>
         auto operator<(const Statement<Params, Row> &stmt) const {
-            return Statement<>{name() + " < "} + stmt;
+            return Statement<>{qualified_name() + " < "} + stmt;
         }
 
         template <typename Params, typename Row>
         auto operator>=(const Statement<Params, Row> &stmt) const {
-            return Statement<>{name() + " >= "} + stmt;
+            return Statement<>{qualified_name() + " >= "} + stmt;
         }
 
         template <typename Params, typename Row>
         auto operator<=(const Statement<Params, Row> &stmt) const {
-            return Statement<>{name() + " <= "} + stmt;
+            return Statement<>{qualified_name() + " <= "} + stmt;
         }
 
         /// TODO: just to avoid ambiguity with `table.col == "literal"`
-        auto operator==(Column<T> &other) const {
-            return Statement<>{name() + " = " + other.name()};
+        template <typename Tbl>
+        auto operator==(Column<Tbl, T> &other) const {
+            return Statement<>{qualified_name() + " = " + other.qualified_name()};
         }
 
-        struct Asc {
-            const Column *col;
-            std::string   name() const {
-                return col->name() + " asc";
-            }
-        };
-        Asc asc() const {
-            return {this};
+        Alias<T> asc() const {
+            return qualified_name() + " asc";
         }
 
-        struct Desc {
-            const Column *col;
-            std::string   name() const {
-                return col->name() + " desc";
-            }
-        };
-        Desc desc() const {
-            return {this};
+        Alias<T> desc() const {
+            return qualified_name() + " desc";
         }
     };
 
-    template <const auto &table, typename... Cols>
-    auto create_table(const Cols &...cols) {
-        return Statement<>{
-            std::string("create table ") + table.TableName +     //
-            " (" +                                               //
-            cpx::sql::detail::string_cat(", ", cols.column()...) //
-            + ")"
-        };
+    template <const auto &table, typename... Tables, typename... Ts>
+    auto create_table(const Column<Tables, Ts> &...cols) {
+        auto q = std::string("create table ") + table.TableName + " ";
+        q += "(" + cpx::sql::detail::string_cat(", ", cols.column()...) + ")";
+        return Statement<>{std::move(q)};
     }
 
-    template <const auto &table, typename... Cols>
-    auto create_table_if_not_exists(const Cols &...cols) {
-        return Statement<>{
-            std::string("create table if not exists ") + table.TableName + //
-            " (" +                                                         //
-            cpx::sql::detail::string_cat(", ", cols.column()...) +         //
-            ")"
-        };
+    template <const auto &table, typename... Tables, typename... Ts>
+    auto create_table_if_not_exists(const Column<Tables, Ts> &...cols) {
+        auto q = std::string("create table if not exists ") + table.TableName + " ";
+        q += "(" + cpx::sql::detail::string_cat(", ", cols.column()...) + ")";
+        return Statement<>{std::move(q)};
     }
 
     template <const auto &table>
@@ -506,18 +491,17 @@ namespace cpx::sql {
     template <const auto &table>
     inline const Statement<> update = {std::string("update ") + table.TableName};
 
-    template <const auto &table, typename... Cols>
-    auto insert_into(const Cols &...cols) {
-        return Statement<std::tuple<typename Cols::type...>>{
-            std::string("insert into ") + table.TableName + " (" + cpx::sql::detail::string_cat(", ", cols.name()...) + ")"
-        };
+    template <const auto &table, typename... Tables, typename... Ts>
+    auto insert_into(const Column<Tables, Ts> &...cols) {
+        auto q = std::string("insert into ") + table.TableName + " (" + cpx::sql::detail::string_cat(", ", cols.name()...) + ")";
+        return Statement<std::tuple<Ts...>>{std::move(q)};
     }
 
-    template <typename... Cols>
-    auto select(const Cols &...cols) {
-        return Statement<std::tuple<>, std::tuple<typename Cols::type...>>{
-            std::string("select ") + cpx::sql::detail::string_cat(", ", cols.name()...)
-        };
+    // TODO: select literals?
+    template <typename... Tables, typename... Ts>
+    auto select(const Column<Tables, Ts> &...cols) {
+        auto q = std::string("select ") + cpx::sql::detail::string_cat(", ", cols.qualified_name()...);
+        return Statement<std::tuple<>, std::tuple<Ts...>>{std::move(q)};
     };
 
 #ifdef BOOST_PFR_HPP

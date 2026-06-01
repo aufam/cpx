@@ -5,27 +5,27 @@ namespace sql = cpx::sql;
 
 namespace {
     struct User {
-        static constexpr const char *TableName = "Users";
+        static constexpr const char *TableName = "users";
 
-        sql::Column<int>         id   = "id integer primary key";
-        sql::Column<std::string> name = "name varchar(32) not null";
-        sql::Column<int>         age  = "age integer";
+        sql::Column<User, int>         id   = "id integer primary key";
+        sql::Column<User, std::string> name = "name varchar(32) not null";
+        sql::Column<User, int>         age  = "age integer";
     };
     static constexpr User users;
 
     struct Employee {
-        static constexpr const char *TableName = "Employees";
+        static constexpr const char *TableName = "employees";
 
-        sql::Column<int>         id     = "id integer primary key";
-        sql::Column<std::string> name   = "name varchar(32) not null";
-        sql::Column<int>         salary = "salary integer";
-        sql::Column<int>         bonus  = "bonus integer";
+        sql::Column<Employee, int>         id     = "id integer primary key";
+        sql::Column<Employee, std::string> name   = "name varchar(32) not null";
+        sql::Column<Employee, int>         salary = "salary integer";
+        sql::Column<Employee, int>         bonus  = "bonus integer";
     };
     static constexpr Employee employees;
 } // namespace
 
 TEST(sqlite3, workflow) {
-    const auto total_income = sql::Alias("total_income");
+    const sql::Alias<int> total_income = "total_income";
 
     struct Person {
         struct User {
@@ -48,12 +48,21 @@ TEST(sqlite3, workflow) {
     sql::sqlite3::Connection db(":memory:");
 
     {
-        auto stmt = sql::create_table<users>(users.id, users.name, users.age);
+        auto stmt = sql::create_table<users>( //
+            users.id,
+            users.name,
+            users.age
+        );
         ASSERT_NO_THROW(db(stmt));
     }
 
     {
-        auto stmt = sql::create_table<employees>(employees.id, employees.name, employees.salary, employees.bonus);
+        auto stmt = sql::create_table<employees>( //
+            employees.id,
+            employees.name,
+            employees.salary,
+            employees.bonus
+        );
         ASSERT_NO_THROW(db(stmt));
     }
 
@@ -71,10 +80,10 @@ TEST(sqlite3, workflow) {
         Marwoto.u.age  = 18;
 
         auto stmt = sql::insert_into<users>(users.name, users.age)
-                        .values(
-                            std::tuple{Wibowo.u.name, Wibowo.u.age},
-                            std::tuple{Sucipto.u.name, Sucipto.u.age},
-                            std::tuple{Marwoto.u.name, Marwoto.u.age}
+                        .values( //
+                            {Wibowo.u.name, Wibowo.u.age},
+                            {Sucipto.u.name, Sucipto.u.age},
+                            {Marwoto.u.name, Marwoto.u.age}
                         );
         ASSERT_NO_THROW(db(stmt));
     }
@@ -102,7 +111,8 @@ TEST(sqlite3, workflow) {
     }
 
     {
-        auto stmt = sql::update<employees>.set(employees.salary = employees.salary * 3);
+        auto stmt = sql::update<employees> //
+                        .set(employees.salary = employees.salary * 3);
         EXPECT_NO_THROW(db(stmt));
         Wibowo.e.salary *= 3;
         Sucipto.e.salary *= 3;
@@ -110,13 +120,17 @@ TEST(sqlite3, workflow) {
     }
 
     {
-        auto stmt = sql::update<users>.set(users.age = users.age + 3).where(users.name == "Marwoto");
+        auto stmt = sql::update<users> //
+                        .set(users.age = users.age + 3)
+                        .where(users.name == "Marwoto");
         EXPECT_NO_THROW(db(stmt));
         Marwoto.u.age += 3;
     }
 
     {
-        auto stmt = sql::update<employees>.set(employees.bonus = 100).where(employees.name == "Sucipto");
+        auto stmt = sql::update<employees> //
+                        .set(employees.bonus = 100)
+                        .where(employees.name == "Sucipto");
         EXPECT_NO_THROW(db(stmt));
         Sucipto.e.bonus = 100;
     }
@@ -148,15 +162,15 @@ TEST(sqlite3, workflow) {
     }
 
     {
-        const auto stmt = sql::select(
-                              employees.id,
-                              employees.name,
-                              employees.salary,
-                              employees.bonus,
-                              (employees.salary + employees.bonus).as(total_income)
-        )
-                              .from(employees)
-                              .order_by(total_income);
+        const auto stmt = sql::select( //
+                employees.id,
+                employees.name,
+                employees.salary,
+                employees.bonus,
+                (employees.salary + employees.bonus).as(total_income)
+            )
+            .from(employees)
+            .order_by(total_income);
 
         auto rows = db(stmt);
 

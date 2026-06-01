@@ -3,49 +3,54 @@
 
 namespace sql = cpx::sql;
 
-template <typename Table, typename T>
-struct Column {};
-
-
 struct User {
-    static constexpr const char *TableName = "Users";
+    static constexpr const char *TableName = "users";
 
-    Column<User, int> asd;
-
-    sql::Column<int>         id   = "id integer primary key";
-    sql::Column<std::string> name = "name varchar(32) not null";
-    sql::Column<int>         age  = "age integer";
+    sql::Column<User, int>         id   = "id integer primary key";
+    sql::Column<User, std::string> name = "name varchar(32) not null";
+    sql::Column<User, int>         age  = "age integer";
 };
 static constexpr User users;
 
 struct Product {
-    static constexpr const char *TableName = "Products";
+    static constexpr const char *TableName = "products";
 
-    sql::Column<int>    id    = "id integer primary key";
-    sql::Column<double> price = "price real";
-    sql::Column<int>    stock = "stock integer";
+    sql::Column<Product, int>    id    = "id integer primary key";
+    sql::Column<Product, double> price = "price real";
+    sql::Column<Product, int>    stock = "stock integer";
 };
 static constexpr Product products;
 
 int main() {
     {
-        auto stmt = sql::create_table<products>(products.id, products.price, products.stock);
+        auto stmt = sql::create_table<products>( //
+            products.id,
+            products.price,
+            products.stock
+        );
         fmt::println("{}", stmt);
     }
     {
-        auto stmt = sql::create_table<users>(users.id, users.name, users.age);
+        auto stmt = sql::create_table<users>( //
+            users.id,
+            users.name,
+            users.age
+        );
         fmt::println("{}", stmt);
     }
 
     {
         auto stmt = sql::update<products> //
-                        .set(products.price = 9.99, products.stock = products.stock - 10)
+                        .set( //
+                            products.price = 9.99, 
+                            products.stock = products.stock - 10
+                        )
                         .where(products.id == 42);
         fmt::println("{}", stmt);
     }
     {
         auto stmt = sql::insert_into<users>(users.name, users.age) //
-                        .values(std::tuple{"Sucipto", 20}, std::tuple{"Sugeng", 25});
+                        .values({"Sucipto", 20}, {"Sugeng", 25});
         fmt::println("{}", stmt);
     }
     {
