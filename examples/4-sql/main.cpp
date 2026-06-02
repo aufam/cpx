@@ -41,10 +41,7 @@ int main() {
 
     {
         auto stmt = sql::update<products> //
-                        .set( //
-                            products.price = 9.99, 
-                            products.stock = products.stock - 10
-                        )
+                        .set(products.price = 9.99, products.stock = products.stock - 10)
                         .where(products.id == 42);
         fmt::println("{}", stmt);
     }
@@ -74,11 +71,10 @@ int main() {
         fmt::println("{}", stmt);
     }
     {
-        auto asdf = products.id;
         auto stmt = sql::select(users.name, products.stock) //
                         .from(users)
                         .left_join(products)
-                        .on(users.id == asdf);
+                        .on(users.id == products.id);
         fmt::println("{}", stmt);
     }
 }

@@ -32,15 +32,6 @@ namespace cpx::sql {
 
     template <typename T>
     class Alias;
-
-    template <typename T>
-    class Condition;
-
-    template <typename T>
-    class Operation;
-
-    template <typename T>
-    class Assignment;
 } // namespace cpx::sql
 
 /*
@@ -292,8 +283,7 @@ namespace cpx::sql {
         using type = T;
 
         Alias(std::string qualified_name)
-            : Column<cpx::sql::detail::NoTable, T>()
-            , qname(std::move(qualified_name)) {
+            : qname(std::move(qualified_name)) {
             this->name_ = this->qname;
         }
 
@@ -342,29 +332,64 @@ namespace cpx::sql {
             return qualified_name() + " as " + alias.name();
         }
 
+
+        /*
+         * with other column
+         */
+
+        template <typename Tbl, typename U>
+        auto operator=(const Column<Tbl, U> &other) const {
+            return Statement<>{name() + " = " + other.qualified_name()};
+        }
         template <typename Tbl, typename U>
         auto operator+(const Column<Tbl, U> &other) const {
             using R = decltype(std::declval<T>() + std::declval<U>());
             return Alias<R>('(' + qualified_name() + " + " + other.qualified_name() + ')');
         }
-
         template <typename Tbl, typename U>
         auto operator-(const Column<Tbl, U> &other) const {
             using R = decltype(std::declval<T>() - std::declval<U>());
             return Alias<R>('(' + qualified_name() + " - " + other.qualified_name() + ')');
         }
-
         template <typename Tbl, typename U>
         auto operator*(const Column<Tbl, U> &other) const {
             using R = decltype(std::declval<T>() - std::declval<U>());
             return Alias<R>('(' + qualified_name() + " * " + other.qualified_name() + ')');
         }
-
         template <typename Tbl, typename U>
         auto operator/(const Column<Tbl, U> &other) const {
             using R = decltype(std::declval<T>() - std::declval<U>());
             return Alias<R>('(' + qualified_name() + " / " + other.qualified_name() + ')');
         }
+        template <typename Tbl, typename U>
+        auto operator==(const Column<Tbl, U> &other) const {
+            return Statement<>{qualified_name() + " = " + other.qualified_name()};
+        }
+        template <typename Tbl, typename U>
+        auto operator!=(const Column<Tbl, U> &other) const {
+            return Statement<>{qualified_name() + " != " + other.qualified_name()};
+        }
+        template <typename Tbl, typename U>
+        auto operator>(const Column<Tbl, U> &other) const {
+            return Statement<>{qualified_name() + " > " + other.qualified_name()};
+        }
+        template <typename Tbl, typename U>
+        auto operator<(const Column<Tbl, U> &other) const {
+            return Statement<>{qualified_name() + " < " + other.qualified_name()};
+        }
+        template <typename Tbl, typename U>
+        auto operator>=(const Column<Tbl, U> &other) const {
+            return Statement<>{qualified_name() + " >= " + other.qualified_name()};
+        }
+        template <typename Tbl, typename U>
+        auto operator<=(const Column<Tbl, U> &other) const {
+            return Statement<>{qualified_name() + " <= " + other.qualified_name()};
+        }
+
+
+        /*
+         * with T
+         */
 
         Statement<std::tuple<T>> operator=(const T &val) const {
             return {name() + " = ?", {val}};
@@ -381,7 +406,6 @@ namespace cpx::sql {
         Statement<std::tuple<T>> operator/(const T &val) const {
             return {qualified_name() + " / ?", {val}};
         }
-
         Statement<std::tuple<T>> operator==(const T &val) const {
             return {qualified_name() + " = ?", {val}};
         }
@@ -401,71 +425,101 @@ namespace cpx::sql {
             return {qualified_name() + " <= ?", {val}};
         }
 
+
+        /*
+         * with string literals
+         */
+
+        template <size_t N>
+        Statement<std::tuple<std::string>> operator=(const char (&val)[N]) const {
+            static_assert(std::is_same_v<T, std::string>);
+            return {name() + " = ?", {val}};
+        }
+        template <size_t N>
+        Statement<std::tuple<std::string>> operator==(const char (&val)[N]) const {
+            static_assert(std::is_same_v<T, std::string>);
+            return {qualified_name() + " = ?", {val}};
+        }
+        template <size_t N>
+        Statement<std::tuple<std::string>> operator!=(const char (&val)[N]) const {
+            static_assert(std::is_same_v<T, std::string>);
+            return {qualified_name() + " != ?", {val}};
+        }
+        template <size_t N>
+        Statement<std::tuple<std::string>> operator>(const char (&val)[N]) const {
+            static_assert(std::is_same_v<T, std::string>);
+            return {qualified_name() + " > ?", {val}};
+        }
+        template <size_t N>
+        Statement<std::tuple<std::string>> operator<(const char (&val)[N]) const {
+            static_assert(std::is_same_v<T, std::string>);
+            return {qualified_name() + " < ?", {val}};
+        }
+        template <size_t N>
+        Statement<std::tuple<std::string>> operator>=(const char (&val)[N]) const {
+            static_assert(std::is_same_v<T, std::string>);
+            return {qualified_name() + " >= ?", {val}};
+        }
+        template <size_t N>
+        Statement<std::tuple<std::string>> operator<=(const char (&val)[N]) const {
+            static_assert(std::is_same_v<T, std::string>);
+            return {qualified_name() + " <= ?", {val}};
+        }
+
+
+        /*
+         * with statement
+         */
+
         template <typename Params, typename Row>
         auto operator=(const Statement<Params, Row> &stmt) const {
             return Statement<>{name() + " = "} + stmt;
         }
-
         template <typename Params, typename Row>
         auto operator+(const Statement<Params, Row> &stmt) const {
             return Statement<>{qualified_name() + " + "} + stmt;
         }
-
         template <typename Params, typename Row>
         auto operator-(const Statement<Params, Row> &stmt) const {
             return Statement<>{qualified_name() + " - "} + stmt;
         }
-
         template <typename Params, typename Row>
         auto operator*(const Statement<Params, Row> &stmt) const {
             return Statement<>{qualified_name() + " * "} + stmt;
         }
-
         template <typename Params, typename Row>
         auto operator/(const Statement<Params, Row> &stmt) const {
             return Statement<>{qualified_name() + " / "} + stmt;
         }
-
         template <typename Params, typename Row>
         auto operator==(const Statement<Params, Row> &stmt) const {
             return Statement<>{qualified_name() + " = "} + stmt;
         }
-
         template <typename Params, typename Row>
         auto operator!=(const Statement<Params, Row> &stmt) const {
             return Statement<>{qualified_name() + " != "} + stmt;
         }
-
         template <typename Params, typename Row>
         auto operator>(const Statement<Params, Row> &stmt) const {
             return Statement<>{qualified_name() + " > "} + stmt;
         }
-
         template <typename Params, typename Row>
         auto operator<(const Statement<Params, Row> &stmt) const {
             return Statement<>{qualified_name() + " < "} + stmt;
         }
-
         template <typename Params, typename Row>
         auto operator>=(const Statement<Params, Row> &stmt) const {
             return Statement<>{qualified_name() + " >= "} + stmt;
         }
-
         template <typename Params, typename Row>
         auto operator<=(const Statement<Params, Row> &stmt) const {
             return Statement<>{qualified_name() + " <= "} + stmt;
         }
 
-        /// TODO: just to avoid ambiguity with `table.col == "literal"`
-        template <typename Tbl>
-        auto operator==(Column<Tbl, T> &other) const {
-            return Statement<>{qualified_name() + " = " + other.qualified_name()};
-        }
 
         Alias<T> asc() const {
             return qualified_name() + " asc";
         }
-
         Alias<T> desc() const {
             return qualified_name() + " desc";
         }
