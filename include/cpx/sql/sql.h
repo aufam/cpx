@@ -233,25 +233,36 @@ namespace cpx::sql {
             return *this + Statement<>{" on "} + condition;
         }
 
-        auto values(const Params &params) const {
+        auto values(Params params) const {
             auto pch  = detail::repeated_placeholders<std::tuple_size_v<Params>>::value();
-            auto stmt = Statement<Params>{query + " values (" + pch + ")", params};
+            auto stmt = Statement<Params>{query + " values (" + pch + ")", std::move(params)};
             return stmt;
         }
 
-        auto values(const Params &params, const Params &params2) const {
+        auto values(Params params, Params params2) const {
             auto pch   = detail::repeated_placeholders<std::tuple_size_v<Params>>::value();
-            auto stmt  = Statement<Params>{query + " values (" + pch + ")", params};
-            auto stmt2 = Statement<Params>{", (" + pch + ")", params2};
+            auto stmt  = Statement<Params>{query + " values (" + pch + ")", std::move(params)};
+            auto stmt2 = Statement<Params>{", (" + pch + ")", std::move(params2)};
             return stmt + stmt2;
         }
 
-        auto values(const Params &params, const Params &params2, const Params &params3) const {
+        auto values(Params params, Params params2, Params params3) const {
             auto pch   = detail::repeated_placeholders<std::tuple_size_v<Params>>::value();
-            auto stmt  = Statement<Params>{query + " values (" + pch + ")", params};
-            auto stmt2 = Statement<Params>{", (" + pch + ")", params2};
-            auto stmt3 = Statement<Params>{", (" + pch + ")", params3};
+            auto stmt  = Statement<Params>{query + " values (" + pch + ")", std::move(params)};
+            auto stmt2 = Statement<Params>{", (" + pch + ")", std::move(params2)};
+            auto stmt3 = Statement<Params>{", (" + pch + ")", std::move(params3)};
             return stmt + stmt2 + stmt3;
+        }
+
+        auto values(std::vector<Params> params) const {
+            const auto pch = '(' + detail::repeated_placeholders<std::tuple_size_v<Params>>::value() + ')';
+
+            std::string pchs = "";
+            for (size_t i = 0; i < params.size(); i++)
+                pchs += (i == 0 ? "" : ", ") + pch;
+
+            auto stmt = Statement<std::tuple<std::vector<Params>>>{query + " values " + pchs, {std::move(params)}};
+            return stmt;
         }
 
         template <typename... Tables, typename... Ts>
@@ -522,6 +533,42 @@ namespace cpx::sql {
         }
         Alias<T> desc() const {
             return qualified_name() + " desc";
+        }
+
+        Statement<std::tuple<std::vector<T>>> in(std::vector<T> values) const {
+            std::string pch = "";
+            for (size_t i = 0; i < values.size(); i++)
+                pch += (i == 0 ? "(" : ", ") + std::string("?");
+
+            if (values.empty())
+                pch = "()";
+            else
+                pch += ')';
+
+            return {qualified_name() + " in " + pch, {std::move(values)}};
+        }
+
+        Statement<std::tuple<std::vector<T>>> not_in(std::vector<T> values) const {
+            std::string pch = "";
+            for (size_t i = 0; i < values.size(); i++)
+                pch += (i == 0 ? "(" : ", ") + std::string("?");
+
+            if (values.empty())
+                pch = "()";
+            else
+                pch += ')';
+
+            return {qualified_name() + " not in " + pch, {std::move(values)}};
+        }
+
+        template <typename Params, typename Row>
+        auto in(const Statement<Params, Row> &stmt) const {
+            return Statement<>{qualified_name() + " in ("} + stmt + Statement<>{")"};
+        }
+
+        template <typename Params, typename Row>
+        auto not_in(const Statement<Params, Row> &stmt) const {
+            return Statement<>{qualified_name() + " not in ("} + stmt + Statement<>{")"};
         }
     };
 

@@ -36,7 +36,7 @@ namespace cpx::sql::sqlite3 {
 
     struct Serializer {
         sqlite3_stmt *stmt;
-        int           index;
+        int          &index;
 
         using error = cpx::sql::sqlite3::error;
     };
@@ -217,8 +217,9 @@ namespace cpx::sql::sqlite3 {
 
             std::apply(
                 [&](auto &&...args) {
-                    int i = 1;
-                    (Serialize<std::decay_t<decltype(args)>>{stmt, i++}.from(args), ...);
+                    [[maybe_unused]]
+                    int index = 1;
+                    (Serialize<std::decay_t<decltype(args)>>{stmt, index}.from(args), ...);
                 },
                 std::move(statement.params)
             );
@@ -247,14 +248,14 @@ namespace cpx::serde {
     template <>
     struct Serialize<SERIALIZER, int> : SERIALIZER {
         void from(int value) const {
-            sqlite3_bind_int(stmt, index, value);
+            sqlite3_bind_int(stmt, index++, value);
         }
     };
 
     template <typename T>
     struct Serialize<SERIALIZER, T, std::enable_if_t<std::is_integral_v<T> && !std::is_same_v<T, int>>> : SERIALIZER {
         void from(sqlite3_int64 value) const {
-            sqlite3_bind_int64(stmt, index, value);
+            sqlite3_bind_int64(stmt, index++, value);
         }
     };
 
@@ -266,28 +267,28 @@ namespace cpx::serde {
 #else
             auto t = ::timegm(&value);
 #endif
-            sqlite3_bind_int64(stmt, index, t);
+            sqlite3_bind_int64(stmt, index++, t);
         }
     };
 
     template <>
     struct Serialize<SERIALIZER, double> : SERIALIZER {
         void from(double value) const {
-            sqlite3_bind_double(stmt, index, value);
+            sqlite3_bind_double(stmt, index++, value);
         }
     };
 
     template <>
     struct Serialize<SERIALIZER, std::string> : SERIALIZER {
         void from(const std::string &value) const {
-            sqlite3_bind_text(stmt, index, value.c_str(), (int)value.size(), SQLITE_STATIC);
+            sqlite3_bind_text(stmt, index++, value.c_str(), (int)value.size(), SQLITE_STATIC);
         }
     };
 
     template <>
     struct Serialize<SERIALIZER, std::vector<uint8_t>> : SERIALIZER {
         void from(const std::vector<uint8_t> &value) const {
-            sqlite3_bind_blob(stmt, index, (void *)value.data(), (int)value.size(), SQLITE_STATIC);
+            sqlite3_bind_blob(stmt, index++, (void *)value.data(), (int)value.size(), SQLITE_STATIC);
         }
     };
 
@@ -295,9 +296,28 @@ namespace cpx::serde {
     struct Serialize<SERIALIZER, std::optional<T>> : SERIALIZER {
         void from(const std::optional<T> &value) const {
             if (!value.has_value())
-                sqlite3_bind_null(stmt, index);
+                sqlite3_bind_null(stmt, index++);
             else
                 Serialize<SERIALIZER, T>{stmt, index}.from(*value);
+        }
+    };
+
+    template <typename T>
+    struct Serialize<
+        SERIALIZER,
+        std::vector<T>,
+        std::enable_if_t<!std::is_same_v<T, uint8_t> && is_serializable_v<SERIALIZER, T>>> : SERIALIZER {
+        void from(const std::vector<T> &values) const {
+            for (auto &value : values) {
+                Serialize<SERIALIZER, T>{stmt, index}.from(value);
+            }
+        }
+    };
+
+    template <typename... Ts>
+    struct Serialize<SERIALIZER, std::tuple<Ts...>, std::enable_if_t<(is_serializable_v<SERIALIZER, Ts> && ...)>> : SERIALIZER {
+        void from(const std::tuple<Ts...> &values) const {
+            std::apply([&](auto &&...args) { (Serialize<SERIALIZER, Ts>{stmt, index}.from(args), ...); }, values);
         }
     };
 

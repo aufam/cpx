@@ -80,11 +80,11 @@ TEST(sqlite3, workflow) {
         Marwoto.u.age  = 18;
 
         auto stmt = sql::insert_into<users>(users.name, users.age)
-                        .values( //
-                            {Wibowo.u.name, Wibowo.u.age},
+                        .values({
+                            {Wibowo.u.name,  Wibowo.u.age },
                             {Sucipto.u.name, Sucipto.u.age},
                             {Marwoto.u.name, Marwoto.u.age}
-                        );
+        });
         ASSERT_NO_THROW(db(stmt));
     }
 
@@ -163,14 +163,14 @@ TEST(sqlite3, workflow) {
 
     {
         const auto stmt = sql::select( //
-                employees.id,
-                employees.name,
-                employees.salary,
-                employees.bonus,
-                (employees.salary + employees.bonus).as(total_income)
-            )
-            .from(employees)
-            .order_by(total_income);
+                              employees.id,
+                              employees.name,
+                              employees.salary,
+                              employees.bonus,
+                              (employees.salary + employees.bonus).as(total_income)
+        )
+                              .from(employees)
+                              .order_by(total_income);
 
         auto rows = db(stmt);
 

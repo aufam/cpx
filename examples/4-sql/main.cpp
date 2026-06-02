@@ -47,7 +47,10 @@ int main() {
     }
     {
         auto stmt = sql::insert_into<users>(users.name, users.age) //
-                        .values({"Sucipto", 20}, {"Sugeng", 25});
+                        .values({
+                            {"Sucipto", 20},
+                            {"Sugeng",  25}
+        });
         fmt::println("{}", stmt);
     }
     {
@@ -67,7 +70,7 @@ int main() {
         auto stmt = sql::insert_into<users>(users.id, users.age)
                         .select(products.id, products.stock)
                         .from(products)
-                        .where(products.id == 42);
+                        .where(products.id.in({42, 43}));
         fmt::println("{}", stmt);
     }
     {

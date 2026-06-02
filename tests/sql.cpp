@@ -50,12 +50,17 @@ TEST(sql, update) {
 
 TEST(sql, insert) {
     auto u = sql::insert_into<users>(users.name, users.age) //
-                 .values( //
-                    {"Sucipto", 20},
-                    {"Sugeng", 25}
-                 );
+                 .values({
+                     {"Sucipto", 20},
+                     {"Sugeng",  25}
+    });
     EXPECT_EQ(u.query, "insert into users (name, age) values (?, ?), (?, ?)");
-    EXPECT_EQ(u.params, (std::tuple<std::string, int, std::string, int>{"Sucipto", 20, "Sugeng", 25}));
+    EXPECT_EQ(
+        u.params,
+        (std::tuple<std::vector<std::tuple<std::string, int>>>{
+            {{"Sucipto", 20}, {"Sugeng", 25}}
+    })
+    );
     EXPECT_EQ(decltype(u)::row_type{}, std::tuple<>{});
 }
 
