@@ -307,9 +307,9 @@ struct SERIALIZE(std::tuple<Ts...>) {
         constexpr bool  is_tbl = cpx::detail::tuple_has_any_tagged_type_v<Tpl>;
         __toml11::value node   = is_tbl ? __toml11::value(__toml11::table()) : __toml11::value(__toml11::array());
 
-        std::array<std::string_view, std::tuple_size_v<Tpl>> oneofs = {};
-
-        size_t idx = 0;
+        auto   oneofs      = std::array<std::string_view, std::tuple_size_v<Tpl>>{};
+        size_t oneof_count = 0;
+        size_t idx         = 0;
         tuple_for_each(flatten, [&](auto &item, const size_t) {
             const cpx::TagInfo &t       = cpx::toml::get_tag_info(item);
             auto               &v       = cpx::detail::get_underlying_value(item);
@@ -322,6 +322,14 @@ struct SERIALIZE(std::tuple<Ts...>) {
             size_t i = idx++;
             if ((t.omitempty || !t.oneof.empty()) && detail::is_empty_value(v) && is_tbl)
                 return;
+
+            if (!t.oneof.empty()) {
+                for (size_t j = 0; j < oneof_count; ++j) {
+                    if (oneofs[j] == t.oneof)
+                        throw duplicate_oneof_error(t.oneof);
+                }
+                oneofs[oneof_count++] = t.oneof;
+            }
 
             __toml11::value val;
             try {
@@ -345,18 +353,8 @@ struct SERIALIZE(std::tuple<Ts...>) {
                 node.as_table(std::nothrow)[std::string(t.key)] = std::move(val);
             else
                 node.as_array(std::nothrow).push_back(std::move(val));
-
-            oneofs[i] = t.oneof;
         });
 
-        for (const auto &oneof : oneofs) {
-            if (oneof.empty())
-                continue;
-
-            for (const auto &existing : oneofs)
-                if (existing == oneof && &existing != &oneof)
-                    throw duplicate_oneof_error(oneof);
-        }
         return node;
     }
 };
@@ -377,9 +375,9 @@ struct DESERIALIZE(std::tuple<Ts...>) {
         const __toml11::array *arr = &node.as_array(std::nothrow);
         const __toml11::table *tbl = &node.as_table(std::nothrow);
 
-        std::array<std::string_view, std::tuple_size_v<Tpl>> oneofs = {};
-
-        size_t idx = 0;
+        auto   oneofs      = std::array<std::string_view, std::tuple_size_v<Tpl>>{};
+        size_t oneof_count = 0;
+        size_t idx         = 0;
         tuple_for_each(flattened, [&](auto &item, const size_t) {
             const cpx::TagInfo &t         = cpx::toml::get_tag_info(item);
             auto               &v         = detail::get_underlying_value(item);
@@ -402,6 +400,14 @@ struct DESERIALIZE(std::tuple<Ts...>) {
             if (val->is_empty() && (t.skipmissing || !t.oneof.empty()))
                 return;
 
+            if (!t.oneof.empty()) {
+                for (size_t j = 0; j < oneof_count; ++j) {
+                    if (oneofs[j] == t.oneof)
+                        throw duplicate_oneof_error(t.oneof);
+                }
+                oneofs[oneof_count++] = t.oneof;
+            }
+
             try {
                 if (t.noserde)
                     if constexpr (std::is_same_v<T, std::string>)
@@ -419,18 +425,7 @@ struct DESERIALIZE(std::tuple<Ts...>) {
                     e.add_context(i);
                 throw;
             }
-
-            oneofs[i] = t.oneof;
         });
-
-        for (const auto &oneof : oneofs) {
-            if (oneof.empty())
-                continue;
-
-            for (const auto &existing : oneofs)
-                if (existing == oneof && &existing != &oneof)
-                    throw duplicate_oneof_error(oneof);
-        }
     }
 };
 

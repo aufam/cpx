@@ -4,6 +4,7 @@
 #include <cpx/sql/sql.h>
 #include <cpx/serde/serialize.h>
 #include <cpx/serde/deserialize.h>
+#include <cpx/serde/error.h>
 #include <string>
 #include <optional>
 #include <ctime>
@@ -23,37 +24,12 @@ namespace cpx::sql::sqlite3 {
     template <typename Row>
     class Rows;
 
-    struct Serializer;
-    struct Deserializer;
-
     template <typename From, typename Enable = void>
-    using Serialize = ::cpx::serde::Serialize<Serializer, From, Enable>;
+    using Serialize = cpx::serde::Serialize<sqlite3_stmt, From, Enable>;
 
     template <typename To, typename Enable = void>
-    using Deserialize = ::cpx::serde::Deserialize<Deserializer, To, Enable>;
+    using Deserialize = cpx::serde::Deserialize<sqlite3_stmt, To, Enable>;
 
-    class error;
-
-    struct Serializer {
-        sqlite3_stmt *stmt;
-        int          &index;
-
-        using error = cpx::sql::sqlite3::error;
-    };
-
-    struct Deserializer {
-        sqlite3_stmt *stmt;
-        int           index;
-
-        using error = cpx::sql::sqlite3::error;
-    };
-} // namespace cpx::sql::sqlite3
-
-
-/*
- * Helper declarations
- */
-namespace cpx::sql::sqlite3 {
     class error : public std::exception {
         mutable std::string what_;
 
@@ -89,7 +65,6 @@ namespace cpx::sql::sqlite3 {
     };
 } // namespace cpx::sql::sqlite3
 
-
 /*
  * Implementations
  */
@@ -120,7 +95,7 @@ namespace cpx::sql::sqlite3 {
             , query(std::move(other.query))
             , ret(std::exchange(other.ret, SQLITE_DONE)) {}
 
-        virtual ~Rows() {
+        ~Rows() override {
             if (stmt) {
                 sqlite3_finalize(stmt);
                 stmt = nullptr;
@@ -156,7 +131,9 @@ namespace cpx::sql::sqlite3 {
 
         template <std::size_t... I>
         auto get_all(std::index_sequence<I...>) const {
-            return std::make_tuple(Deserialize<std::tuple_element_t<I, Row>>{stmt, int(I)}.into()...);
+            Row row = {};
+            (Deserialize<std::tuple_element_t<I, Row>>{stmt, int(I)}.into(std::get<I>(row)), ...);
+            return row;
         }
     };
 
@@ -238,153 +215,202 @@ namespace cpx::sql::sqlite3 {
 } // namespace cpx::sql::sqlite3
 
 
-#define SERIALIZER   ::cpx::sql::sqlite3::Serializer
-#define DESERIALIZER ::cpx::sql::sqlite3::Deserializer
+#define SERIALIZE(...)      cpx::serde::Serialize<sqlite3_stmt, __VA_ARGS__>
+#define DESERIALIZE(...)    cpx::serde::Deserialize<sqlite3_stmt, __VA_ARGS__>
+#define SERIALIZABLE(...)   cpx::serde::is_serializable_v<sqlite3_stmt, __VA_ARGS__>
+#define DESERIALIZABLE(...) cpx::serde::is_deserializable_v<sqlite3_stmt, __VA_ARGS__>
 
-/*
- * Helper Implementations
- */
-namespace cpx::serde {
-    template <>
-    struct Serialize<SERIALIZER, int> : SERIALIZER {
-        void from(int value) const {
-            sqlite3_bind_int(stmt, index++, value);
-        }
-    };
+#define SERIALIZER_FIELDS                                                                                                        \
+    sqlite3_stmt *stmt;                                                                                                          \
+    int          &index
 
-    template <typename T>
-    struct Serialize<SERIALIZER, T, std::enable_if_t<std::is_integral_v<T> && !std::is_same_v<T, int>>> : SERIALIZER {
-        void from(sqlite3_int64 value) const {
-            sqlite3_bind_int64(stmt, index++, value);
-        }
-    };
+#define DESERIALIZER_FIELDS                                                                                                      \
+    sqlite3_stmt *stmt;                                                                                                          \
+    int           index
 
-    template <>
-    struct Serialize<SERIALIZER, std::tm> : SERIALIZER {
-        void from(std::tm value) const {
+template <typename T>
+struct SERIALIZE(T, std::enable_if_t<std::is_integral_v<T>>) {
+    SERIALIZER_FIELDS;
+    void from(T value) const {
+        if constexpr (sizeof(T) <= 4)
+            sqlite3_bind_int(stmt, index++, int(value));
+        else
+            sqlite3_bind_int64(stmt, index++, sqlite3_int64(value));
+    }
+};
+
+template <typename T>
+struct SERIALIZE(T, std::enable_if_t<std::is_floating_point_v<T>>) {
+    SERIALIZER_FIELDS;
+    void from(T value) const {
+        sqlite3_bind_double(stmt, index++, double(value));
+    }
+};
+
+template <>
+struct SERIALIZE(std::tm) {
+    SERIALIZER_FIELDS;
+    void from(std::tm value) const {
 #if defined(_WIN32)
-            auto t = _mkgmtime(&value);
+        auto t = _mkgmtime(&value);
 #else
-            auto t = ::timegm(&value);
+        auto t = ::timegm(&value);
 #endif
-            sqlite3_bind_int64(stmt, index++, t);
-        }
-    };
+        sqlite3_bind_int64(stmt, index++, t);
+    }
+};
 
-    template <>
-    struct Serialize<SERIALIZER, double> : SERIALIZER {
-        void from(double value) const {
-            sqlite3_bind_double(stmt, index++, value);
-        }
-    };
-
-    template <>
-    struct Serialize<SERIALIZER, std::string> : SERIALIZER {
-        void from(const std::string &value) const {
-            sqlite3_bind_text(stmt, index++, value.c_str(), (int)value.size(), SQLITE_STATIC);
-        }
-    };
-
-    template <>
-    struct Serialize<SERIALIZER, std::vector<uint8_t>> : SERIALIZER {
-        void from(const std::vector<uint8_t> &value) const {
+template <typename CT>
+struct SERIALIZE(std::basic_string_view<char, CT>) {
+    SERIALIZER_FIELDS;
+    void from(std::basic_string_view<char, CT> value, bool is_blob = false) const {
+        if (is_blob) {
             sqlite3_bind_blob(stmt, index++, (void *)value.data(), (int)value.size(), SQLITE_STATIC);
+        } else {
+            sqlite3_bind_text(stmt, index++, value.data(), (int)value.size(), SQLITE_STATIC);
         }
-    };
+    }
+};
 
-    template <typename T>
-    struct Serialize<SERIALIZER, std::optional<T>> : SERIALIZER {
-        void from(const std::optional<T> &value) const {
-            if (!value.has_value())
-                sqlite3_bind_null(stmt, index++);
-            else
-                Serialize<SERIALIZER, T>{stmt, index}.from(*value);
+template <typename CT, typename A>
+struct SERIALIZE(std::basic_string<char, CT, A>) {
+    SERIALIZER_FIELDS;
+    void from(const std::basic_string<char, CT, A> &value, bool is_blob = false) const {
+        return SERIALIZE(std::basic_string_view<char, CT>){stmt, index}.from(value, is_blob);
+    }
+    void from(std::basic_string<char, CT, A> &&value) = delete;
+};
+
+template <typename T>
+struct SERIALIZE(std::optional<T>, std::enable_if_t<SERIALIZABLE(T)>) {
+    SERIALIZER_FIELDS;
+    void from(const std::optional<T> &value) const {
+        if (!value.has_value())
+            sqlite3_bind_null(stmt, index++);
+        else
+            SERIALIZE(T){stmt, index}.from(*value);
+    }
+    void from(std::vector<T> &&) = delete;
+};
+
+template <typename T>
+struct SERIALIZE(std::vector<T>, std::enable_if_t<SERIALIZABLE(T)>) {
+    SERIALIZER_FIELDS;
+    void from(const std::vector<T> &value) const {
+        if constexpr (std::is_same_v<T, uint8_t>) {
+            sqlite3_bind_blob(stmt, index++, (void *)value.data(), (int)value.size(), SQLITE_STATIC);
+        } else {
+            for (auto &val : value)
+                SERIALIZE(T){stmt, index}.from(val);
         }
-    };
+    }
+    void from(std::vector<T> &&) = delete;
+};
 
-    template <typename T>
-    struct Serialize<
-        SERIALIZER,
-        std::vector<T>,
-        std::enable_if_t<!std::is_same_v<T, uint8_t> && is_serializable_v<SERIALIZER, T>>> : SERIALIZER {
-        void from(const std::vector<T> &values) const {
-            for (auto &value : values) {
-                Serialize<SERIALIZER, T>{stmt, index}.from(value);
-            }
+template <typename... Ts>
+struct SERIALIZE(std::tuple<Ts...>, std::enable_if_t<(SERIALIZABLE(Ts) && ...)>) {
+    SERIALIZER_FIELDS;
+    void from(const std::tuple<Ts...> &value) const {
+        std::apply([&](auto &&...args) { (SERIALIZE(Ts){stmt, index}.from(args), ...); }, value);
+    }
+};
+
+
+namespace cpx::sql::sqlite3::detail {
+    inline std::string type_of(int type) {
+        switch (type) {
+        case SQLITE_INTEGER:
+            return "integer";
+        case SQLITE_FLOAT:
+            return "float";
+        case SQLITE_TEXT:
+            return "text";
+        case SQLITE_BLOB:
+            return "blob";
+        case SQLITE_NULL:
+            return "null";
+        default:
+            return "unknown";
         }
-    };
+    }
+} // namespace cpx::sql::sqlite3::detail
 
-    template <typename... Ts>
-    struct Serialize<SERIALIZER, std::tuple<Ts...>, std::enable_if_t<(is_serializable_v<SERIALIZER, Ts> && ...)>> : SERIALIZER {
-        void from(const std::tuple<Ts...> &values) const {
-            std::apply([&](auto &&...args) { (Serialize<SERIALIZER, Ts>{stmt, index}.from(args), ...); }, values);
+template <typename T>
+struct DESERIALIZE(T, std::enable_if_t<std::is_integral_v<T>>) {
+    DESERIALIZER_FIELDS;
+    void into(T &value) const {
+        if (auto type = sqlite3_column_type(stmt, index); type != SQLITE_INTEGER)
+            throw type_mismatch_error("integer", cpx::sql::sqlite3::detail::type_of(type));
+        if constexpr (sizeof(T) <= 4)
+            value = (T)sqlite3_column_int(stmt, index);
+        else
+            value = (T)sqlite3_column_int64(stmt, index);
+    }
+};
+
+template <>
+struct DESERIALIZE(std::tm) {
+    DESERIALIZER_FIELDS;
+    void into(std::tm &value) const {
+        if (auto type = sqlite3_column_type(stmt, index); type != SQLITE_INTEGER)
+            throw type_mismatch_error("integer", cpx::sql::sqlite3::detail::type_of(type));
+        std::time_t t;
+        DESERIALIZE(std::time_t){stmt, index}.into(t);
+        value = *std::gmtime(&t);
+    }
+};
+
+template <typename T>
+struct DESERIALIZE(T, std::enable_if_t<std::is_floating_point_v<T>>) {
+    DESERIALIZER_FIELDS;
+    void into(T &value) const {
+        if (auto type = sqlite3_column_type(stmt, index); type != SQLITE_FLOAT)
+            throw type_mismatch_error("float", cpx::sql::sqlite3::detail::type_of(type));
+        value = (T)sqlite3_column_double(stmt, index);
+    }
+};
+
+template <typename CT, typename A>
+struct DESERIALIZE(std::basic_string<char, CT, A>) {
+    DESERIALIZER_FIELDS;
+    void into(std::basic_string<char, CT, A> &value) const {
+        if (auto type = sqlite3_column_type(stmt, index); type != SQLITE_TEXT)
+            throw type_mismatch_error("text", cpx::sql::sqlite3::detail::type_of(type));
+        value = (const char *)sqlite3_column_text(stmt, index);
+    }
+};
+
+template <>
+struct DESERIALIZE(std::vector<uint8_t>) {
+    DESERIALIZER_FIELDS;
+    void into(std::vector<uint8_t> &value) const {
+        if (auto type = sqlite3_column_type(stmt, index); type != SQLITE_BLOB)
+            throw type_mismatch_error("blob", cpx::sql::sqlite3::detail::type_of(type));
+        const auto *data = static_cast<const uint8_t *>(sqlite3_column_blob(stmt, index));
+        const int   size = sqlite3_column_bytes(stmt, index);
+        if (!data || size <= 0)
+            return;
+        value = {data, data + size};
+    }
+};
+
+template <typename T>
+struct DESERIALIZE(std::optional<T>, std::enable_if_t<DESERIALIZABLE(T)>) {
+    DESERIALIZER_FIELDS;
+    void into(std::optional<T> &value) const {
+        if (sqlite3_column_type(stmt, index) == SQLITE_NULL) {
+            value = std::nullopt;
+        } else {
+            value.emplace();
+            DESERIALIZE(T){stmt, index}.into(*value);
         }
-    };
+    }
+};
 
-    template <>
-    struct Deserialize<DESERIALIZER, int> : DESERIALIZER {
-        int into() const {
-            return sqlite3_column_int(stmt, index);
-        }
-    };
-
-    template <typename T>
-    struct Deserialize<DESERIALIZER, T, std::enable_if_t<std::is_integral_v<T> && !std::is_same_v<T, int>>> : DESERIALIZER {
-        T into() const {
-            return (T)sqlite3_column_int64(stmt, index);
-        }
-    };
-
-    template <>
-    struct Deserialize<DESERIALIZER, std::tm> : DESERIALIZER {
-        std::tm into() const {
-            const auto t   = Deserialize<DESERIALIZER, std::time_t>{stmt, index}.into();
-            std::tm    out = {};
-#if defined(_WIN32)
-            _gmtime64_s(&out, &t);
-#else
-            ::gmtime_r(&t, &out);
-#endif
-            return out;
-        }
-    };
-
-    template <>
-    struct Deserialize<DESERIALIZER, double> : DESERIALIZER {
-        double into() const {
-            return sqlite3_column_double(stmt, index);
-        }
-    };
-
-    template <>
-    struct Deserialize<DESERIALIZER, std::string> : DESERIALIZER {
-        std::string into() const {
-            return (const char *)sqlite3_column_text(stmt, index);
-        }
-    };
-
-    template <>
-    struct Deserialize<DESERIALIZER, std::vector<uint8_t>> : DESERIALIZER {
-        std::vector<uint8_t> into() const {
-            const auto *data = static_cast<const uint8_t *>(sqlite3_column_blob(stmt, index));
-            const int   size = sqlite3_column_bytes(stmt, index);
-            if (!data || size <= 0)
-                return {};
-            return {data, data + size};
-        }
-    };
-
-    template <typename T>
-    struct Deserialize<DESERIALIZER, std::optional<T>> : DESERIALIZER {
-        std::optional<T> into(sqlite3_stmt *stmt, int index) const {
-            if (sqlite3_column_type(stmt, index) == SQLITE_NULL)
-                return std::nullopt;
-            else
-                return Deserialize<DESERIALIZER, T>{stmt, index}.into();
-        }
-    };
-} // namespace cpx::serde
-
-#undef SERIALIZER
-#undef DESERIALIZER
+#undef SERIALIZE
+#undef DESERIALIZE
+#undef SERIALIZABLE
+#undef DESERIALIZABLE
+#undef SERIALIZER_FIELDS
+#undef DESERIALIZER_FIELDS
 #endif

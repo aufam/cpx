@@ -289,9 +289,9 @@ struct SERIALIZE(std::tuple<Ts...>) {
 
         __yaml_cpp::Node node(is_map ? __yaml_cpp::NodeType::Map : __yaml_cpp::NodeType::Sequence);
 
-        std::array<std::string_view, std::tuple_size_v<Tpl>> oneofs = {};
-
-        size_t idx = 0;
+        auto   oneofs      = std::array<std::string_view, std::tuple_size_v<Tpl>>{};
+        size_t oneof_count = 0;
+        size_t idx         = 0;
         tuple_for_each(flattened, [&](auto &item, const size_t) {
             const cpx::TagInfo &t       = cpx::yaml::get_tag_info(item);
             auto               &v       = cpx::detail::get_underlying_value(item);
@@ -306,6 +306,14 @@ struct SERIALIZE(std::tuple<Ts...>) {
                 if constexpr (!is_map)
                     node.push_back(__yaml_cpp::Node(__yaml_cpp::NodeType::Null));
                 return;
+            }
+
+            if (!t.oneof.empty()) {
+                for (size_t j = 0; j < oneof_count; ++j) {
+                    if (oneofs[j] == t.oneof)
+                        throw duplicate_oneof_error(t.oneof);
+                }
+                oneofs[oneof_count++] = t.oneof;
             }
 
             __yaml_cpp::Node val;
@@ -330,18 +338,7 @@ struct SERIALIZE(std::tuple<Ts...>) {
                 node[t.key] = val;
             else
                 node.push_back(val);
-
-            oneofs[i] = t.oneof;
         });
-
-        for (const auto &oneof : oneofs) {
-            if (oneof.empty())
-                continue;
-
-            for (const auto &existing : oneofs)
-                if (existing == oneof && &existing != &oneof)
-                    throw duplicate_oneof_error(oneof);
-        }
 
         return node;
     }
@@ -363,9 +360,9 @@ struct DESERIALIZE(std::tuple<Ts...>) {
         const auto &arr = node;
         const auto &map = node;
 
-        std::array<std::string_view, std::tuple_size_v<Tpl>> oneofs = {};
-
-        size_t idx = 0;
+        auto   oneofs      = std::array<std::string_view, std::tuple_size_v<Tpl>>{};
+        size_t oneof_count = 0;
+        size_t idx         = 0;
         tuple_for_each(flattened, [&](auto &item, const size_t) {
             const cpx::TagInfo &t         = cpx::yaml::get_tag_info(item);
             auto               &v         = detail::get_underlying_value(item);
@@ -387,6 +384,14 @@ struct DESERIALIZE(std::tuple<Ts...>) {
             if ((!val.IsDefined() || val.IsNull()) && (t.skipmissing || !t.oneof.empty()))
                 return;
 
+            if (!t.oneof.empty()) {
+                for (size_t j = 0; j < oneof_count; ++j) {
+                    if (oneofs[j] == t.oneof)
+                        throw duplicate_oneof_error(t.oneof);
+                }
+                oneofs[oneof_count++] = t.oneof;
+            }
+
             try {
                 if (t.noserde)
                     if constexpr (std::is_same_v<T, std::string>)
@@ -404,18 +409,7 @@ struct DESERIALIZE(std::tuple<Ts...>) {
                     e.add_context(i);
                 throw;
             }
-
-            oneofs[i] = t.oneof;
         });
-
-        for (const auto &oneof : oneofs) {
-            if (oneof.empty())
-                continue;
-
-            for (const auto &existing : oneofs)
-                if (existing == oneof && &existing != &oneof)
-                    throw duplicate_oneof_error(oneof);
-        }
     }
 };
 

@@ -1,7 +1,7 @@
 #ifndef CPX_MSGPACK_H
 #define CPX_MSGPACK_H
 
-#include <cpx/reflect.h>
+#include <cpx/reflect_builtin.h>
 #include <cpx/extend.h>
 #include <cpx/serde/serialize.h>
 #include <cpx/serde/deserialize.h>

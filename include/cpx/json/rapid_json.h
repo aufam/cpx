@@ -492,9 +492,9 @@ struct SERIALIZE(std::tuple<Ts...>) {
         is_obj ? val.MemberReserve(std::tuple_size_v<Tpl>, doc.GetAllocator())
                : val.Reserve(std::tuple_size_v<Tpl>, doc.GetAllocator());
 
-        std::array<std::string_view, std::tuple_size_v<Tpl>> oneofs = {};
-
-        size_t idx = 0;
+        auto   oneofs      = std::array<std::string_view, std::tuple_size_v<Tpl>>{};
+        size_t oneof_count = 0;
+        size_t idx         = 0;
         tuple_for_each(flatten, [&](auto &item, const size_t) {
             const cpx::TagInfo &t       = cpx::json::get_tag_info(item);
             auto               &v       = cpx::detail::get_underlying_value(item);
@@ -507,6 +507,14 @@ struct SERIALIZE(std::tuple<Ts...>) {
             size_t i = idx++;
             if ((t.omitempty || !t.oneof.empty()) && detail::is_empty_value(v) && is_obj)
                 return;
+
+            if (!t.oneof.empty()) {
+                for (size_t j = 0; j < oneof_count; ++j) {
+                    if (oneofs[j] == t.oneof)
+                        throw duplicate_oneof_error(t.oneof);
+                }
+                oneofs[oneof_count++] = t.oneof;
+            }
 
             rapidjson::Value sub;
             try {
@@ -533,18 +541,7 @@ struct SERIALIZE(std::tuple<Ts...>) {
                 auto arr = val.GetArray();
                 arr.PushBack(std::move(sub), doc.GetAllocator());
             }
-
-            oneofs[i] = t.oneof;
         });
-
-        for (const auto &oneof : oneofs) {
-            if (oneof.empty())
-                continue;
-
-            for (const auto &existing : oneofs)
-                if (existing == oneof && &existing != &oneof)
-                    throw duplicate_oneof_error(oneof);
-        }
 
         return val;
     }
@@ -564,12 +561,12 @@ struct DESERIALIZE(std::tuple<Ts...>) {
         if (is_obj && !val.IsObject())
             throw type_mismatch_error("table", cpx::json::rapid_json::detail::type(val));
 
-        std::array<std::string_view, std::tuple_size_v<Tpl>> oneofs = {};
-
-        size_t idx = 0;
+        auto   oneofs      = std::array<std::string_view, std::tuple_size_v<Tpl>>{};
+        size_t oneof_count = 0;
+        size_t idx         = 0;
         tuple_for_each(flattened, [&](auto &item, const size_t) {
             const cpx::TagInfo &t         = cpx::json::get_tag_info(item);
-            auto               &v         = detail::get_underlying_value(item);
+            auto               &v         = cpx::detail::get_underlying_value(item);
             using T                       = std::decay_t<decltype(v)>;
             constexpr bool deserializable = DESERIALIZABLE(T);
 
@@ -594,6 +591,14 @@ struct DESERIALIZE(std::tuple<Ts...>) {
             if (ptr == &empty && (t.skipmissing || !t.oneof.empty()))
                 return;
 
+            if (!t.oneof.empty()) {
+                for (size_t j = 0; j < oneof_count; ++j) {
+                    if (oneofs[j] == t.oneof)
+                        throw duplicate_oneof_error(t.oneof);
+                }
+                oneofs[oneof_count++] = t.oneof;
+            }
+
             try {
                 if (t.noserde)
                     if constexpr (std::is_same_v<T, std::string>)
@@ -611,18 +616,7 @@ struct DESERIALIZE(std::tuple<Ts...>) {
                     e.add_context(i);
                 throw;
             }
-
-            oneofs[i] = t.oneof;
         });
-
-        for (const auto &oneof : oneofs) {
-            if (oneof.empty())
-                continue;
-
-            for (const auto &existing : oneofs)
-                if (existing == oneof && &existing != &oneof)
-                    throw duplicate_oneof_error(oneof);
-        }
     }
 };
 

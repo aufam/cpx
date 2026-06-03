@@ -302,9 +302,9 @@ struct SERIALIZE(std::tuple<Ts...>) {
         std::unique_ptr<__tomlpp::node> node =
             is_tbl ? std::unique_ptr<__tomlpp::node>(new __tomlpp::table) : std::unique_ptr<__tomlpp::node>(new __tomlpp::array);
 
-        std::array<std::string_view, std::tuple_size_v<Tpl>> oneofs = {};
-
-        size_t idx = 0;
+        auto   oneofs      = std::array<std::string_view, std::tuple_size_v<Tpl>>{};
+        size_t oneof_count = 0;
+        size_t idx         = 0;
         tuple_for_each(flattened, [&](auto &item, const size_t) {
             const cpx::TagInfo &t = cpx::toml::get_tag_info(item);
             auto               &v = cpx::detail::get_underlying_value(item);
@@ -316,6 +316,14 @@ struct SERIALIZE(std::tuple<Ts...>) {
             size_t i = idx++;
             if ((t.omitempty || !t.oneof.empty()) && cpx::detail::is_empty_value(v) && is_tbl)
                 return;
+
+            if (!t.oneof.empty()) {
+                for (size_t j = 0; j < oneof_count; ++j) {
+                    if (oneofs[j] == t.oneof)
+                        throw duplicate_oneof_error(t.oneof);
+                }
+                oneofs[oneof_count++] = t.oneof;
+            }
 
             std::unique_ptr<__tomlpp::node> val;
             try {
@@ -339,18 +347,7 @@ struct SERIALIZE(std::tuple<Ts...>) {
                 node->as_table()->insert_or_assign(t.key, std::move(*val));
             else
                 node->as_array()->push_back(std::move(*val));
-
-            oneofs[i] = t.oneof;
         });
-
-        for (const auto &oneof : oneofs) {
-            if (oneof.empty())
-                continue;
-
-            for (const auto &existing : oneofs)
-                if (existing == oneof && &existing != &oneof)
-                    throw duplicate_oneof_error(oneof);
-        }
 
         return node;
     }
@@ -375,22 +372,29 @@ struct DESERIALIZE(std::tuple<Ts...>) {
         if (is_tbl && !tbl)
             throw type_mismatch_error("table", std::string(__tomlpp::impl::node_type_friendly_names[(int)node->type()]));
 
-        std::array<std::string_view, std::tuple_size_v<Tpl>> oneofs = {};
-
-        size_t idx = 0;
+        auto   oneofs      = std::array<std::string_view, std::tuple_size_v<Tpl>>{};
+        size_t oneof_count = 0;
+        size_t idx         = 0;
         tuple_for_each(flattened, [&](auto &item, const size_t) {
-            const cpx::TagInfo &t         = cpx::toml::get_tag_info(item);
-            auto               &v         = detail::get_underlying_value(item);
-            using T                       = std::decay_t<decltype(v)>;
-            constexpr bool deserializable = DESERIALIZABLE(T);
+            const cpx::TagInfo &t = cpx::toml::get_tag_info(item);
+            auto               &v = cpx::detail::get_underlying_value(item);
+            using T               = std::decay_t<decltype(v)>;
 
-            if (!deserializable || (is_tbl && t.key == ""))
+            if (!DESERIALIZABLE(T) || (is_tbl && t.key == ""))
                 return;
 
             const size_t          i   = idx++;
             const __tomlpp::node *val = is_tbl ? tbl->get(t.key) : arr->get(i);
             if (!val && (t.skipmissing || !t.oneof.empty()))
                 return;
+
+            if (!t.oneof.empty()) {
+                for (size_t j = 0; j < oneof_count; ++j) {
+                    if (oneofs[j] == t.oneof)
+                        throw duplicate_oneof_error(t.oneof);
+                }
+                oneofs[oneof_count++] = t.oneof;
+            }
 
             try {
                 if (t.noserde)
@@ -409,17 +413,7 @@ struct DESERIALIZE(std::tuple<Ts...>) {
                     e.add_context(i);
                 throw;
             }
-            oneofs[i] = t.oneof;
         });
-
-        for (const auto &oneof : oneofs) {
-            if (oneof.empty())
-                continue;
-
-            for (const auto &existing : oneofs)
-                if (existing == oneof && &existing != &oneof)
-                    throw duplicate_oneof_error(oneof);
-        }
     }
 };
 

@@ -152,9 +152,9 @@ struct nlohmann::adl_serializer<std::tuple<Ts...>> {
 
         j = is_obj ? nlohmann::json::object() : nlohmann::json::array();
 
-        std::array<std::string_view, std::tuple_size_v<Tpl>> oneofs = {};
-
-        size_t idx = 0;
+        auto   oneofs      = std::array<std::string_view, std::tuple_size_v<Tpl>>{};
+        size_t oneof_count = 0;
+        size_t idx         = 0;
         cpx::tuple_for_each(flattened, [&](const auto &item, const size_t) {
             const cpx::TagInfo &t = cpx::json::get_tag_info(item);
             const auto         &v = cpx::detail::get_underlying_value(item);
@@ -166,6 +166,14 @@ struct nlohmann::adl_serializer<std::tuple<Ts...>> {
             size_t i = idx++;
             if ((t.omitempty || !t.oneof.empty()) && cpx::detail::is_empty_value(v))
                 return;
+
+            if (!t.oneof.empty()) {
+                for (size_t j = 0; j < oneof_count; ++j) {
+                    if (oneofs[j] == t.oneof)
+                        throw cpx::serde::duplicate_oneof_error(t.oneof);
+                }
+                oneofs[oneof_count++] = t.oneof;
+            }
 
             auto &val = is_obj ? j[t.key] : j[i];
             try {
@@ -189,18 +197,7 @@ struct nlohmann::adl_serializer<std::tuple<Ts...>> {
                     e.add_context(i);
                 throw;
             }
-
-            oneofs[i] = t.oneof;
         });
-
-        for (const auto &oneof : oneofs) {
-            if (oneof.empty())
-                continue;
-
-            for (const auto &existing : oneofs)
-                if (existing == oneof && &existing != &oneof)
-                    throw cpx::serde::duplicate_oneof_error(oneof);
-        }
     }
 
     static void from_json(const json &j, std::tuple<Ts...> &tpl) {
@@ -213,9 +210,9 @@ struct nlohmann::adl_serializer<std::tuple<Ts...>> {
         if (!is_obj && !j.is_array())
             throw cpx::serde::type_mismatch_error("array", j.type_name());
 
-        std::array<std::string_view, std::tuple_size_v<Tpl>> oneofs = {};
-
-        size_t idx = 0;
+        auto   oneofs      = std::array<std::string_view, std::tuple_size_v<Tpl>>{};
+        size_t oneof_count = 0;
+        size_t idx         = 0;
         cpx::tuple_for_each(flattened, [&](auto &item, const size_t) {
             const cpx::TagInfo &t = cpx::json::get_tag_info(item);
             auto               &v = cpx::detail::get_underlying_value(item);
@@ -223,6 +220,14 @@ struct nlohmann::adl_serializer<std::tuple<Ts...>> {
 
             if (!DESERIALIZABLE(T) || (is_obj && t.key == ""))
                 return;
+
+            if (!t.oneof.empty()) {
+                for (size_t j = 0; j < oneof_count; ++j) {
+                    if (oneofs[j] == t.oneof)
+                        throw cpx::serde::duplicate_oneof_error(t.oneof);
+                }
+                oneofs[oneof_count++] = t.oneof;
+            }
 
             size_t                i   = idx++;
             const nlohmann::json *ptr = nullptr;
@@ -255,17 +260,7 @@ struct nlohmann::adl_serializer<std::tuple<Ts...>> {
                     e.add_context(i);
                 throw;
             }
-            oneofs[i] = t.oneof;
         });
-
-        for (const auto &oneof : oneofs) {
-            if (oneof.empty())
-                continue;
-
-            for (const auto &existing : oneofs)
-                if (existing == oneof && &existing != &oneof)
-                    throw cpx::serde::duplicate_oneof_error(oneof);
-        }
     }
 };
 

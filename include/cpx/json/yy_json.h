@@ -329,9 +329,9 @@ struct SERIALIZE(std::tuple<Ts...>) {
         constexpr bool  is_obj     = cpx::detail::tuple_has_any_tagged_type_v<Tpl>;
         yyjson_mut_val *obj_or_arr = is_obj ? yyjson_mut_obj(doc) : yyjson_mut_arr(doc);
 
-        std::array<std::string_view, std::tuple_size_v<Tpl>> oneofs = {};
-
-        size_t idx = 0;
+        auto   oneofs      = std::array<std::string_view, std::tuple_size_v<Tpl>>{};
+        size_t oneof_count = 0;
+        size_t idx         = 0;
         tuple_for_each(flattened, [&](auto &item, const size_t) {
             const cpx::TagInfo &t = cpx::json::get_tag_info(item);
             auto               &v = cpx::detail::get_underlying_value(item);
@@ -345,6 +345,14 @@ struct SERIALIZE(std::tuple<Ts...>) {
                 if constexpr (!is_obj)
                     yyjson_mut_arr_append(obj_or_arr, yyjson_mut_null(doc));
                 return;
+            }
+
+            if (!t.oneof.empty()) {
+                for (size_t j = 0; j < oneof_count; ++j) {
+                    if (oneofs[j] == t.oneof)
+                        throw duplicate_oneof_error(t.oneof);
+                }
+                oneofs[oneof_count++] = t.oneof;
             }
 
             yyjson_mut_val *val = nullptr;
@@ -369,18 +377,8 @@ struct SERIALIZE(std::tuple<Ts...>) {
                 yyjson_mut_obj_add(obj_or_arr, yyjson_mut_strn(doc, t.key.data(), t.key.size()), val);
             else
                 yyjson_mut_arr_append(obj_or_arr, val);
-
-            oneofs[i] = t.oneof;
         });
 
-        for (const auto &oneof : oneofs) {
-            if (oneof.empty())
-                continue;
-
-            for (const auto &existing : oneofs)
-                if (existing == oneof && &existing != &oneof)
-                    throw duplicate_oneof_error(oneof);
-        }
         return obj_or_arr;
     }
 };
@@ -401,12 +399,12 @@ struct DESERIALIZE(std::tuple<Ts...>) {
         if (!is_obj && !yyjson_is_arr(arr))
             throw type_mismatch_error("array", yyjson_get_type_desc(arr));
 
-        std::array<std::string_view, std::tuple_size_v<Tpl>> oneofs = {};
-
-        size_t idx = 0;
+        auto   oneofs      = std::array<std::string_view, std::tuple_size_v<Tpl>>{};
+        size_t oneof_count = 0;
+        size_t idx         = 0;
         tuple_for_each(flattened, [&](auto &item, const size_t) {
             const cpx::TagInfo &t = cpx::json::get_tag_info(item);
-            auto               &v = detail::get_underlying_value(item);
+            auto               &v = cpx::detail::get_underlying_value(item);
             using T               = std::decay_t<decltype(v)>;
 
             if (!DESERIALIZABLE(T) || (is_obj && t.key == ""))
@@ -416,6 +414,14 @@ struct DESERIALIZE(std::tuple<Ts...>) {
             yyjson_val  *val = is_obj ? yyjson_obj_getn(obj, t.key.data(), t.key.size()) : yyjson_arr_get(arr, i);
             if (!val && (t.skipmissing || !t.oneof.empty()))
                 return;
+
+            if (!t.oneof.empty()) {
+                for (size_t j = 0; j < oneof_count; ++j) {
+                    if (oneofs[j] == t.oneof)
+                        throw duplicate_oneof_error(t.oneof);
+                }
+                oneofs[oneof_count++] = t.oneof;
+            }
 
             try {
                 if (t.noserde)
@@ -434,17 +440,7 @@ struct DESERIALIZE(std::tuple<Ts...>) {
                     e.add_context(i);
                 throw;
             }
-            oneofs[i] = t.oneof;
         });
-
-        for (const auto &oneof : oneofs) {
-            if (oneof.empty())
-                continue;
-
-            for (const auto &existing : oneofs)
-                if (existing == oneof && &existing != &oneof)
-                    throw duplicate_oneof_error(oneof);
-        }
     }
 };
 

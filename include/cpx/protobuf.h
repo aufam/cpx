@@ -476,9 +476,8 @@ struct SERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_repeated_serializ
 };
 
 template <typename T>
-struct DESERIALIZE(
-    T, std::enable_if_t<cpx::protobuf::detail::is_repeated_deserializable<T>::value && cpx::detail::is_std_array<T>::value>
-) {
+struct
+    DESERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_repeated_deserializable<T>::value && cpx::detail::is_std_array<T>::value>) {
     DESERIALIZER_FIELDS
 
     void into(T &) const {
@@ -487,9 +486,8 @@ struct DESERIALIZE(
 };
 
 template <typename T>
-struct DESERIALIZE(
-    T, std::enable_if_t<cpx::protobuf::detail::is_repeated_deserializable<T>::value && !cpx::detail::is_std_array<T>::value>
-) {
+struct
+    DESERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_repeated_deserializable<T>::value && !cpx::detail::is_std_array<T>::value>) {
     DESERIALIZER_FIELDS
     using value_type = typename T::value_type;
 
@@ -512,33 +510,30 @@ struct SERIALIZE(std::tuple<Ts...>) {
             google::protobuf::io::StringOutputStream os(&buffer);
             google::protobuf::io::CodedOutputStream  sdoc(&os);
 
-            auto &doc       = ti.field_number > 0 ? sdoc : this->doc;
-            auto  flattened = flatten(tpl);
-            auto  oneofs    = std::array<std::string_view, std::tuple_size_v<decltype(flattened)>>();
-            tuple_for_each(flattened, [&ret, &doc, &oneofs](const auto &v, size_t i) {
-                const cpx::TagInfo &ti  = cpx::protobuf::get_tag_info(v);
-                const auto         &val = detail::get_underlying_value(v);
-                using T                 = std::decay_t<decltype(val)>;
+            auto  &doc         = ti.field_number > 0 ? sdoc : this->doc;
+            auto   flattened   = flatten(tpl);
+            auto   oneofs      = std::array<std::string_view, std::tuple_size_v<decltype(flattened)>>();
+            size_t oneof_count = 0;
+            tuple_for_each(flattened, [&](const auto &item, size_t) {
+                const cpx::TagInfo &t = cpx::protobuf::get_tag_info(item);
+                const auto         &v = detail::get_underlying_value(item);
+                using T               = std::decay_t<decltype(v)>;
 
                 bool written = false;
                 if constexpr (SERIALIZABLE(T))
                     if (ti.field_number > 0)
-                        written = SERIALIZE(T){doc, ti}.from(val);
+                        written = SERIALIZE(T){doc, ti}.from(v);
 
-                if (written)
-                    oneofs[i] = ti.oneof;
+                if (written && !t.oneof.empty()) {
+                    for (size_t j = 0; j < oneof_count; ++j) {
+                        if (oneofs[j] == t.oneof)
+                            throw duplicate_oneof_error(t.oneof);
+                    }
+                    oneofs[oneof_count++] = t.oneof;
+                }
 
                 ret |= written;
             });
-
-            for (const auto &oneof : oneofs) {
-                if (oneof.empty())
-                    continue;
-
-                for (const auto &existing : oneofs)
-                    if (existing == oneof && &existing != &oneof)
-                        throw duplicate_oneof_error(oneof);
-            }
         }
         if (ti.field_number > 0)
             ret = SERIALIZE(std::string){doc, ti}.from(buffer);
@@ -555,15 +550,15 @@ struct DESERIALIZE(std::tuple<Ts...>) {
         auto             flattened = cpx::flatten(tpl);
         constexpr size_t size      = std::tuple_size_v<decltype(flattened)>;
 
-        std::array<cpx::TagInfo, size> tis    = {};
-        std::vector<std::string_view>  oneofs = {};
+        std::array<cpx::TagInfo, size> tis = {};
         tuple_for_each(flattened, [&](auto &v, size_t i) { tis[i] = cpx::protobuf::get_tag_info(v); });
 
+        auto   oneofs      = std::array<std::string_view, size>{};
+        size_t oneof_count = 0;
         while (const uint32_t tag = doc.ReadTag()) {
             DESERIALIZER_BODY
 
-            bool             done = false;
-            std::string_view oneof;
+            bool done = false;
             tuple_for_each(flattened, [&](auto &item, size_t i) {
                 const cpx::TagInfo &t = tis[i];
                 if (done || (int)field_number != t.field_number)
@@ -572,32 +567,30 @@ struct DESERIALIZE(std::tuple<Ts...>) {
                 auto &v = detail::get_underlying_value(item);
                 using T = std::decay_t<decltype(v)>;
 
-                if constexpr (DESERIALIZABLE(T))
+                if constexpr (DESERIALIZABLE(T)) {
                     try {
-                        DESERIALIZE(T){doc, ti, wire_type, len}.into(v);
-                        done  = true;
-                        oneof = ti.oneof;
+                        DESERIALIZE(T){doc, t, wire_type, len}.into(v);
                     } catch (serde::error &e) {
                         e.add_context(std::to_string(field_number));
                         throw;
                     }
+                    if (!t.oneof.empty()) {
+                        for (size_t j = 0; j < oneof_count; ++j) {
+                            if (oneofs[j] == t.oneof)
+                                throw duplicate_oneof_error(t.oneof);
+                        }
+                        oneofs[oneof_count++] = t.oneof;
+                    }
+                    done = true;
+                }
             });
 
-            if (done) {
-                if (!oneof.empty())
-                    oneofs.push_back(oneof);
-            } else {
+            if (!done) {
                 if (wire_type == google::protobuf::internal::WireFormatLite::WireType::WIRETYPE_LENGTH_DELIMITED)
                     std::ignore = doc.Skip((int)len);
                 else
                     std::ignore = google::protobuf::internal::WireFormatLite::SkipField(&doc, tag);
             }
-        }
-
-        for (const auto &oneof : oneofs) {
-            for (const auto &existing : oneofs)
-                if (existing == oneof && &existing != &oneof)
-                    throw duplicate_oneof_error(oneof);
         }
     }
 };
@@ -633,11 +626,8 @@ struct SERIALIZE(std::unordered_map<K, T, H, P, A>, std::enable_if_t<SERIALIZABL
 };
 
 template <typename K, typename T, typename H, typename P, typename A>
-struct DESERIALIZE(
-    std::unordered_map<K, T, H, P, A>,
-    std::enable_if_t<
-        DESERIALIZABLE(K) && DESERIALIZABLE(T) && std::is_default_constructible_v<K> && std::is_default_constructible_v<T>>
-) {
+struct
+    DESERIALIZE(std::unordered_map<K, T, H, P, A>, std::enable_if_t<DESERIALIZABLE(K) && DESERIALIZABLE(T) && std::is_default_constructible_v<K> && std::is_default_constructible_v<T>>) {
     DESERIALIZER_FIELDS
 
     void into(std::unordered_map<K, T, H, P, A> &map) const {
