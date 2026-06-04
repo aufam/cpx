@@ -1,3 +1,6 @@
+// TODO: perfect forwarding
+// TODO: tuple of references
+
 #ifndef CPX_SQL_SQL_H
 #define CPX_SQL_SQL_H
 
@@ -12,8 +15,6 @@
 #    endif
 #endif
 
-// TODO: implement perfect forwarding
-
 
 /*
  * Forward declarations
@@ -24,7 +25,7 @@ namespace cpx::sql {
     template <typename Row>
     class Rows;
 
-    template <typename Params, typename Row>
+    template <typename Params = std::tuple<>, typename Row = std::tuple<>>
     struct Statement;
 
     template <typename Table, typename T>
@@ -32,6 +33,15 @@ namespace cpx::sql {
 
     template <typename T>
     class Alias;
+
+    template <typename Params = std::tuple<>>
+    struct Assignment;
+
+    template <typename Params = std::tuple<>>
+    struct Condition;
+
+    template <typename Params = std::tuple<>>
+    struct Arithmetics;
 } // namespace cpx::sql
 
 /*
@@ -55,18 +65,12 @@ namespace cpx::sql::detail {
         using type = typename sql::Column<Table, T>::type;
     };
 
-    template <typename T>
-    using column_t = typename column<T>::type;
-
     // is_column
     template <typename T>
     struct is_column : std::false_type {};
 
     template <typename Table, typename T>
     struct is_column<Column<Table, T>> : std::true_type {};
-
-    template <typename T>
-    inline constexpr bool is_column_v = is_column<T>::value;
 
     // repeated placeholders
     template <size_t i>
@@ -144,145 +148,265 @@ namespace cpx::sql {
         }
     };
 
-    // TODO: tuple reference?
-    template <typename Params = std::tuple<>, typename Row = std::tuple<>>
-    struct Statement {
-        static_assert(cpx::is_tuple_v<Params> && cpx::is_tuple_v<Row>);
-
+    template <typename Params>
+    struct Condition {
         using params_type = Params;
-        using row_type    = Row;
-
         std::string query;
-        Params      params = {};
+        params_type params = {};
 
-        template <typename OParams, typename ORow>
-        auto operator+(const Statement<OParams, ORow> &other) const {
-            using P = decltype(std::tuple_cat(std::declval<Params>(), std::declval<OParams>()));
-            using R = decltype(std::tuple_cat(std::declval<Row>(), std::declval<ORow>()));
-            return Statement<P, R>{query + other.query, std::tuple_cat(params, other.params)};
+        template <typename OParams>
+        auto operator&&(const Condition<OParams> &other) const {
+            auto params = std::tuple_cat(this->params, other.params);
+            return Condition<decltype(params)>{"(" + query + " and " + other.query + ")", std::move(params)};
         }
 
-        template <typename OParams, typename ORow>
-        auto operator&&(const Statement<OParams, ORow> &other) const {
-            return Statement<>{"("} + *this + Statement<>{" and "} + other + Statement<>{")"};
+        template <typename OParams>
+        auto operator||(const Condition<OParams> &other) const {
+            auto params = std::tuple_cat(this->params, other.params);
+            return Condition<decltype(params)>{"(" + query + " or " + other.query + ")", std::move(params)};
         }
 
-        template <typename OParams, typename ORow>
-        auto operator||(const Statement<OParams, ORow> &other) const {
-            return Statement<>{"("} + *this + Statement<>{" or "} + other + Statement<>{")"};
+        Condition<Params> operator!() const {
+            return {"not (" + query + ")", params};
         }
 
-        auto operator!() const {
-            return Statement<>{"not ("} + *this + Statement<>{")"};
+        Statement<Params, std::tuple<>> into_statement() const {
+            return {query, params};
+        }
+    };
+
+    template <typename Params>
+    struct Assignment {
+        using params_type = Params;
+        std::string query;
+        params_type params = {};
+
+        template <typename OParams>
+        auto operator,(const Assignment<OParams> &other) const {
+            auto params = std::tuple_cat(this->params, other.params);
+            return Assignment<decltype(params)>{query + ", " + other.query, std::move(params)};
         }
 
-        template <typename... Tables, typename... Ts>
-        auto select(const Column<Tables, Ts> &...cols) const {
-            static_assert(sizeof...(cols) == std::tuple_size_v<Params>, "Number of columns must match the number of params");
-            return Statement<>{query + " select " + cpx::sql::detail::string_cat(", ", cols.qualified_name()...)};
-        };
+        Statement<Params, std::tuple<>> into_statement() const {
+            return {query, params};
+        }
+    };
 
-        template <typename... OParams, typename... ORow>
-        auto set(const Statement<OParams, ORow> &...others) const {
-            return *this + Statement<>{" set "} + cpx::sql::detail::string_cat(Statement<>{", "}, others...);
+    template <typename Params>
+    struct Arithmetics {
+        using params_type = Params;
+        std::string query;
+        params_type params = {};
+
+        Statement<Params, std::tuple<>> into_statement() const {
+            return {query, params};
         }
 
-        template <typename Table>
-        auto from(const Table &table) const {
-            return *this + Statement<>{std::string(" from ") + table.TableName};
+        /*
+         * with Self
+         */
+        template <typename OParams>
+        auto operator+(Arithmetics<OParams> other) const {
+            auto params = std::tuple_cat(this->params, other.params);
+            return Assignment<decltype(params)>{"(" + query + " + " + other.query + ")", std::move(params)};
+        }
+        template <typename OParams>
+        auto operator-(Arithmetics<OParams> other) const {
+            auto params = std::tuple_cat(this->params, other.params);
+            return Assignment<decltype(params)>{"(" + query + " - " + other.query + ")", std::move(params)};
+        }
+        template <typename OParams>
+        auto operator*(Arithmetics<OParams> other) const {
+            auto params = std::tuple_cat(this->params, other.params);
+            return Assignment<decltype(params)>{"(" + query + " * " + other.query + ")", std::move(params)};
+        }
+        template <typename OParams>
+        auto operator/(Arithmetics<OParams> other) const {
+            auto params = std::tuple_cat(this->params, other.params);
+            return Assignment<decltype(params)>{"(" + query + " / " + other.query + ")", std::move(params)};
+        }
+        template <typename OParams>
+        auto operator==(Arithmetics<OParams> other) const {
+            auto params = std::tuple_cat(this->params, other.params);
+            return Condition<decltype(params)>{"(" + query + " = " + other.query + ")", std::move(params)};
+        }
+        template <typename OParams>
+        auto operator!=(Arithmetics<OParams> other) const {
+            auto params = std::tuple_cat(this->params, other.params);
+            return Condition<decltype(params)>{"(" + query + " != " + other.query + ")", std::move(params)};
+        }
+        template <typename OParams>
+        auto operator>(Arithmetics<OParams> other) const {
+            auto params = std::tuple_cat(this->params, other.params);
+            return Condition<decltype(params)>{"(" + query + " > " + other.query + ")", std::move(params)};
+        }
+        template <typename OParams>
+        auto operator<(Arithmetics<OParams> other) const {
+            auto params = std::tuple_cat(this->params, other.params);
+            return Condition<decltype(params)>{"(" + query + " < " + other.query + ")", std::move(params)};
+        }
+        template <typename OParams>
+        auto operator>=(Arithmetics<OParams> other) const {
+            auto params = std::tuple_cat(this->params, other.params);
+            return Condition<decltype(params)>{"(" + query + " >= " + other.query + ")", std::move(params)};
+        }
+        template <typename OParams>
+        auto operator<=(Arithmetics<OParams> other) const {
+            auto params = std::tuple_cat(this->params, other.params);
+            return Condition<decltype(params)>{"(" + query + " <= " + other.query + ")", std::move(params)};
         }
 
-        template <typename Table>
-        auto join(const Table &table) const {
-            return *this + Statement<>{std::string(" join ") + table.TableName};
+
+        /*
+         * with column
+         */
+        template <typename Tbl, typename U>
+        Arithmetics<Params> operator+(const Column<Tbl, U> &col) const {
+            return {"(" + query + " + " + col.qualified_name() + ")", params};
+        }
+        template <typename Tbl, typename U>
+        Arithmetics<Params> operator-(const Column<Tbl, U> &col) const {
+            return {"(" + query + " - " + col.qualified_name() + ")", params};
+        }
+        template <typename Tbl, typename U>
+        Arithmetics<Params> operator*(const Column<Tbl, U> &col) const {
+            return {"(" + query + " * " + col.qualified_name() + ")", params};
+        }
+        template <typename Tbl, typename U>
+        Arithmetics<Params> operator/(const Column<Tbl, U> &col) const {
+            return {"(" + query + " / " + col.qualified_name() + ")", params};
+        }
+        template <typename Tbl, typename U>
+        Condition<Params> operator==(const Column<Tbl, U> &col) const {
+            return {query + " = " + col.qualified_name(), params};
+        }
+        template <typename Tbl, typename U>
+        Condition<Params> operator!=(const Column<Tbl, U> &col) const {
+            return {query + " != " + col.qualified_name(), params};
+        }
+        template <typename Tbl, typename U>
+        Condition<Params> operator>(const Column<Tbl, U> &col) const {
+            return {query + " > " + col.qualified_name(), params};
+        }
+        template <typename Tbl, typename U>
+        Condition<Params> operator<(const Column<Tbl, U> &col) const {
+            return {query + " < " + col.qualified_name(), params};
+        }
+        template <typename Tbl, typename U>
+        Condition<Params> operator>=(const Column<Tbl, U> &col) const {
+            return {query + " >= " + col.qualified_name(), params};
+        }
+        template <typename Tbl, typename U>
+        Condition<Params> operator<=(const Column<Tbl, U> &col) const {
+            return {query + " <= " + col.qualified_name(), params};
         }
 
-        template <typename Table>
-        auto left_join(const Table &table) const {
-            return *this + Statement<>{std::string(" left join ") + table.TableName};
+
+        /*
+         * with string literal
+         */
+        template <size_t N>
+        auto operator+(const char (&val)[N]) const {
+            auto params = std::tuple_cat(this->params, std::tuple<std::string>{std::string(val, (-1))});
+            return Arithmetics<decltype(params)>{"(" + query + " + ?)", std::move(params)};
+        }
+        template <size_t N>
+        auto operator-(const char (&val)[N]) const {
+            auto params = std::tuple_cat(this->params, std::tuple<std::string>{std::string(val, (-1))});
+            return Arithmetics<decltype(params)>{"(" + query + " - ?)", std::move(params)};
+        }
+        template <size_t N>
+        auto operator*(const char (&val)[N]) const {
+            auto params = std::tuple_cat(this->params, std::tuple<std::string>{std::string(val, (-1))});
+            return Arithmetics<decltype(params)>{"(" + query + " * ?)", std::move(params)};
+        }
+        template <size_t N>
+        auto operator/(const char (&val)[N]) const {
+            auto params = std::tuple_cat(this->params, std::tuple<std::string>{std::string(val, (-1))});
+            return Arithmetics<decltype(params)>{"(" + query + " / ?)", std::move(params)};
+        }
+        template <size_t N>
+        auto operator==(const char (&val)[N]) const {
+            auto params = std::tuple_cat(this->params, std::tuple<std::string>{std::string(val, (-1))});
+            return Condition<decltype(params)>{query + " = ?", std::move(params)};
+        }
+        template <size_t N>
+        auto operator!=(const char (&val)[N]) const {
+            auto params = std::tuple_cat(this->params, std::tuple<std::string>{std::string(val, (-1))});
+            return Condition<decltype(params)>{query + " != ?", std::move(params)};
+        }
+        template <size_t N>
+        auto operator>(const char (&val)[N]) const {
+            auto params = std::tuple_cat(this->params, std::tuple<std::string>{std::string(val, (-1))});
+            return Condition<decltype(params)>{query + " > ?", std::move(params)};
+        }
+        template <size_t N>
+        auto operator<(const char (&val)[N]) const {
+            auto params = std::tuple_cat(this->params, std::tuple<std::string>{std::string(val, (-1))});
+            return Condition<decltype(params)>{query + " < ?", std::move(params)};
+        }
+        template <size_t N>
+        auto operator>=(const char (&val)[N]) const {
+            auto params = std::tuple_cat(this->params, std::tuple<std::string>{std::string(val, (-1))});
+            return Condition<decltype(params)>{query + " >= ?", std::move(params)};
+        }
+        template <size_t N>
+        auto operator<=(const char (&val)[N]) const {
+            auto params = std::tuple_cat(this->params, std::tuple<std::string>{std::string(val, (-1))});
+            return Condition<decltype(params)>{query + " <= ?", std::move(params)};
         }
 
-        template <typename Table>
-        auto inner_join(const Table &table) const {
-            return *this + Statement<>{std::string(" inner join ") + table.TableName};
-        }
 
-        template <typename Table>
-        auto right_join(const Table &table) const {
-            return *this + Statement<>{std::string(" right join ") + table.TableName};
-        }
+/*
+ * with primitive types
+ */
+#define ARITHMETIC_OPERATOR_FOR(T)                                                                                               \
+    auto operator+(T val) const {                                                                                                \
+        auto params = std::tuple_cat(this->params, std::tuple<T>{std::move(val)});                                               \
+        return Arithmetics<decltype(params)>{"(" + query + " + ?)", std::move(params)};                                          \
+    }                                                                                                                            \
+    auto operator-(T val) const {                                                                                                \
+        auto params = std::tuple_cat(this->params, std::tuple<T>{std::move(val)});                                               \
+        return Arithmetics<decltype(params)>{"(" + query + " - ?)", std::move(params)};                                          \
+    }                                                                                                                            \
+    auto operator*(T val) const {                                                                                                \
+        auto params = std::tuple_cat(this->params, std::tuple<T>{std::move(val)});                                               \
+        return Arithmetics<decltype(params)>{"(" + query + " * ?)", std::move(params)};                                          \
+    }                                                                                                                            \
+    auto operator/(T val) const {                                                                                                \
+        auto params = std::tuple_cat(this->params, std::tuple<T>{std::move(val)});                                               \
+        return Arithmetics<decltype(params)>{"(" + query + " / ?)", std::move(params)};                                          \
+    }                                                                                                                            \
+    auto operator==(T val) const {                                                                                               \
+        auto params = std::tuple_cat(this->params, std::tuple<T>{std::move(val)});                                               \
+        return Condition<decltype(params)>{query + " = ?", std::move(params)};                                                   \
+    }                                                                                                                            \
+    auto operator!=(T val) const {                                                                                               \
+        auto params = std::tuple_cat(this->params, std::tuple<T>{std::move(val)});                                               \
+        return Condition<decltype(params)>{query + " != ?", std::move(params)};                                                  \
+    }                                                                                                                            \
+    auto operator>(T val) const {                                                                                                \
+        auto params = std::tuple_cat(this->params, std::tuple<T>{std::move(val)});                                               \
+        return Condition<decltype(params)>{query + " > ?", std::move(params)};                                                   \
+    }                                                                                                                            \
+    auto operator<(T val) const {                                                                                                \
+        auto params = std::tuple_cat(this->params, std::tuple<T>{std::move(val)});                                               \
+        return Condition<decltype(params)>{query + " < ?", std::move(params)};                                                   \
+    }                                                                                                                            \
+    auto operator>=(T val) const {                                                                                               \
+        auto params = std::tuple_cat(this->params, std::tuple<T>{std::move(val)});                                               \
+        return Condition<decltype(params)>{query + " >= ?", std::move(params)};                                                  \
+    }                                                                                                                            \
+    auto operator<=(T val) const {                                                                                               \
+        auto params = std::tuple_cat(this->params, std::tuple<T>{std::move(val)});                                               \
+        return Condition<decltype(params)>{query + " <= ?", std::move(params)};                                                  \
+    }
 
-        // for alter_table
-        template <typename Table, typename T>
-        auto add_column(const Column<Table, T> &col) const {
-            return *this + Statement<>{std::string(" add ") + col.column()};
-        }
+        ARITHMETIC_OPERATOR_FOR(int)
+        ARITHMETIC_OPERATOR_FOR(double)
+        ARITHMETIC_OPERATOR_FOR(std::string)
 
-        template <typename Table, typename T>
-        auto drop_column(const Column<Table, T> &col) const {
-            return *this + Statement<>{std::string(" drop column ") + col.name()};
-        }
-
-        template <typename OParams, typename ORow>
-        auto where(const Statement<OParams, ORow> &condition) const {
-            return *this + Statement<>{" where "} + condition;
-        }
-
-        template <typename OParams, typename ORow>
-        auto on(const Statement<OParams, ORow> &condition) const {
-            return *this + Statement<>{" on "} + condition;
-        }
-
-        auto values(Params params) const {
-            auto pch  = detail::repeated_placeholders<std::tuple_size_v<Params>>::value();
-            auto stmt = Statement<Params>{query + " values (" + pch + ")", std::move(params)};
-            return stmt;
-        }
-
-        auto values(Params params, Params params2) const {
-            auto pch   = detail::repeated_placeholders<std::tuple_size_v<Params>>::value();
-            auto stmt  = Statement<Params>{query + " values (" + pch + ")", std::move(params)};
-            auto stmt2 = Statement<Params>{", (" + pch + ")", std::move(params2)};
-            return stmt + stmt2;
-        }
-
-        auto values(Params params, Params params2, Params params3) const {
-            auto pch   = detail::repeated_placeholders<std::tuple_size_v<Params>>::value();
-            auto stmt  = Statement<Params>{query + " values (" + pch + ")", std::move(params)};
-            auto stmt2 = Statement<Params>{", (" + pch + ")", std::move(params2)};
-            auto stmt3 = Statement<Params>{", (" + pch + ")", std::move(params3)};
-            return stmt + stmt2 + stmt3;
-        }
-
-        auto values(std::vector<Params> params) const {
-            const auto pch = '(' + detail::repeated_placeholders<std::tuple_size_v<Params>>::value() + ')';
-
-            std::string pchs = "";
-            for (size_t i = 0; i < params.size(); i++)
-                pchs += (i == 0 ? "" : ", ") + pch;
-
-            auto stmt = Statement<std::tuple<std::vector<Params>>>{query + " values " + pchs, {std::move(params)}};
-            return stmt;
-        }
-
-        template <typename... Tables, typename... Ts>
-        auto order_by(const Column<Tables, Ts> &...cols) const {
-            return *this + Statement<>{" order by " + cpx::sql::detail::string_cat(", ", cols.qualified_name()...)};
-        };
-
-        auto limit(std::optional<size_t> val) const {
-            if (val.has_value())
-                return *this + Statement<>{" limit " + std::to_string(*val)};
-            else
-                return *this;
-        };
-
-        auto offset(std::optional<size_t> val) const {
-            if (val.has_value())
-                return *this + Statement<>{" offset " + std::to_string(*val)};
-            else
-                return *this;
-        };
+#undef ARITHMETIC_OPERATOR_FOR
     };
 
     template <typename T>
@@ -335,22 +459,33 @@ namespace cpx::sql {
         }
 
         std::string qualified_name() const {
-            const char *table = Table::TableName;
-            return (table ? std::string(Table::TableName) + "." : std::string()) + std::string(name_);
+            const char    *table    = Table::TableName;
+            constexpr bool is_tuple = cpx::is_tuple_v<T>;
+            return (is_tuple ? "(" : "") +                                                              //
+                   (table ? std::string(Table::TableName) + "." : std::string()) + std::string(name_) + //
+                   (is_tuple ? ")" : "");
         }
 
         Alias<T> as(const Alias<T> &alias) const {
             return qualified_name() + " as " + alias.name();
         }
 
+        template <typename Tbl, typename U>
+        auto operator,(const Column<Tbl, U> &other) const {
+            using R = decltype(std::tuple_cat(
+                std::declval<std::conditional_t<cpx::is_tuple_v<T>, T, std::tuple<T>>>(),
+                std::declval<std::conditional_t<cpx::is_tuple_v<U>, U, std::tuple<U>>>()
+            ));
+            return Alias<R>{qualified_name() + ", " + other.qualified_name()};
+        }
 
         /*
-         * with other column
+         * with Self
          */
 
         template <typename Tbl, typename U>
-        auto operator=(const Column<Tbl, U> &other) const {
-            return Statement<>{name() + " = " + other.qualified_name()};
+        Assignment<> operator=(const Column<Tbl, U> &other) const {
+            return {name() + " = " + other.qualified_name()};
         }
         template <typename Tbl, typename U>
         auto operator+(const Column<Tbl, U> &other) const {
@@ -373,28 +508,28 @@ namespace cpx::sql {
             return Alias<R>('(' + qualified_name() + " / " + other.qualified_name() + ')');
         }
         template <typename Tbl, typename U>
-        auto operator==(const Column<Tbl, U> &other) const {
-            return Statement<>{qualified_name() + " = " + other.qualified_name()};
+        Condition<> operator==(const Column<Tbl, U> &other) const {
+            return {qualified_name() + " = " + other.qualified_name()};
         }
         template <typename Tbl, typename U>
-        auto operator!=(const Column<Tbl, U> &other) const {
-            return Statement<>{qualified_name() + " != " + other.qualified_name()};
+        Condition<> operator!=(const Column<Tbl, U> &other) const {
+            return {qualified_name() + " != " + other.qualified_name()};
         }
         template <typename Tbl, typename U>
-        auto operator>(const Column<Tbl, U> &other) const {
-            return Statement<>{qualified_name() + " > " + other.qualified_name()};
+        Condition<> operator>(const Column<Tbl, U> &other) const {
+            return {qualified_name() + " > " + other.qualified_name()};
         }
         template <typename Tbl, typename U>
-        auto operator<(const Column<Tbl, U> &other) const {
-            return Statement<>{qualified_name() + " < " + other.qualified_name()};
+        Condition<> operator<(const Column<Tbl, U> &other) const {
+            return {qualified_name() + " < " + other.qualified_name()};
         }
         template <typename Tbl, typename U>
-        auto operator>=(const Column<Tbl, U> &other) const {
-            return Statement<>{qualified_name() + " >= " + other.qualified_name()};
+        Condition<> operator>=(const Column<Tbl, U> &other) const {
+            return {qualified_name() + " >= " + other.qualified_name()};
         }
         template <typename Tbl, typename U>
-        auto operator<=(const Column<Tbl, U> &other) const {
-            return Statement<>{qualified_name() + " <= " + other.qualified_name()};
+        Condition<> operator<=(const Column<Tbl, U> &other) const {
+            return {qualified_name() + " <= " + other.qualified_name()};
         }
 
 
@@ -402,38 +537,38 @@ namespace cpx::sql {
          * with T
          */
 
-        Statement<std::tuple<T>> operator=(const T &val) const {
-            return {name() + " = ?", {val}};
+        Assignment<std::tuple<T>> operator=(T val) const {
+            return {name() + " = ?", {std::move(val)}};
         }
-        Statement<std::tuple<T>> operator+(const T &val) const {
-            return {qualified_name() + " + ?", {val}};
+        Arithmetics<std::tuple<T>> operator+(T val) const {
+            return {"(" + qualified_name() + " + ?)", {std::move(val)}};
         }
-        Statement<std::tuple<T>> operator-(const T &val) const {
-            return {qualified_name() + " - ?", {val}};
+        Arithmetics<std::tuple<T>> operator-(T val) const {
+            return {"(" + qualified_name() + " - ?)", {std::move(val)}};
         }
-        Statement<std::tuple<T>> operator*(const T &val) const {
-            return {qualified_name() + " * ?", {val}};
+        Arithmetics<std::tuple<T>> operator*(T val) const {
+            return {"(" + qualified_name() + " * ?)", {std::move(val)}};
         }
-        Statement<std::tuple<T>> operator/(const T &val) const {
-            return {qualified_name() + " / ?", {val}};
+        Arithmetics<std::tuple<T>> operator/(T val) const {
+            return {"(" + qualified_name() + " / ?)", {std::move(val)}};
         }
-        Statement<std::tuple<T>> operator==(const T &val) const {
-            return {qualified_name() + " = ?", {val}};
+        Condition<std::tuple<T>> operator==(T val) const {
+            return {qualified_name() + " = ?", {std::move(val)}};
         }
-        Statement<std::tuple<T>> operator!=(const T &val) const {
-            return {qualified_name() + " != ?", {val}};
+        Condition<std::tuple<T>> operator!=(T val) const {
+            return {qualified_name() + " != ?", {std::move(val)}};
         }
-        Statement<std::tuple<T>> operator>(const T &val) const {
-            return {qualified_name() + " > ?", {val}};
+        Condition<std::tuple<T>> operator>(T val) const {
+            return {qualified_name() + " > ?", {std::move(val)}};
         }
-        Statement<std::tuple<T>> operator<(const T &val) const {
-            return {qualified_name() + " < ?", {val}};
+        Condition<std::tuple<T>> operator<(T val) const {
+            return {qualified_name() + " < ?", {std::move(val)}};
         }
-        Statement<std::tuple<T>> operator>=(const T &val) const {
-            return {qualified_name() + " >= ?", {val}};
+        Condition<std::tuple<T>> operator>=(T val) const {
+            return {qualified_name() + " >= ?", {std::move(val)}};
         }
-        Statement<std::tuple<T>> operator<=(const T &val) const {
-            return {qualified_name() + " <= ?", {val}};
+        Condition<std::tuple<T>> operator<=(T val) const {
+            return {qualified_name() + " <= ?", {std::move(val)}};
         }
 
 
@@ -442,89 +577,89 @@ namespace cpx::sql {
          */
 
         template <size_t N>
-        Statement<std::tuple<std::string>> operator=(const char (&val)[N]) const {
+        Assignment<std::tuple<std::string>> operator=(const char (&val)[N]) const {
             static_assert(std::is_same_v<T, std::string>);
-            return {name() + " = ?", {val}};
+            return {name() + " = ?", {std::string(val, N - 1)}};
         }
         template <size_t N>
-        Statement<std::tuple<std::string>> operator==(const char (&val)[N]) const {
+        Condition<std::tuple<std::string>> operator==(const char (&val)[N]) const {
             static_assert(std::is_same_v<T, std::string>);
-            return {qualified_name() + " = ?", {val}};
+            return {qualified_name() + " = ?", {std::string(val, N - 1)}};
         }
         template <size_t N>
-        Statement<std::tuple<std::string>> operator!=(const char (&val)[N]) const {
+        Condition<std::tuple<std::string>> operator!=(const char (&val)[N]) const {
             static_assert(std::is_same_v<T, std::string>);
-            return {qualified_name() + " != ?", {val}};
+            return {qualified_name() + " != ?", {std::string(val, N - 1)}};
         }
         template <size_t N>
-        Statement<std::tuple<std::string>> operator>(const char (&val)[N]) const {
+        Condition<std::tuple<std::string>> operator>(const char (&val)[N]) const {
             static_assert(std::is_same_v<T, std::string>);
-            return {qualified_name() + " > ?", {val}};
+            return {qualified_name() + " > ?", {std::string(val, N - 1)}};
         }
         template <size_t N>
-        Statement<std::tuple<std::string>> operator<(const char (&val)[N]) const {
+        Condition<std::tuple<std::string>> operator<(const char (&val)[N]) const {
             static_assert(std::is_same_v<T, std::string>);
-            return {qualified_name() + " < ?", {val}};
+            return {qualified_name() + " < ?", {std::string(val, N - 1)}};
         }
         template <size_t N>
-        Statement<std::tuple<std::string>> operator>=(const char (&val)[N]) const {
+        Condition<std::tuple<std::string>> operator>=(const char (&val)[N]) const {
             static_assert(std::is_same_v<T, std::string>);
-            return {qualified_name() + " >= ?", {val}};
+            return {qualified_name() + " >= ?", {std::string(val, N - 1)}};
         }
         template <size_t N>
-        Statement<std::tuple<std::string>> operator<=(const char (&val)[N]) const {
+        Condition<std::tuple<std::string>> operator<=(const char (&val)[N]) const {
             static_assert(std::is_same_v<T, std::string>);
-            return {qualified_name() + " <= ?", {val}};
+            return {qualified_name() + " <= ?", {std::string(val, N - 1)}};
         }
 
 
         /*
-         * with statement
+         * with Arithmetics
          */
 
-        template <typename Params, typename Row>
-        auto operator=(const Statement<Params, Row> &stmt) const {
-            return Statement<>{name() + " = "} + stmt;
+        template <typename Params>
+        Assignment<Params> operator=(Arithmetics<Params> ari) const {
+            return {name() + " = " + ari.query, std::move(ari.params)};
         }
-        template <typename Params, typename Row>
-        auto operator+(const Statement<Params, Row> &stmt) const {
-            return Statement<>{qualified_name() + " + "} + stmt;
+        template <typename Params>
+        Arithmetics<Params> operator+(Arithmetics<Params> ari) const {
+            return {"(" + qualified_name() + " + " + ari.query + ")", std::move(ari.params)};
         }
-        template <typename Params, typename Row>
-        auto operator-(const Statement<Params, Row> &stmt) const {
-            return Statement<>{qualified_name() + " - "} + stmt;
+        template <typename Params>
+        Arithmetics<Params> operator-(Arithmetics<Params> ari) const {
+            return {"(" + qualified_name() + " - " + ari.query + ")", std::move(ari.params)};
         }
-        template <typename Params, typename Row>
-        auto operator*(const Statement<Params, Row> &stmt) const {
-            return Statement<>{qualified_name() + " * "} + stmt;
+        template <typename Params>
+        Arithmetics<Params> operator*(Arithmetics<Params> ari) const {
+            return {"(" + qualified_name() + " * " + ari.query + ")", std::move(ari.params)};
         }
-        template <typename Params, typename Row>
-        auto operator/(const Statement<Params, Row> &stmt) const {
-            return Statement<>{qualified_name() + " / "} + stmt;
+        template <typename Params>
+        Arithmetics<Params> operator/(Arithmetics<Params> ari) const {
+            return {"(" + qualified_name() + " / " + ari.query + ")", std::move(ari.params)};
         }
-        template <typename Params, typename Row>
-        auto operator==(const Statement<Params, Row> &stmt) const {
-            return Statement<>{qualified_name() + " = "} + stmt;
+        template <typename Params>
+        Condition<Params> operator==(Arithmetics<Params> ari) const {
+            return {qualified_name() + " = " + ari.query, std::move(ari.params)};
         }
-        template <typename Params, typename Row>
-        auto operator!=(const Statement<Params, Row> &stmt) const {
-            return Statement<>{qualified_name() + " != "} + stmt;
+        template <typename Params>
+        Condition<Params> operator!=(Arithmetics<Params> ari) const {
+            return {qualified_name() + " != " + ari.query, std::move(ari.params)};
         }
-        template <typename Params, typename Row>
-        auto operator>(const Statement<Params, Row> &stmt) const {
-            return Statement<>{qualified_name() + " > "} + stmt;
+        template <typename Params>
+        Condition<Params> operator>(Arithmetics<Params> ari) const {
+            return {qualified_name() + " > " + ari.query, std::move(ari.params)};
         }
-        template <typename Params, typename Row>
-        auto operator<(const Statement<Params, Row> &stmt) const {
-            return Statement<>{qualified_name() + " < "} + stmt;
+        template <typename Params>
+        Condition<Params> operator<(Arithmetics<Params> ari) const {
+            return {qualified_name() + " < " + ari.query, std::move(ari.params)};
         }
-        template <typename Params, typename Row>
-        auto operator>=(const Statement<Params, Row> &stmt) const {
-            return Statement<>{qualified_name() + " >= "} + stmt;
+        template <typename Params>
+        Condition<Params> operator>=(Arithmetics<Params> ari) const {
+            return {qualified_name() + " >= " + ari.query, std::move(ari.params)};
         }
-        template <typename Params, typename Row>
-        auto operator<=(const Statement<Params, Row> &stmt) const {
-            return Statement<>{qualified_name() + " <= "} + stmt;
+        template <typename Params>
+        Condition<Params> operator<=(Arithmetics<Params> ari) const {
+            return {qualified_name() + " <= " + ari.query, std::move(ari.params)};
         }
 
 
@@ -535,41 +670,164 @@ namespace cpx::sql {
             return qualified_name() + " desc";
         }
 
-        Statement<std::tuple<std::vector<T>>> in(std::vector<T> values) const {
-            std::string pch = "";
-            for (size_t i = 0; i < values.size(); i++)
-                pch += (i == 0 ? "(" : ", ") + std::string("?");
-
-            if (values.empty())
-                pch = "()";
-            else
-                pch += ')';
-
-            return {qualified_name() + " in " + pch, {std::move(values)}};
+        Condition<std::tuple<std::vector<T>>> in(std::vector<T> values) const {
+            return {qualified_name() + " in " + get_placeholders(values.size()), {std::move(values)}};
         }
-
-        Statement<std::tuple<std::vector<T>>> not_in(std::vector<T> values) const {
-            std::string pch = "";
-            for (size_t i = 0; i < values.size(); i++)
-                pch += (i == 0 ? "(" : ", ") + std::string("?");
-
-            if (values.empty())
-                pch = "()";
-            else
-                pch += ')';
-
-            return {qualified_name() + " not in " + pch, {std::move(values)}};
+        Condition<std::tuple<std::vector<T>>> not_in(std::vector<T> values) const {
+            return {qualified_name() + " not in " + get_placeholders(values.size()), {std::move(values)}};
         }
-
         template <typename Params, typename Row>
-        auto in(const Statement<Params, Row> &stmt) const {
-            return Statement<>{qualified_name() + " in ("} + stmt + Statement<>{")"};
+        Condition<Params> in(Statement<Params, Row> stmt) const {
+            return {qualified_name() + " in (" + stmt.query + ")", std::move(stmt.params)};
+        }
+        template <typename Params, typename Row>
+        Condition<Params> not_in(Statement<Params, Row> stmt) const {
+            return {qualified_name() + " not in (" + stmt.query + ")", std::move(stmt.params)};
         }
 
-        template <typename Params, typename Row>
-        auto not_in(const Statement<Params, Row> &stmt) const {
-            return Statement<>{qualified_name() + " not in ("} + stmt + Statement<>{")"};
+    protected:
+        static std::string get_placeholders(size_t size) {
+            if (size == 0)
+                return "()";
+
+            std::string placeholder = "?";
+            if constexpr (cpx::is_tuple_v<T>)
+                placeholder = "(" + cpx::sql::detail::repeated_placeholders<std::tuple_size_v<T>>::value() + ")";
+
+            std::string pch = "";
+            for (size_t i = 0; i < size; i++)
+                pch += (i == 0 ? "(" : ", ") + placeholder;
+            pch += ')';
+
+            return pch;
         }
+    };
+
+    // TODO: tuple reference?
+    template <typename Params, typename Row>
+    struct Statement {
+        static_assert(cpx::is_tuple_v<Params> && cpx::is_tuple_v<Row>);
+
+        using params_type = Params;
+        using row_type    = Row;
+
+        std::string query;
+        Params      params = {};
+
+        template <typename OParams, typename ORow>
+        auto operator+(const Statement<OParams, ORow> &other) const {
+            using P = decltype(std::tuple_cat(std::declval<Params>(), std::declval<OParams>()));
+            using R = decltype(std::tuple_cat(std::declval<Row>(), std::declval<ORow>()));
+            return Statement<P, R>{query + other.query, std::tuple_cat(params, other.params)};
+        }
+
+        template <typename... Tables, typename... Ts>
+        auto select(const Column<Tables, Ts> &...cols) const {
+            static_assert(sizeof...(cols) == std::tuple_size_v<Params>, "Number of columns must match the number of params");
+            return Statement<>{query + " select " + cpx::sql::detail::string_cat(", ", cols.qualified_name()...)};
+        };
+
+        template <typename... OParams>
+        auto set(const Assignment<OParams> &...assignments) const {
+            return *this + Statement<>{" set "} + (assignments, ...).into_statement();
+        }
+
+        template <typename Table>
+        auto from(const Table &table) const {
+            return *this + Statement<>{std::string(" from ") + table.TableName};
+        }
+
+        template <typename Table>
+        auto join(const Table &table) const {
+            return *this + Statement<>{std::string(" join ") + table.TableName};
+        }
+
+        template <typename Table>
+        auto left_join(const Table &table) const {
+            return *this + Statement<>{std::string(" left join ") + table.TableName};
+        }
+
+        template <typename Table>
+        auto inner_join(const Table &table) const {
+            return *this + Statement<>{std::string(" inner join ") + table.TableName};
+        }
+
+        template <typename Table>
+        auto right_join(const Table &table) const {
+            return *this + Statement<>{std::string(" right join ") + table.TableName};
+        }
+
+        // for alter_table
+        template <typename Table, typename T>
+        auto add_column(const Column<Table, T> &col) const {
+            return *this + Statement<>{std::string(" add ") + col.column()};
+        }
+
+        template <typename Table, typename T>
+        auto drop_column(const Column<Table, T> &col) const {
+            return *this + Statement<>{std::string(" drop column ") + col.name()};
+        }
+
+        template <typename OParams>
+        auto where(const Condition<OParams> &condition) const {
+            return *this + Statement<>{" where "} + condition.into_statement();
+        }
+
+        template <typename OParams>
+        auto on(const Condition<OParams> &condition) const {
+            return *this + Statement<>{" on "} + condition.into_statement();
+        }
+
+        auto values(Params params) const {
+            auto pch  = detail::repeated_placeholders<std::tuple_size_v<Params>>::value();
+            auto stmt = Statement<Params>{query + " values (" + pch + ")", std::move(params)};
+            return stmt;
+        }
+
+        auto values(Params params, Params params2) const {
+            auto pch   = detail::repeated_placeholders<std::tuple_size_v<Params>>::value();
+            auto stmt  = Statement<Params>{query + " values (" + pch + ")", std::move(params)};
+            auto stmt2 = Statement<Params>{", (" + pch + ")", std::move(params2)};
+            return stmt + stmt2;
+        }
+
+        auto values(Params params, Params params2, Params params3) const {
+            auto pch   = detail::repeated_placeholders<std::tuple_size_v<Params>>::value();
+            auto stmt  = Statement<Params>{query + " values (" + pch + ")", std::move(params)};
+            auto stmt2 = Statement<Params>{", (" + pch + ")", std::move(params2)};
+            auto stmt3 = Statement<Params>{", (" + pch + ")", std::move(params3)};
+            return stmt + stmt2 + stmt3;
+        }
+
+        auto values(std::vector<Params> params) const {
+            const auto pch = '(' + detail::repeated_placeholders<std::tuple_size_v<Params>>::value() + ')';
+
+            std::string pchs = "";
+            for (size_t i = 0; i < params.size(); i++)
+                pchs += (i == 0 ? "" : ", ") + pch;
+
+            auto stmt = Statement<std::tuple<std::vector<Params>>>{query + " values " + pchs, {std::move(params)}};
+            return stmt;
+        }
+
+        template <typename... Tables, typename... Ts>
+        auto order_by(const Column<Tables, Ts> &...cols) const {
+            return *this + Statement<>{" order by " + cpx::sql::detail::string_cat(", ", cols.qualified_name()...)};
+        };
+
+        auto limit(std::optional<size_t> val) const {
+            if (val.has_value())
+                return *this + Statement<>{" limit " + std::to_string(*val)};
+            else
+                return *this;
+        };
+
+        auto offset(std::optional<size_t> val) const {
+            if (val.has_value())
+                return *this + Statement<>{" offset " + std::to_string(*val)};
+            else
+                return *this;
+        };
     };
 
     template <const auto &table, typename... Tables, typename... Ts>

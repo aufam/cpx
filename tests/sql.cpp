@@ -43,16 +43,17 @@ TEST(sql, update) {
                  .set(products.price = 9.99, products.stock = products.stock - 10) //
                  .where(products.id == 42);
 
-    EXPECT_EQ(p.query, "update products set price = ?, stock = products.stock - ? where products.id = ?");
+    EXPECT_EQ(p.query, "update products set price = ?, stock = (products.stock - ?) where products.id = ?");
     EXPECT_EQ(p.params, (std::tuple<double, int, int>{9.99, 10, 42}));
     EXPECT_EQ(decltype(p)::row_type{}, std::tuple<>{});
 }
 
 TEST(sql, insert) {
-    auto u = sql::insert_into<users>(users.name, users.age) //
-                 .values({
-                     {"Sucipto", 20},
-                     {"Sugeng",  25}
+    auto u = //
+        sql::insert_into<users>(users.name, users.age)
+            .values({
+                {"Sucipto", 20},
+                {"Sugeng",  25}
     });
     EXPECT_EQ(u.query, "insert into users (name, age) values (?, ?), (?, ?)");
     EXPECT_EQ(

@@ -162,15 +162,16 @@ TEST(sqlite3, workflow) {
     }
 
     {
-        const auto stmt = sql::select( //
-                              employees.id,
-                              employees.name,
-                              employees.salary,
-                              employees.bonus,
-                              (employees.salary + employees.bonus).as(total_income)
-        )
-                              .from(employees)
-                              .order_by(total_income);
+        const auto stmt = //
+            sql::select(
+                employees.id,
+                employees.name,
+                employees.salary,
+                employees.bonus,
+                (employees.salary + employees.bonus).as(total_income)
+            )
+                .from(employees)
+                .order_by(total_income);
 
         auto rows = db(stmt);
 

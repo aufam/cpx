@@ -62,7 +62,7 @@ int main() {
     {
         auto stmt = sql::select(products.price, products.stock)
                         .from(products)
-                        .where(products.price > 4.99 || products.stock <= 10)
+                        .where(products.price * 3 == products.stock * 10 - 100)
                         .order_by(products.stock, products.price.desc());
         fmt::println("{}", stmt);
     }
@@ -70,7 +70,11 @@ int main() {
         auto stmt = sql::insert_into<users>(users.id, users.age)
                         .select(products.id, products.stock)
                         .from(products)
-                        .where(products.id.in({42, 43}));
+                        .where((products.id, products.stock)
+                                   .in({
+                                       {42, 69},
+                                       {42, 69}
+        }));
         fmt::println("{}", stmt);
     }
     {
