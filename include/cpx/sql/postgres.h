@@ -34,6 +34,10 @@ namespace cpx::sql::postgres {
     using Deserialize = ::cpx::serde::Deserialize<PGresult, To, Enable>;
 } // namespace cpx::sql::postgres
 
+namespace cpx {
+    namespace postgres = cpx::sql::postgres;
+}
+
 namespace cpx::sql::postgres::detail {
     std::string convert_placeholders(const std::string &query) {
         std::string result;

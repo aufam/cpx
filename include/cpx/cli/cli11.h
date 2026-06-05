@@ -36,6 +36,10 @@ namespace cpx::cli::cli11 {
     std::string help(const std::string &app_desc, int argc, char **argv, T &v);
 } // namespace cpx::cli::cli11
 
+namespace cpx {
+    namespace cli11 = cpx::cli::cli11;
+}
+
 namespace cpx::cli::cli11::detail {
     inline std::string generate_option_name(const cpx::TagInfo &ti, bool subcommand = false) {
         if (ti.positional || subcommand)

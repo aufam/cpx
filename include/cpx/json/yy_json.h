@@ -66,6 +66,10 @@ namespace cpx::json::yy_json {
     void dump(const T &&val, yyjson_write_flag = YYJSON_WRITE_NOFLAG, const yyjson_alc *alc = nullptr) = delete;
 } // namespace cpx::json::yy_json
 
+namespace cpx {
+    namespace yy_json = cpx::json::yy_json;
+}
+
 // bool
 template <>
 struct SERIALIZE(bool) {

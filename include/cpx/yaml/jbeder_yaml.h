@@ -74,6 +74,10 @@ namespace cpx::yaml::jbeder_yaml {
     void dump(std::ostream &os, const T &val);
 } // namespace cpx::yaml::jbeder_yaml
 
+namespace cpx {
+    namespace jbeder_yaml = cpx::yaml::jbeder_yaml;
+}
+
 namespace cpx::yaml::jbeder_yaml::detail {
     inline std::string type(const __yaml_cpp::Node &val) {
         switch (val.Type()) {

@@ -78,6 +78,10 @@ namespace cpx::toml::toruniina_toml {
     void dump(std::ostream &os, const T &val, const spec &s = spec::default_version());
 } // namespace cpx::toml::toruniina_toml
 
+namespace cpx {
+    namespace toruniina_toml = cpx::toml::toruniina_toml;
+}
+
 namespace cpx::toml::toruniina_toml::detail {
     inline std::string type(const __toml11::value &val) {
         switch (val.type()) {

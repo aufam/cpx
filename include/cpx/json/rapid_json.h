@@ -107,6 +107,10 @@ namespace cpx::json::rapid_json {
     void dump(std::ostream &, const T &&val) = delete;
 } // namespace cpx::json::rapid_json
 
+namespace cpx {
+    namespace rapid_json = cpx::json::rapid_json;
+}
+
 namespace cpx::json::rapid_json::detail {
     inline std::string type(const rapidjson::Value &val) {
         switch (val.GetType()) {

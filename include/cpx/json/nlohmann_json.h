@@ -41,6 +41,10 @@ namespace cpx::json::nlohmann_json {
     }
 } // namespace cpx::json::nlohmann_json
 
+namespace cpx {
+    namespace nlohmann_json = cpx::json::nlohmann_json;
+}
+
 #define SERIALIZE(...)      cpx::serde::Serialize<nlohmann::json, __VA_ARGS__>
 #define DESERIALIZE(...)    cpx::serde::Deserialize<nlohmann::json, __VA_ARGS__>
 #define SERIALIZABLE(...)   cpx::serde::is_serializable_v<nlohmann::json, __VA_ARGS__>

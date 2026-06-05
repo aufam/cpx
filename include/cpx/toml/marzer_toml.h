@@ -73,6 +73,10 @@ namespace cpx::toml::marzer_toml {
     void dump(std::ostream &, const T &val);
 } // namespace cpx::toml::marzer_toml
 
+namespace cpx {
+    namespace marzer_toml = cpx::toml::marzer_toml;
+}
+
 // bool
 template <>
 struct SERIALIZE(bool) {

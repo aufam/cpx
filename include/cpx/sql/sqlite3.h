@@ -65,6 +65,10 @@ namespace cpx::sql::sqlite3 {
     };
 } // namespace cpx::sql::sqlite3
 
+namespace cpx {
+    namespace sqlite3 = cpx::sql::sqlite3;
+}
+
 /*
  * Implementations
  */
