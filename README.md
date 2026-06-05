@@ -6,16 +6,16 @@
 
 ## Features
 
-- **Tag-based serialization/deserialization**
-  Unified interface for JSON, TOML, YAML, Protobuf, MessagePack, CLI, and SQL
+- **Tag-based reflection**
+  Unified interface for JSON, TOML, YAML, Protobuf, MessagePack, CLI
+
+- **SQL query builder**
 
 - **Composable iterator utilities**
   `iterate`, `enumerate`, `zip`, `map`, `drop`, `take`, `collect`
 
 - **RAII utilities**
   Scope-exit guard via `defer`
-
-- **SQL query builder**
 
 - **CLI argument parsing**
 
@@ -44,6 +44,12 @@ It does not bundle or enforce specific libraries, instead it provides adapters s
 
 - **CLI parsing**
   [`CLI11`](https://github.com/CLIUtils/CLI11)
+
+- **Struct reflection**
+  [`Boost.PFR`](https://github.com/boostorg/pfr)
+
+- **Enum reflection**
+  [`magic_enum`](https://github.com/Neargye/magic_enum)
 
 - **JSON**
   [`yyjson`](https://github.com/ibireme/yyjson), [`nlohmann::json`](https://github.com/nlohmann/json), [`rapidjson`](https://github.com/Tencent/rapidjson)
@@ -81,3 +87,278 @@ See [`examples/`](examples/) for runnable demos:
 | [`5-protobuf`](examples/5-protobuf/main.cpp) | Protobuf serialization                  |
 
 For more detailed usage, check [`tests/`](tests/).
+
+### Struct Reflection
+
+You can specialize `Reflect<T>` for your custom types:
+```cpp
+#include <cpx/reflect.h>
+
+struct User {
+    std::string name;
+    int         age;
+    std::tm     created_at;
+};
+
+template <>
+struct cpx::Reflect<User> : cpx::Fields<
+    cpx::Reflect<User>, // CRTP
+    &User::name,
+    &User::age,
+    &User::created_at
+> {
+    static constexpr TagInfo name       = "name";
+    static constexpr TagInfo age        = "age";
+    static constexpr TagInfo created_at = "created-at";
+
+    static constexpr tags_type tags() {
+        return std::tie(name, age, created_at);
+    }
+};
+```
+
+You can then use your favorite serializer library:
+```cpp
+#include <cpx/yaml/jbeder_yaml.h>
+
+User u = {"Sucipto", 24, now()};
+std::string yaml = cpx::jbeder_yaml::dump(u);
+```
+
+### Format-specific reflection
+
+You can specialize reflection for a specific format.
+
+For example, JSON may prefer camelCase while others use kebab-case:
+
+```cpp
+#include <cpx/json/json.h>
+
+template <>
+struct cpx::json::Reflect<User> : cpx::Fields<
+    cpx::json::Reflect<User>,
+    &User::name,
+    &User::age,
+    &User::created_at
+> {
+    static constexpr TagInfo created_at = "createdAt";
+
+    static constexpr tags_type tags() {
+        using Base = cpx::Reflect<User>;
+        return std::tie(Base::name, Base::age, created_at);
+    }
+};
+```
+
+Now:
+
+```cpp
+cpx::jbeder_yaml::dump(u);
+// name: Sucipto
+// age: 24
+// created-at: ...
+
+cpx::nlohmann_json::dump(u);
+// {"name":"Sucipto","age":24,"createdAt":"..."}
+```
+
+### Third-party library integration
+
+`cpx` does not care on how your third-party libraries are organized.
+
+If the header guard matches, cpx will not try to include the default path.
+
+For example:
+```cpp
+#include "you/might/locate/nlohmann_json/in/weird/path/json.h"
+#include "as/well/as/toml++.h"
+#include <cpx/json/nlohmann_json.h>
+#include <cpx/toml/marzer_toml.h>
+```
+
+For libraries with native ADL serializers (such as `fmt` or `nlohmann::json`), `cpx` provides automatic integration:
+```cpp
+fmt::println("{}", u);
+nlohmann::json j = u;
+```
+
+For libraries with SAX streaming support (avoid building an intermediate DOM), cpx provides a streming interface:
+```cpp
+#include <cpx/json/rapid_json.h>
+#include <iostream>
+
+User u = {"Sucipto", 24, now()};
+std::cout << cpx::rapid_json::io << u << std::endl;
+```
+
+
+> **Note**
+>
+> `cpx` is only tested against the third-party versions listed in `CMakeLists.txt`.
+
+### Primitive type reflection
+
+As the name suggests, `Reflect<T>` is not exclusive to field reflection. It can also act as a mirror for already-known types.
+
+For example:
+
+```cpp
+template <>
+struct cpx::Reflect<MyString> {
+    static constexpr bool value = true;
+
+    using const_type = std::string_view; // for serialization
+    using type = std::string; // for deserialization
+
+    static const_type of(const MyString& str) {
+        return str.view();
+    }
+
+    static decltype(auto) of(MyString& str) {
+        // if MyString has mutable reference to std::string
+        std::string& ref = str.get_mut_str();
+        return ref;
+
+        // otherwise, you may need some kind of proxy type that
+        // converts string at destructor
+        struct Proxy {
+            MyString& str;
+            std::string proxy;
+
+            ~Proxy() noexcept(false) {
+                str = MyString::from_std(proxy);
+            }
+
+            operator std::string&() {
+                return proxy;
+            }
+        };
+
+        return Proxy{str};
+    }
+};
+```
+
+### Tuple reflection
+
+`Reflect<T> : Fields<...> {...}` is just a convenient way to structure tagged fields.
+
+Under the hood, reflection is essentially a tuple of tagged references.
+
+You can construct one manually:
+
+```cpp
+std::string name = "Sucipto";
+int         age  = 24;
+
+TagInfo tag_name = "name";
+TagInfo tag_age  = "age";
+
+auto u = std::make_tuple(
+    cpx::tag_tie(name, tag_name),
+    cpx::tag_tie(age, tag_age)
+);
+
+fmt::println("{}", u); // (name="Sucipto", age=24)
+```
+
+### Tag properties
+
+`TagInfo` stores metadata associated with a reflected field.
+
+By default:
+
+```cpp
+struct TagInfo {
+    std::string_view key   = "";
+    std::string_view oneof = "";
+
+    // CLI
+    std::string_view short_ = "";
+    std::string_view env    = "";
+    std::string_view help   = "";
+
+    // Protobuf / MessagePack
+    int field_number = 0;
+
+    // General serialization behavior
+    bool omitempty   = false; // when serializing, omit zeros, nullopt, and .empty()
+    bool skipmissing = false; // when deserializing, skip missing field instead of throw
+    bool noserde     = false;
+    bool positional  = false; // for CLI
+
+    // Protobuf encoding
+    bool fixed  = false;
+    bool zigzag = false;
+    bool packed = true;
+};
+```
+
+#### String literal syntax
+
+You can construct `TagInfo` directly from a string literal:
+
+```cpp
+TagInfo key = "key,omitempty,skipmissing";
+```
+
+This is equivalent to:
+
+```cpp id="w5mec4"
+TagInfo key;
+key.key         = "key";
+key.omitempty   = true;
+key.skipmissing = true;
+```
+
+#### Protobuf example
+
+```cpp
+TagInfo user =
+    "user,"
+    "field_number=1,"
+    "omitempty,"
+    "skipmissing,"
+    "env=USER,"
+    "help=Define a username";
+
+TagInfo age =
+    "age,"
+    "field_number=2,"
+    "omitempty,"
+    "skipmissing,"
+    "fixed,"
+    "help=Specify the user age";
+```
+
+#### Oneof example
+
+Fields can belong to a `oneof` group.
+
+The unique identifier must be shared among all members of the group.
+
+If oneof is specified, it also implies `omitempty` and `skipmissing`
+
+```cpp
+TagInfo circle    = "circle,    oneof=circle|rectangle"; // space after comma is ignored
+TagInfo rectangle = "rectangle, oneof=circle|rectangle";
+```
+
+
+#### TagInfoBuilder
+
+String literals are concise but may be typo-prone.
+
+You can use `TagInfoBuilder` instead.
+
+Both constructor throgh string literals and builder are constexpr friendly tho.
+
+```cpp
+TagInfo user = TagInfoBuilder("user")
+    .field_number(1)
+    .omitempty()
+    .skipmissing()
+    .env("USER")
+    .help("Define a username");
+```
+
