@@ -127,8 +127,12 @@ You can then use your favorite serializer library:
 #include <cpx/yaml/jbeder_yaml.h>
 
 User u = {"Sucipto", 24, now()};
+
+// dump `u` into string
 std::string yaml = cpx::jbeder_yaml::dump(u);
-u = cpx::jbeder_yaml::parse(yaml);
+
+// parse from string into `u`
+cpx::jbeder_yaml::parse(yaml, u);
 ```
 
 ### Format-specific reflection
