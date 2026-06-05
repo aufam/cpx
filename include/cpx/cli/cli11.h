@@ -109,8 +109,8 @@ struct cpx::serde::Deserialize<CLI::App, bool> {
     CLI::App      &app;
     const TagInfo &ti;
 
-    void into(bool &v) const {
-        this->app.add_flag(cpx::cli::cli11::detail::generate_option_name(ti), v, std::string(ti.help));
+    CLI::Option *into(bool &v) const {
+        return this->app.add_flag(cpx::cli::cli11::detail::generate_option_name(ti), v, std::string(ti.help));
     }
 };
 
@@ -120,7 +120,7 @@ struct cpx::serde::Deserialize<CLI::App, T, std::enable_if_t<cpx::cli::cli11::de
     CLI::App      &app;
     const TagInfo &ti;
 
-    void into(T &v) const {
+    CLI::Option *into(T &v) const {
         CLI::Option *opt = this->app.add_option(cpx::cli::cli11::detail::generate_option_name(ti), v, std::string(ti.help));
         if (!ti.env.empty())
             opt->envname(std::string(ti.env));
@@ -128,6 +128,7 @@ struct cpx::serde::Deserialize<CLI::App, T, std::enable_if_t<cpx::cli::cli11::de
             opt->required();
         else
             opt->default_val(v);
+        return opt;
     }
 };
 
@@ -137,12 +138,13 @@ struct cpx::serde::Deserialize<CLI::App, std::vector<T>, std::enable_if_t<cpx::c
     CLI::App      &app;
     const TagInfo &ti;
 
-    void into(std::vector<T> &v) const {
+    CLI::Option *into(std::vector<T> &v) const {
         CLI::Option *opt = this->app.add_option(cpx::cli::cli11::detail::generate_option_name(ti), v, std::string(ti.help));
         if (!ti.env.empty())
             opt->envname(std::string(ti.env));
         if (!v.empty())
             opt->default_val(v);
+        return opt;
     }
 };
 
@@ -153,7 +155,7 @@ struct cpx::serde::
     CLI::App      &app;
     const TagInfo &ti;
 
-    void into(std::optional<T> &v) const {
+    CLI::Option *into(std::optional<T> &v) const {
         CLI::Option *opt = this->app.template add_option<std::optional<T>, T>(
             cpx::cli::cli11::detail::generate_option_name(ti), v, std::string(ti.help)
         );
@@ -161,6 +163,7 @@ struct cpx::serde::
             opt->envname(std::string(ti.env));
         if (v.has_value())
             opt->default_val(*v);
+        return opt;
     }
 };
 
@@ -171,7 +174,7 @@ struct cpx::serde::
     CLI::App      &app;
     const TagInfo &ti;
 
-    void into(std::variant<T...> &v) const {
+    CLI::Option *into(std::variant<T...> &v) const {
         CLI::Option *opt = this->app.template add_option_function<std::string>(
             cpx::cli::cli11::detail::generate_option_name(ti),
             [&v, this](const std::string &str) {
@@ -199,6 +202,7 @@ struct cpx::serde::
             opt->required();
         else
             std::visit([opt](auto &val) { opt->default_val(val); }, v);
+        return opt;
     }
 };
 
@@ -208,19 +212,21 @@ struct cpx::serde::Deserialize<CLI::App, std::tuple<Ts...>> {
     CLI::App      &app;
     const TagInfo &ti;
 
-    void into(std::tuple<Ts...> &tpl) const {
-        into(tpl, nullptr);
+    CLI::Option *into(std::tuple<Ts...> &tpl) const {
+        return into(tpl, nullptr);
     }
 
-    void into(std::tuple<Ts...> &tpl, std::function<void()> cb) const {
+    CLI::Option *into(std::tuple<Ts...> &tpl, std::function<void()> cb) const {
         CLI::App *sub = nullptr;
         if (!ti.key.empty()) {
-            sub = this->app.add_subcommand(cpx::cli::cli11::detail::generate_option_name(ti, true), std::string(ti.help));
+            sub = app.add_subcommand(cpx::cli::cli11::detail::generate_option_name(ti, true), std::string(ti.help));
             if (cb)
                 sub->callback(std::move(cb));
         }
+        CLI::App &app = sub ? *sub : this->app;
 
-        cpx::tuple_for_each(cpx::flatten(tpl), [&](auto &item, size_t) {
+        std::unordered_map<std::string, CLI::Option_group *> oneof_groups;
+        cpx::tuple_for_each(cpx::flatten(tpl), [&app, &oneof_groups](auto &item, size_t) {
             const cpx::TagInfo &t         = cpx::cli::get_tag_info(item);
             auto               &v         = cpx::detail::get_underlying_value(item);
             using T                       = std::decay_t<decltype(v)>;
@@ -229,9 +235,30 @@ struct cpx::serde::Deserialize<CLI::App, std::tuple<Ts...>> {
             if (!deserializable || t.key == "")
                 return;
 
-            if constexpr (deserializable)
-                Deserialize<CLI::App, T>{sub ? *sub : this->app, t}.into(v);
+            if constexpr (deserializable) {
+                CLI::Option *opt = Deserialize<CLI::App, T>{app, t}.into(v);
+                if (opt && !t.oneof.empty()) {
+                    CLI::Option_group *group = get_or_create_group(app, oneof_groups, t.oneof);
+                    group->add_option(opt);
+                }
+            }
         });
+
+        return nullptr;
+    }
+
+    static CLI::Option_group *get_or_create_group(
+        CLI::App &app, std::unordered_map<std::string, CLI::Option_group *> &oneof_groups, std::string_view name
+    ) {
+        auto it = oneof_groups.find(std::string(name));
+        if (it != oneof_groups.end())
+            return it->second;
+
+        auto *g = app.add_option_group(std::string(name));
+        g->require_option(1, 1);
+
+        oneof_groups.emplace(name, g);
+        return g;
     }
 };
 
@@ -242,9 +269,9 @@ struct cpx::serde::
     CLI::App      &app;
     const TagInfo &ti;
 
-    void into(T &v) const {
+    CLI::Option *into(T &v) const {
         decltype(auto) r = cpx::cli::reflect_of(v);
-        Deserialize<CLI::App, cpx::cli::reflect_t<T>>{app, ti}.into(r);
+        return Deserialize<CLI::App, cpx::cli::reflect_t<T>>{app, ti}.into(r);
     }
 };
 
@@ -257,14 +284,14 @@ struct cpx::serde::Deserialize<
     CLI::App      &app;
     const TagInfo &ti;
 
-    void into(std::optional<T> &v) const {
+    CLI::Option *into(std::optional<T> &v) const {
         if (v.has_value())
             throw error("subcommand optional type must be empty");
 
         auto val = std::make_shared<T>();
 
         decltype(auto) r = cpx::cli::reflect_of(*val);
-        Deserialize<CLI::App, cpx::cli::reflect_t<T>>{app, ti}.into(r, [val, &v]() { v = *val; });
+        return Deserialize<CLI::App, cpx::cli::reflect_t<T>>{app, ti}.into(r, [val, &v]() { v = *val; });
     }
 };
 
@@ -274,7 +301,7 @@ struct cpx::serde::Deserialize<CLI::App, T, std::enable_if_t<cpx::cli::cli11::de
     CLI::App      &app;
     const TagInfo &ti;
 
-    void into(T &v) const {
+    CLI::Option *into(T &v) const {
         CLI::Option *opt = this->app.template add_option_function<std::string>(
             cpx::cli::cli11::detail::generate_option_name(ti),
             [&v](const std::string &str) {
@@ -299,6 +326,7 @@ struct cpx::serde::Deserialize<CLI::App, T, std::enable_if_t<cpx::cli::cli11::de
             decltype(auto) str = cpx::cli::reflect_of(cv);
             opt->default_str(std::string(str));
         }
+        return opt;
     }
 };
 
@@ -309,7 +337,7 @@ struct cpx::serde::
     CLI::App      &app;
     const TagInfo &ti;
 
-    void into(std::optional<T> &v) const {
+    CLI::Option *into(std::optional<T> &v) const {
         CLI::Option *opt = this->app.template add_option_function<std::string>(
             cpx::cli::cli11::detail::generate_option_name(ti),
             [&v](const std::string &str) {
@@ -333,6 +361,7 @@ struct cpx::serde::
             decltype(auto) str = cpx::cli::reflect_of(cv);
             opt->default_str(std::string(str));
         }
+        return opt;
     }
 };
 
@@ -342,7 +371,7 @@ struct cpx::serde::Deserialize<CLI::App, std::vector<T>, std::enable_if_t<cpx::c
     CLI::App      &app;
     const TagInfo &ti;
 
-    void into(std::vector<T> &v) const {
+    CLI::Option *into(std::vector<T> &v) const {
         CLI::Option *opt = this->app.template add_option_function<std::vector<std::string>>(
             cpx::cli::cli11::detail::generate_option_name(ti),
             [&v](const std::vector<std::string> &strs) {
@@ -373,6 +402,7 @@ struct cpx::serde::Deserialize<CLI::App, std::vector<T>, std::enable_if_t<cpx::c
             }
             opt->default_val(enum_names);
         }
+        return opt;
     }
 };
 

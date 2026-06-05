@@ -9,7 +9,7 @@ namespace cpx::cli {
         if constexpr (::cpx::detail::is_tag_info_for_v<T>)
             return field.ti;
         else
-            return ::cpx::get_tag_info(field, "opt");
+            return cpx::get_tag_info(field, "opt");
     }
 
     template <typename T>
@@ -30,11 +30,11 @@ namespace cpx::cli {
     using const_reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::const_type, cpx::const_reflect_t<T>>;
 
     template <typename T>
-    constexpr decltype(auto) reflect_of(T &&v) {
-        if constexpr (Reflect<std::decay_t<T>>::value)
-            return Reflect<std::decay_t<T>>::of(std::forward<T>(v));
+    constexpr decltype(auto) reflect_of(T &v) {
+        if constexpr (Reflect<std::remove_const_t<T>>::value)
+            return Reflect<std::remove_const_t<T>>::of(v);
         else
-            return cpx::reflect_of(std::forward<T>(v));
+            return cpx::reflect_of(v);
     }
 } // namespace cpx::cli
 
