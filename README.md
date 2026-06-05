@@ -90,15 +90,17 @@ For more detailed usage, check [`tests/`](tests/).
 
 ### Struct Reflection
 
-You can specialize `Reflect<T>` for your custom types:
+You can specialize `Reflect<T>` for your custom types without littering your public API:
 ```cpp
-#include <cpx/reflect.h>
-
+// public API
 struct User {
     std::string name;
     int         age;
     std::tm     created_at;
 };
+
+// private API
+#include <cpx/reflect.h>
 
 template <>
 struct cpx::Reflect<User> : cpx::Fields<
@@ -117,12 +119,16 @@ struct cpx::Reflect<User> : cpx::Fields<
 };
 ```
 
+That’s it. No macros, no codegen, no black magic, no public API pollution — just pure C++17.
+
 You can then use your favorite serializer library:
+
 ```cpp
 #include <cpx/yaml/jbeder_yaml.h>
 
 User u = {"Sucipto", 24, now()};
 std::string yaml = cpx::jbeder_yaml::dump(u);
+u = cpx::jbeder_yaml::parse(yaml);
 ```
 
 ### Format-specific reflection
@@ -248,6 +254,8 @@ Under the hood, reflection is essentially a tuple of tagged references.
 You can construct one manually:
 
 ```cpp
+#include <cpx/fmt.h>
+
 std::string name = "Sucipto";
 int         age  = 24;
 
