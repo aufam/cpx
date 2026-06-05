@@ -1,45 +1,74 @@
+#include <magic_enum/magic_enum.hpp>
 #include <cpx/fmt.h>
 #include <cpx/cli/cli11.h>
 
-template <typename T>
-using Tag = cpx::Tag<T>;
-
+// public API
 struct App {
-    Tag<std::string> my_name = "fmt:`name`    opt:`name,    short=n, help=Name to greet, env=USER`";
-    Tag<bool>        verbose = "fmt:`verbose` opt:`verbose, short=v, help=Enable verbose output`";
+    std::string my_name;
+    bool        verbose = false;
 
     enum LogLevel { Debug, Info, Warn };
-    Tag<LogLevel> log_level = {"fmt,opt:`log-level, skipmissing, help=Log level`", Info};
+    LogLevel log_level = Info;
 
-    Tag<std::timespec> delay = "fmt,opt:`delay, skipmissing, help=specify delay`";
+    std::timespec delay{};
 
     struct Greet {
         void greet(const std::string &name) {
             fmt::println("Hello from greet {}", name);
         }
     };
-    Tag<std::optional<Greet>> greet = "fmt,opt:`greet,help=Greet the name`";
+    std::optional<Greet> greet;
 
     struct Add {
-        Tag<int> num1 = "fmt,opt:`num1,positional,help=First number`";
-        Tag<int> num2 = "fmt,opt:`num2,positional,help=Second number`";
+        int num1;
+        int num2;
     };
-    Tag<Add> add = "fmt,opt:`add,help=Add two numbers`";
+    Add add;
+};
+
+template <>
+struct cpx::Reflect<App> //
+    : Fields<cpx::Reflect<App>, &App::my_name, &App::verbose, &App::log_level, &App::delay, &App::greet, &App::add> {
+    static constexpr TagInfo my_name   = "name,      short=n,     help=Name to greet,        env=USER";
+    static constexpr TagInfo verbose   = "verbose,   short=v,     help=Enable verbose output";
+    static constexpr TagInfo log_level = "log-level,              help=Log level,            skipmissing";
+    static constexpr TagInfo delay     = "delay,                  help=specify delay,        skipmissing";
+    static constexpr TagInfo greet     = "greet,                  help=Greet the name";
+    static constexpr TagInfo add       = "add,                    help=Add two numbers";
+
+    static constexpr tags_type tags() {
+        return std::tie(my_name, verbose, log_level, delay, greet, add);
+    }
+};
+
+template <>
+struct cpx::Reflect<App::Greet> : Fields<cpx::Reflect<App::Greet>> {};
+
+template <>
+struct cpx::Reflect<App::Add> : Fields<cpx::Reflect<App::Add>, &App::Add::num1, &App::Add::num2> {
+    static constexpr TagInfo num1 = "num1, positional, help=First number";
+    static constexpr TagInfo num2 = "num2, positional, help=Second number";
+
+    static constexpr tags_type tags() {
+        return std::tie(num1, num2);
+    }
 };
 
 int main(int argc, char **argv) {
-    auto [app, subcommands] = cpx::cli::cli11::parse_with_subcommands<App>("cli example", argc, argv);
+    auto [app, subcommands] = cpx::cli11::parse_with_subcommands<App>("cli example", argc, argv);
 
-    if (app.verbose())
+    if (app.verbose)
         fmt::println("app = {}", app);
 
+    // detect subcommand using parsed subcommands tree
     if (subcommands.empty()) {
-        fmt::println("{}: You are {}", app.log_level(), app.my_name());
+        fmt::println("{}: You are {}", app.log_level, app.my_name);
     } else if (const std::string &sub = subcommands.front(); sub == "add") {
-        auto [a, b] = std::tuple(app.add().num1(), app.add().num2());
-        fmt::println("{}: {} + {} = {}", app.log_level(), a, b, a + b);
+        auto [a, b] = std::make_tuple(app.add.num1, app.add.num2);
+        fmt::println("{}: {} + {} = {}", app.log_level, a, b, a + b);
     }
 
-    if (app.greet().has_value())
-        app.greet()->greet(app.my_name());
+    // detect subcommand with optional
+    if (app.greet.has_value())
+        app.greet->greet(app.my_name);
 }

@@ -74,66 +74,89 @@ namespace {
     };
 } // namespace
 
-static constexpr cpx::TagInfo user = "user";
-static constexpr cpx::TagInfo meta = "meta";
-
 template <>
-struct cpx::Reflect<Schema2> //
-    : Fields<                //
-          Field<&Schema2::user, user>,
-          Field<&Schema2::meta, meta>> {};
+struct cpx::Reflect<Schema2> : Fields<Reflect<Schema2>, &Schema2::user, &Schema2::meta> {
+    static constexpr cpx::TagInfo user = "user";
+    static constexpr cpx::TagInfo meta = "meta";
 
-static constexpr cpx::TagInfo id       = "id";
-static constexpr cpx::TagInfo username = "username";
-static constexpr cpx::TagInfo email    = "email";
-static constexpr cpx::TagInfo roles    = "roles";
-static constexpr cpx::TagInfo profile  = "profile";
+    static constexpr tags_type tags() {
+        return std::tie(user, meta);
+    }
+};
 
 template <>
 struct cpx::Reflect<Schema2::User> //
     : Fields<
-          Field<&Schema2::User::id, id>,
-          Field<&Schema2::User::username, username>,
-          Field<&Schema2::User::email, email>,
-          Field<&Schema2::User::roles, roles>,
-          Field<&Schema2::User::profile, profile>> {};
+          Reflect<Schema2::User>,
+          &Schema2::User::id,
+          &Schema2::User::username,
+          &Schema2::User::email,
+          &Schema2::User::roles,
+          &Schema2::User::profile> {
+    static constexpr cpx::TagInfo id       = "id";
+    static constexpr cpx::TagInfo username = "username";
+    static constexpr cpx::TagInfo email    = "email";
+    static constexpr cpx::TagInfo roles    = "roles";
+    static constexpr cpx::TagInfo profile  = "profile";
 
-static constexpr cpx::TagInfo request_id = "requestId";
-static constexpr cpx::TagInfo timestamp  = "timestamp";
+    static constexpr tags_type tags() {
+        return std::tie(id, username, email, roles, profile);
+    }
+};
 
 template <>
-struct cpx::Reflect<Schema2::Meta> //
-    : Fields<                      //
-          Field<&Schema2::Meta::request_id, request_id>,
-          Field<&Schema2::Meta::timestamp, timestamp>> {};
+struct cpx::Reflect<Schema2::Meta> : Fields<Reflect<Schema2::Meta>, &Schema2::Meta::request_id, &Schema2::Meta::timestamp> {
+    static constexpr cpx::TagInfo request_id = "requestId";
+    static constexpr cpx::TagInfo timestamp  = "timestamp";
 
-static constexpr cpx::TagInfo age         = "age";
-static constexpr cpx::TagInfo country     = "country";
-static constexpr cpx::TagInfo preferences = "preferences";
+    static constexpr tags_type tags() {
+        return std::tie(request_id, timestamp);
+    }
+};
 
 template <>
 struct cpx::Reflect<Schema2::User::Profile> //
     : Fields<
-          Field<&Schema2::User::Profile::age, age>,
-          Field<&Schema2::User::Profile::country, country>,
-          Field<&Schema2::User::Profile::preferences, preferences>> {};
+          Reflect<Schema2::User::Profile>,
+          &Schema2::User::Profile::age,
+          &Schema2::User::Profile::country,
+          &Schema2::User::Profile::preferences> {
+    static constexpr cpx::TagInfo age         = "age";
+    static constexpr cpx::TagInfo country     = "country";
+    static constexpr cpx::TagInfo preferences = "preferences";
 
-static constexpr cpx::TagInfo dark_mode     = "darkMode";
-static constexpr cpx::TagInfo notifications = "notifications";
+    static constexpr tags_type tags() {
+        return std::tie(age, country, preferences);
+    }
+};
 
 template <>
 struct cpx::Reflect<Schema2::User::Profile::Preferences> //
     : Fields<
-          Field<&Schema2::User::Profile::Preferences::dark_mode, dark_mode>,
-          Field<&Schema2::User::Profile::Preferences::notifications, notifications>> {};
+          Reflect<Schema2::User::Profile::Preferences>,
+          &Schema2::User::Profile::Preferences::dark_mode,
+          &Schema2::User::Profile::Preferences::notifications> {
 
-static constexpr cpx::TagInfo push = cpx::TagInfoBuilder("push");
+    static constexpr cpx::TagInfo dark_mode     = "darkMode";
+    static constexpr cpx::TagInfo notifications = "notifications";
+
+    static constexpr tags_type tags() {
+        return std::tie(dark_mode, notifications);
+    }
+};
 
 template <>
 struct cpx::Reflect<Schema2::User::Profile::Preferences::Notifications>
-    : cpx::Fields<
-          Field<&Schema2::User::Profile::Preferences::Notifications::email, email>,
-          Field<&Schema2::User::Profile::Preferences::Notifications::push, push>> {};
+    : Fields<
+          Reflect<Schema2::User::Profile::Preferences::Notifications>,
+          &Schema2::User::Profile::Preferences::Notifications::email,
+          &Schema2::User::Profile::Preferences::Notifications::push> {
+    static constexpr cpx::TagInfo push = cpx::TagInfoBuilder("push");
+
+    static constexpr tags_type tags() {
+        return std::tie(Reflect<Schema2::User>::email, push);
+    }
+};
 
 
 static const char *data = R"json({

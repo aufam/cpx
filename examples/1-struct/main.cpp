@@ -15,7 +15,7 @@ struct User {
 };
 
 template <>
-struct cpx::Reflect<User> : FieldsV2<Reflect<User>, &User::name, &User::age, &User::created_at, &User::address> {
+struct cpx::Reflect<User> : Fields<Reflect<User>, &User::name, &User::age, &User::created_at, &User::address> {
     static constexpr TagInfo name = "name", age = "age", created_at = "created-at", address = "address";
 
     static constexpr tags_type tags() {
@@ -24,7 +24,7 @@ struct cpx::Reflect<User> : FieldsV2<Reflect<User>, &User::name, &User::age, &Us
 };
 
 template <>
-struct cpx::json::Reflect<User> : FieldsV2<Reflect<User>, &User::name, &User::age, &User::created_at, &User::address> {
+struct cpx::json::Reflect<User> : Fields<Reflect<User>, &User::name, &User::age, &User::created_at, &User::address> {
     static constexpr TagInfo created_at = "createdAt";
 
     static constexpr tags_type tags() {
@@ -34,7 +34,7 @@ struct cpx::json::Reflect<User> : FieldsV2<Reflect<User>, &User::name, &User::ag
 };
 
 template <>
-struct cpx::Reflect<Address> : FieldsV2<Reflect<Address>, &Address::city, &Address::zip> {
+struct cpx::Reflect<Address> : Fields<Reflect<Address>, &Address::city, &Address::zip> {
     static constexpr std::tuple<TagInfo, TagInfo> _tags = {"city", "zip"};
 
     static constexpr tags_type tags() {

@@ -27,24 +27,29 @@ struct Person3 {
     std::vector<int> nums;
 };
 
-static constexpr cpx::TagInfo name  = "name,field_number=1";
-static constexpr cpx::TagInfo id    = "id,field_number=2";
-static constexpr cpx::TagInfo email = "email,field_number=3";
-static constexpr cpx::TagInfo num1  = "num1,field_number=4";
-static constexpr cpx::TagInfo num2  = "num2,field_number=5";
-static constexpr cpx::TagInfo num3  = "num3,field_number=6";
-static constexpr cpx::TagInfo nums  = "7";
-
 template <>
 struct cpx::Reflect<Person3> //
     : Fields<
-          Field<&Person3::name, name>,
-          Field<&Person3::id, id>,
-          Field<&Person3::email, email>,
-          Field<&Person3::num1, num1>,
-          Field<&Person3::num2, num2>,
-          Field<&Person3::num3, num3>,
-          Field<&Person3::nums, nums>> {};
+          Reflect<Person3>,
+          &Person3::name,
+          &Person3::id,
+          &Person3::email,
+          &Person3::num1,
+          &Person3::num2,
+          &Person3::num3,
+          &Person3::nums> {
+    static constexpr cpx::TagInfo name  = "name,field_number=1";
+    static constexpr cpx::TagInfo id    = "id,field_number=2";
+    static constexpr cpx::TagInfo email = "email,field_number=3";
+    static constexpr cpx::TagInfo num1  = "num1,field_number=4,fixed";
+    static constexpr cpx::TagInfo num2  = "num2,field_number=5,zigzag";
+    static constexpr cpx::TagInfo num3  = "num3,field_number=6";
+    static constexpr cpx::TagInfo nums  = "7";
+
+    static constexpr tags_type tags() {
+        return std::tie(name, id, email, num1, num2, num3, nums);
+    }
+};
 
 int main() {
     Person p;
