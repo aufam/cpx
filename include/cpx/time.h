@@ -95,35 +95,64 @@ namespace cpx {
 
         long long total_ns = std::llabs(seconds) * 1'000'000'000ll + std::llabs(nanoseconds);
 
-        long long days = total_ns / (24ll * 3600 * 1'000'000'000ll);
-        total_ns %= (24ll * 3600 * 1'000'000'000ll);
+        constexpr long long NS_PER_SEC  = 1'000'000'000ll;
+        constexpr long long NS_PER_MIN  = 60ll * NS_PER_SEC;
+        constexpr long long NS_PER_HOUR = 60ll * NS_PER_MIN;
+        constexpr long long NS_PER_DAY  = 24ll * NS_PER_HOUR;
 
-        long long hours = total_ns / (3600ll * 1'000'000'000ll);
-        total_ns %= (3600ll * 1'000'000'000ll);
+        long long days = total_ns / NS_PER_DAY;
+        total_ns %= NS_PER_DAY;
 
-        long long minutes = total_ns / (60ll * 1'000'000'000ll);
-        total_ns %= (60ll * 1'000'000'000ll);
+        long long hours = total_ns / NS_PER_HOUR;
+        total_ns %= NS_PER_HOUR;
 
-        long long secs = total_ns / 1'000'000'000ll;
-        total_ns %= 1'000'000'000ll;
+        long long minutes = total_ns / NS_PER_MIN;
+        total_ns %= NS_PER_MIN;
 
-        long long ms = total_ns / 1'000'000ll;
+        long long secs  = total_ns / NS_PER_SEC;
+        long long nanos = total_ns % NS_PER_SEC;
 
         std::string str;
 
-        if (days)
-            str += std::to_string(days) + "d";
-        if (hours)
-            str += std::to_string(hours) + "h";
-        if (minutes)
-            str += std::to_string(minutes) + "m";
-        if (secs)
-            str += std::to_string(secs) + "s";
-        if (ms)
-            str += std::to_string(ms) + "ms";
+        bool negative = (seconds < 0 || nanoseconds < 0);
+        if (negative)
+            str += "-";
 
-        if (str.empty() || str == "-")
-            str += "0s";
+        str += "P";
+
+        if (days)
+            str += std::to_string(days) + "D";
+
+        bool has_time = hours || minutes || secs || nanos;
+
+        if (has_time || days == 0) {
+            str += "T";
+
+            if (hours)
+                str += std::to_string(hours) + "H";
+
+            if (minutes)
+                str += std::to_string(minutes) + "M";
+
+            if (nanos) {
+                // fractional seconds
+                char buf[32];
+                std::snprintf(buf, sizeof(buf), "%lld.%09lld", secs, nanos);
+
+                std::string frac = buf;
+
+                // trim trailing zeros
+                frac.erase(frac.find_last_not_of('0') + 1);
+
+                // remove dangling '.'
+                if (frac.back() == '.')
+                    frac.pop_back();
+
+                str += frac + "S";
+            } else if (secs || (!hours && !minutes)) {
+                str += std::to_string(secs) + "S";
+            }
+        }
 
         return str;
     }

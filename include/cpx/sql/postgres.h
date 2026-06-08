@@ -5,12 +5,17 @@
 #include <cpx/serde/serialize.h>
 #include <cpx/serde/deserialize.h>
 #include <cpx/serde/error.h>
-#include <cpx/defer.h>
+#include <cpx/time.h>
 #include <cstring>
 #include <netinet/in.h>
-#include <postgresql/libpq-fe.h>
-#include <string>
-#include <optional>
+
+#if __has_include(<postgresql/libpq-fe.h>)
+#    include <postgresql/libpq-fe.h>
+#elif __has_include(<libpq-fe.h>)
+#    include <postgresql/libpq-fe.h>
+#else
+#    error "Cannot find libpq-fe.h"
+#endif
 
 
 namespace cpx::sql::postgres {
@@ -19,7 +24,7 @@ namespace cpx::sql::postgres {
         int         length;
         int         format; // 0=text, 1=binary
         Oid         type;
-        bool        is_dynamic = false;
+        char        small_buffer[8];
     };
 
     class Connection;
@@ -62,40 +67,86 @@ namespace cpx::sql::postgres {
         friend class Connection;
 
     protected:
-        Rows(PGresult *res, int row_count, int pq_result_format = 0)
-            : res(res)
-            , row_count(row_count)
-            , pq_result_format(pq_result_format) {}
+        Rows(PGconn *db, int pq_result_format = 0)
+            : db(db)
+            , pq_result_format(pq_result_format) {
+            try {
+                next();
+            } catch (std::runtime_error &e) {
+                if (res)
+                    PQclear(res);
+                while (PQgetResult(db))
+                    ;
+                throw;
+            }
+        }
 
     public:
+        Rows(const Rows &)            = delete;
+        Rows &operator=(const Rows &) = delete;
+
+        Rows(Rows &&other) noexcept
+            : db(other.db)
+            , res(std::exchange(other.res, nullptr))
+            , pq_result_format(other.pq_result_format) {}
+
+        Rows &operator=(Rows &&) noexcept = delete;
+
         ~Rows() override {
-            PQclear(res);
+            if (res)
+                PQclear(res);
+            while (PQgetResult(db))
+                ;
         }
 
         void next() override {
-            ++current_row;
+            if (res) {
+                PQclear(res);
+                res = nullptr;
+            }
+
+            while ((res = PQgetResult(db))) {
+                auto status = PQresultStatus(res);
+
+                if (status == PGRES_SINGLE_TUPLE)
+                    return;
+
+                if (status == PGRES_TUPLES_OK || status == PGRES_COMMAND_OK) {
+                    PQclear(res);
+                    res = nullptr;
+                    continue;
+                }
+
+                std::string msg = PQresultErrorMessage(res);
+                PQclear(res);
+                res = nullptr;
+                throw std::runtime_error(msg);
+            }
         }
 
         Row get() const override {
-            if (current_row >= row_count)
+            if (res == nullptr)
                 throw std::runtime_error("Failed to get row data: not a row");
 
             Row row = {};
             cpx::tuple_for_each(row, [&](auto &item, size_t i) {
-                Deserialize<std::decay_t<decltype(item)>>{res, current_row, int(i), pq_result_format}.into(item);
+                const int  row       = 0;
+                const int  col       = int(i);
+                const bool is_binary = (pq_result_format == 1);
+                Deserialize<std::decay_t<decltype(item)>>{res, row, col, is_binary}.into(item);
             });
+
             return row;
         }
 
         bool is_done() const override {
-            return current_row >= row_count;
+            return res == nullptr;
         }
 
     protected:
-        PGresult *res;
-        int       row_count;
-        int       current_row{};
-        int       pq_result_format;
+        PGconn   *db;
+        PGresult *res              = nullptr;
+        int       pq_result_format = 0;
     };
 
     class Connection : public cpx::sql::Connection {
@@ -105,25 +156,21 @@ namespace cpx::sql::postgres {
             if (PQstatus(db) != CONNECTION_OK) {
                 std::string what = PQerrorMessage(db);
                 PQfinish(db);
-
                 std::string msg = "Cannot connect with spec=\"" + spec + "\": " + what;
                 throw std::runtime_error(msg);
             }
         }
 
+        ~Connection() override {
+            PQfinish(db);
+        }
+
         template <typename Params, typename Row>
-        Rows<Row> operator()(const Statement<Params, Row> &statement, int pq_result_format = 0) {
+        Rows<Row> operator()(const Statement<Params, Row> &statement, int pq_result_format = 1) {
             std::vector<cpx::sql::postgres::Value> doc;
             doc.reserve(std::tuple_size_v<Params>);
-            auto _ = cpx::defer([&]() {
-                for (auto &val : doc)
-                    if (val.is_dynamic)
-                        std::free(const_cast<char *>(val.buffer));
-            });
 
-            cpx::tuple_for_each(statement.params, [&](auto &item, size_t) {
-                Serialize<std::decay_t<decltype(item)>>{doc}.from(item);
-            });
+            Serialize<Params>{doc}.from(statement.params);
 
             std::vector<Oid>          types(doc.size());
             std::vector<const char *> values(doc.size());
@@ -137,7 +184,8 @@ namespace cpx::sql::postgres {
             }
 
             std::string converted = detail::convert_placeholders(statement.query);
-            PGresult   *res       = PQexecParams(
+
+            int res = PQsendQueryParams(
                 db,
                 converted.c_str(),
                 (int)doc.size(),
@@ -147,10 +195,11 @@ namespace cpx::sql::postgres {
                 formats.data(),
                 pq_result_format
             );
-            check(res, converted);
+            if (!res)
+                throw std::runtime_error(PQerrorMessage(db));
 
-            int row_count = PQntuples(res);
-            return {res, row_count, pq_result_format};
+            PQsetSingleRowMode(db);
+            return {db, pq_result_format};
         }
 
         void begin_transaction() override {
@@ -168,10 +217,6 @@ namespace cpx::sql::postgres {
             check(res, "ROLLBACK");
         }
 
-        ~Connection() override {
-            PQfinish(db);
-        }
-
     protected:
         PGconn *db;
 
@@ -186,153 +231,142 @@ namespace cpx::sql::postgres {
     };
 } // namespace cpx::sql::postgres
 
+
 namespace cpx::sql::postgres::detail {
-    inline uint8_t to_network(uint8_t v) {
-        return v;
-    }
-    inline int8_t to_network(int8_t v) {
-        return v;
-    }
-    inline int8_t to_network(bool v) {
-        return int8_t(v);
-    }
-    inline uint16_t to_network(uint16_t v) {
-        return htons(v);
-    }
-    inline uint32_t to_network(uint32_t v) {
-        return htonl(v);
-    }
-    inline uint64_t to_network(uint64_t v) {
-#if defined(__APPLE__) || defined(__linux__)
-        return htobe64(v); // available on BSD/Linux
-#elif defined(_WIN32)
-        return htonll(v); // available on MSVC
+    inline uint16_t bswap16(uint16_t v) {
+#if defined(_MSC_VER)
+        return _byteswap_ushort(v);
+#elif defined(__GNUC__) || defined(__clang__)
+        return __builtin_bswap16(v);
 #else
-        if constexpr (std::endian::native == std::endian::little) {
+        return (v >> 8) | (v << 8);
+#endif
+    }
 
-            return __builtin_bswap64(v);
-        } else {
-            return v;
+    inline uint32_t bswap32(uint32_t v) {
+#if defined(_MSC_VER)
+        return _byteswap_ulong(v);
+#elif defined(__GNUC__) || defined(__clang__)
+        return __builtin_bswap32(v);
+#else
+        return ((v & 0x000000FFu) << 24) | ((v & 0x0000FF00u) << 8) | ((v & 0x00FF0000u) >> 8) | ((v & 0xFF000000u) >> 24);
+#endif
+    }
+
+    inline uint64_t bswap64(uint64_t v) {
+#if defined(_MSC_VER)
+        return _byteswap_uint64(v);
+#elif defined(__GNUC__) || defined(__clang__)
+        return __builtin_bswap64(v);
+#else
+        return ((v & 0x00000000000000FFull) << 56) | ((v & 0x000000000000FF00ull) << 40) | ((v & 0x0000000000FF0000ull) << 24) |
+               ((v & 0x00000000FF000000ull) << 8) | ((v & 0x000000FF00000000ull) >> 8) | ((v & 0x0000FF0000000000ull) >> 24) |
+               ((v & 0x00FF000000000000ull) >> 40) | ((v & 0xFF00000000000000ull) >> 56);
+#endif
+    }
+
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    constexpr bool native_big_endian = true;
+#else
+    constexpr bool native_big_endian = false;
+#endif
+
+    template <typename T>
+    inline T byteswap(T value) {
+        if constexpr (sizeof(T) == 2) {
+            return static_cast<T>(bswap16(static_cast<uint16_t>(value)));
         }
-#endif
-    }
 
-
-    inline uint8_t from_network(uint8_t v) {
-        return v;
-    }
-    inline int8_t from_network(int8_t v) {
-        return v;
-    }
-    inline uint16_t from_network(uint16_t v) {
-        return ntohs(v);
-    }
-    inline uint32_t from_network(uint32_t v) {
-        return ntohl(v);
-    }
-    inline uint64_t from_network(uint64_t v) {
-#if defined(__APPLE__) || defined(__linux__)
-        return be64toh(v);
-#elif defined(_WIN32)
-        return ntohll(v);
-#else
-        if constexpr (std::endian::native == std::endian::little) {
-            return __builtin_bswap64(v);
-        } else {
-            return v;
+        if constexpr (sizeof(T) == 4) {
+            return static_cast<T>(bswap32(static_cast<uint32_t>(value)));
         }
-#endif
+
+        if constexpr (sizeof(T) == 8) {
+            return static_cast<T>(bswap64(static_cast<uint64_t>(value)));
+        }
     }
 
-    inline int16_t to_network(int16_t v) {
-        uint16_t u;
-        std::memcpy(&u, &v, sizeof(u));
-        u = htons(u);
-        int16_t out;
-        std::memcpy(&out, &u, sizeof(out));
-        return out;
+    template <typename T>
+    inline T host_to_network(T value) {
+        if constexpr (native_big_endian)
+            return value;
+        return byteswap(value);
     }
 
-    inline int16_t from_network(int16_t v) {
-        uint16_t u;
-        std::memcpy(&u, &v, sizeof(u));
-        u = ntohl(u);
-        int16_t out;
-        std::memcpy(&out, &u, sizeof(out));
-        return out;
+    template <typename T>
+    inline T network_to_host(T value) {
+        return host_to_network(value);
     }
 
-    inline int32_t to_network(int32_t v) {
-        uint32_t u;
-        std::memcpy(&u, &v, sizeof(u));
-        u = htonl(u);
-        int32_t out;
-        std::memcpy(&out, &u, sizeof(out));
-        return out;
+
+    // ---------------- integers ----------------
+    inline void into_network(int16_t value, char *buffer) {
+        value = host_to_network(value);
+        std::memcpy(buffer, &value, sizeof(value));
     }
 
-    inline int32_t from_network(int32_t v) {
-        uint32_t u;
-        std::memcpy(&u, &v, sizeof(u));
-        u = ntohl(u);
-        int32_t out;
-        std::memcpy(&out, &u, sizeof(out));
-        return out;
+    inline void into_network(int32_t value, char *buffer) {
+        value = host_to_network(value);
+        std::memcpy(buffer, &value, sizeof(value));
     }
 
-    inline uint64_t bswap64(uint64_t x) {
-#if defined(__GNUC__) || defined(__clang__)
-        return __builtin_bswap64(x);
-#elif defined(_MSC_VER)
-        return _byteswap_uint64(x);
-#else
-        return ((x & 0x00000000000000FFULL) << 56) | ((x & 0x000000000000FF00ULL) << 40) | ((x & 0x0000000000FF0000ULL) << 24) |
-               ((x & 0x00000000FF000000ULL) << 8) | ((x & 0x000000FF00000000ULL) >> 8) | ((x & 0x0000FF0000000000ULL) >> 24) |
-               ((x & 0x00FF000000000000ULL) >> 40) | ((x & 0xFF00000000000000ULL) >> 56);
-#endif
+    inline void into_network(int64_t value, char *buffer) {
+        value = host_to_network(value);
+        std::memcpy(buffer, &value, sizeof(value));
     }
 
-    inline int64_t to_network(int64_t v) {
-        uint64_t u;
-        std::memcpy(&u, &v, sizeof(u));
-#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-        u = bswap64(u);
-#endif
-        int64_t out;
-        std::memcpy(&out, &u, sizeof(out));
-        return out;
+    inline void from_network(int16_t &value, const char *buffer) {
+        std::memcpy(&value, buffer, sizeof(value));
+        value = network_to_host(value);
     }
 
-    inline int64_t from_network(int64_t v) {
-        uint64_t u;
-        std::memcpy(&u, &v, sizeof(u));
-#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-        u = bswap64(u);
-#endif
-        int64_t out;
-        std::memcpy(&out, &u, sizeof(out));
-        return out;
+    inline void from_network(int32_t &value, const char *buffer) {
+        std::memcpy(&value, buffer, sizeof(value));
+        value = network_to_host(value);
     }
 
-    inline float to_network(float f) {
-        static_assert(sizeof(float) == 4);
-        uint32_t i;
-        std::memcpy(&i, &f, sizeof(f));
-        i = htonl(i);
-        float out;
-
-        std::memcpy(&out, &i, sizeof(out));
-        return out;
+    inline void from_network(int64_t &value, const char *buffer) {
+        std::memcpy(&value, buffer, sizeof(value));
+        value = network_to_host(value);
     }
 
-    inline double to_network(double d) {
-        static_assert(sizeof(double) == 8);
-        uint64_t i;
-        std::memcpy(&i, &d, sizeof(d));
-        i = to_network(i); // 64-bit version
-        double out;
-        std::memcpy(&out, &i, sizeof(out));
-        return out;
+    // ---------------- float / double ----------------
+    inline void into_network(float value, char *buffer) {
+        static_assert(sizeof(float) == sizeof(uint32_t));
+        uint32_t bits;
+        std::memcpy(&bits, &value, sizeof(bits));
+        bits = host_to_network(bits);
+        std::memcpy(buffer, &bits, sizeof(bits));
+    }
+
+    inline void into_network(double value, char *buffer) {
+        static_assert(sizeof(double) == sizeof(uint64_t));
+        uint64_t bits;
+        std::memcpy(&bits, &value, sizeof(bits));
+        bits = host_to_network(bits);
+        std::memcpy(buffer, &bits, sizeof(bits));
+    }
+
+    inline void from_network(float &value, const char *buffer) {
+        uint32_t bits;
+        std::memcpy(&bits, buffer, sizeof(bits));
+        bits = network_to_host(bits);
+        std::memcpy(&value, &bits, sizeof(value));
+    }
+
+    inline void from_network(double &value, const char *buffer) {
+        uint64_t bits;
+        std::memcpy(&bits, buffer, sizeof(bits));
+        bits = network_to_host(bits);
+        std::memcpy(&value, &bits, sizeof(value));
+    }
+
+    // ---------------- bool ----------------
+    inline void into_network(bool value, char *buffer) {
+        buffer[0] = value ? 1 : 0;
+    }
+    inline void from_network(bool &value, const char *buffer) {
+        value = buffer[0] != 0;
     }
 } // namespace cpx::sql::postgres::detail
 
@@ -350,27 +384,31 @@ namespace cpx::sql::postgres::detail {
     bool      is_binary;
 
 template <typename T>
-struct SERIALIZE(T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>>) {
+struct SERIALIZE(T, std::enable_if_t<std::is_same_v<T, bool> || (std::is_signed_v<T> && (sizeof(T) > 1))>) {
     SERIALIZER_FIELDS
 
-    void from(T value) {
-        Oid oid;
-        if constexpr (std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t> || std::is_same_v<T, bool>) {
-            oid = 16;
-        } else if constexpr (std::is_same_v<T, uint16_t> || std::is_same_v<T, int16_t>) {
-            oid = 21;
-        } else if constexpr (std::is_same_v<T, uint32_t> || std::is_same_v<T, int32_t>) {
-            oid = 23;
-        } else if constexpr (std::is_same_v<T, uint64_t> || std::is_same_v<T, int64_t>) {
-            oid = 20;
+    void from(T value, Oid type = 0) {
+        cpx::sql::postgres::Value val;
+
+        if constexpr (std::is_same_v<T, bool>) {
+            val.type = type == 0 ? 16 : type;
+        } else if constexpr (std::is_same_v<T, int16_t>) {
+            val.type = type == 0 ? 21 : type;
+        } else if constexpr (std::is_same_v<T, int32_t>) {
+            val.type = type == 0 ? 23 : type;
+        } else if constexpr (std::is_same_v<T, int64_t>) {
+            val.type = type == 0 ? 20 : type;
         } else if constexpr (std::is_same_v<T, float>) {
-            oid = 700;
+            val.type = type == 0 ? 700 : type;
         } else if constexpr (std::is_same_v<T, double>) {
-            oid = 701;
+            val.type = type == 0 ? 701 : type;
         }
-        T *data = (T *)malloc(sizeof(T));
-        *data   = cpx::sql::postgres::detail::to_network(value);
-        doc.push_back({(const char *)data, sizeof(T), 1, oid, true});
+
+        val.buffer = val.small_buffer;
+        val.length = sizeof(T);
+        val.format = 1;
+        cpx::sql::postgres::detail::into_network(value, val.small_buffer);
+        doc.push_back(val);
     }
 };
 
@@ -378,14 +416,8 @@ template <typename CT>
 struct SERIALIZE(std::basic_string_view<char, CT>) {
     SERIALIZER_FIELDS
 
-    void from(std::basic_string_view<char, CT> value, bool is_blob = false, bool own = false) const {
-        if (own) {
-            auto data = (char *)malloc(value.size());
-            std::memcpy(data, value.data(), value.size());
-            doc.push_back({data, (int)value.size(), is_blob ? 1 : 0, is_blob ? 17u : 0u, true});
-        } else {
-            doc.push_back({value.data(), (int)value.size(), is_blob ? 1 : 0, is_blob ? 17u : 0u, false});
-        }
+    void from(std::basic_string_view<char, CT> value, bool is_blob = false) const {
+        doc.push_back({value.data(), (int)value.size(), is_blob ? 1 : 0, is_blob ? 17u : 0u});
     }
 };
 
@@ -394,12 +426,10 @@ struct SERIALIZE(std::basic_string<char, CT, A>) {
     SERIALIZER_FIELDS
 
     void from(const std::basic_string<char, CT, A> &value, bool is_blob = false) const {
-        SERIALIZE(std::basic_string_view<char, CT>){doc}.from(value, is_blob, false);
+        SERIALIZE(std::basic_string_view<char, CT>){doc}.from(value, is_blob);
     }
 
-    void from(std::basic_string<char, CT, A> &&value, bool is_blob = false) const {
-        SERIALIZE(std::basic_string_view<char, CT>){doc}.from(value, is_blob, true);
-    }
+    void from(std::basic_string<char, CT, A> &&value, bool is_blob = false) const = delete;
 };
 
 template <typename A>
@@ -407,11 +437,22 @@ struct SERIALIZE(std::vector<uint8_t, A>) {
     SERIALIZER_FIELDS
 
     void from(const std::vector<uint8_t, A> &value) const {
-        SERIALIZE(std::basic_string<char>){doc}.from(value, false);
+        SERIALIZE(std::string_view){doc}.from(std::string_view(reinterpret_cast<const char *>(value.data()), value.size()), true);
     }
 
-    void from(std::vector<uint8_t, A> &&value) const {
-        SERIALIZE(std::basic_string<char>){doc}.from(value, true);
+    void from(std::vector<uint8_t, A> &&value) const = delete;
+};
+
+template <>
+struct SERIALIZE(std::timespec) {
+    SERIALIZER_FIELDS
+
+    void from(std::timespec value) const {
+        constexpr int64_t POSTGRES_EPOCH_DIFF_SECONDS = 946684800; // 1970 -> 2000
+
+        int64_t pg_micros = (value.tv_sec - POSTGRES_EPOCH_DIFF_SECONDS) * 1'000'000 + value.tv_nsec / 1'000;
+
+        SERIALIZE(int64_t){doc}.from(pg_micros, 1184);
     }
 };
 
@@ -425,7 +466,8 @@ struct SERIALIZE(std::tm) {
 #else
         auto t = ::timegm(&value);
 #endif
-        SERIALIZE(decltype(t)){doc}.from(t);
+
+        SERIALIZE(std::timespec){doc}.from({t, 0});
     }
 };
 
@@ -435,17 +477,12 @@ struct SERIALIZE(std::optional<T>, std::enable_if_t<SERIALIZABLE(T)>) {
 
     void from(const std::optional<T> &value) const {
         if (!value.has_value())
-            doc.push_back({nullptr, 0, 0, 0, false});
+            doc.push_back({nullptr, 0, 0, 0, {}});
         else
             SERIALIZE(T){doc}.from(*value);
     }
 
-    void from(std::optional<T> &&value) const {
-        if (!value.has_value())
-            doc.push_back({nullptr, 0, 0, 0, false});
-        else
-            SERIALIZE(T){doc}.from(std::move(*value));
-    }
+    void from(std::optional<T> &&value) const = delete;
 };
 
 template <typename T>
@@ -457,10 +494,7 @@ struct SERIALIZE(std::vector<T>, std::enable_if_t<SERIALIZABLE(T) && !std::is_sa
             SERIALIZE(T){doc}.from(v);
     }
 
-    void from(std::optional<T> &&value) const {
-        for (auto &v : value)
-            SERIALIZE(T){doc}.from(std::move(v));
-    }
+    void from(std::vector<T> &&value) const = delete;
 };
 
 template <typename... Ts>
@@ -473,38 +507,45 @@ struct SERIALIZE(std::tuple<Ts...>, std::enable_if_t<(SERIALIZABLE(Ts) && ...)>)
 };
 
 template <typename T>
-struct DESERIALIZE(T, std::enable_if_t<(std::is_integral_v<T> || std::is_floating_point_v<T>) && !std::is_same_v<T, bool>>) {
+struct DESERIALIZE(T, std::enable_if_t<std::is_same_v<T, bool> || (std::is_signed_v<T> && (sizeof(T) > 1))>) {
     DESERIALIZER_FIELDS
 
     void into(T &value) const {
-        if (auto ptr = PQgetvalue(res, row, col); is_binary) {
-            value = cpx::sql::postgres::detail::from_network(*reinterpret_cast<T *>(ptr));
-        } else {
-            value = (T)std::stoi(ptr);
-        }
+        cpx::sql::postgres::detail::from_network(value, PQgetvalue(res, row, col));
+        // if (auto ptr = PQgetvalue(res, row, col); is_binary) {
+        //     cpx::sql::postgres::detail::from_network(value, ptr);
+        // } else {
+        //     std::string str = {ptr, (size_t)PQgetlength(res, row, col)};
+        //     if constexpr (std::is_same_v<T, bool>) {
+        //         value = (str == "t" || str == "true" || str == "1");
+        //     } else if constexpr (std::is_same_v<T, int16_t> || std::is_same_v<T, int32_t>) {
+        //         value = std::stoi(str);
+        //     } else if constexpr (std::is_same_v<T, int64_t>) {
+        //         value = std::stol(str);
+        //     } else if constexpr (std::is_same_v<T, float>) {
+        //         value = std::stof(str);
+        //     } else if constexpr (std::is_same_v<T, double>) {
+        //         value = std::stod(str);
+        //     }
+        // }
     }
 };
 
-template <>
-struct DESERIALIZE(bool) {
+template <typename CT, typename A>
+struct DESERIALIZE(std::basic_string<char, CT, A>) {
     DESERIALIZER_FIELDS
 
-    void into(bool &value) const {
-        if (auto ptr = PQgetvalue(res, row, col); is_binary) {
-            value = *ptr;
-        } else {
-            std::string v = ptr;
-            value         = (v == "t" || v == "true" || v == "1");
-        }
+    void into(std::basic_string<char, CT, A> &value) const {
+        value = {PQgetvalue(res, row, col), (size_t)PQgetlength(res, row, col)};
     }
 };
 
-template <typename CT, typename T>
-struct DESERIALIZE(std::basic_string<char, CT, T>) {
+template <typename CT>
+struct DESERIALIZE(std::basic_string_view<char, CT>) {
     DESERIALIZER_FIELDS
 
-    void into(std::basic_string<char, CT, T> &value) const {
-        value = PQgetvalue(res, row, col);
+    void into(std::basic_string_view<char, CT> &value) const {
+        value = {PQgetvalue(res, row, col), (size_t)PQgetlength(res, row, col)};
     }
 };
 

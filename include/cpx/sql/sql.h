@@ -7,6 +7,7 @@
 #include <cpx/tuple.h>
 #include <optional>
 #include <string>
+#include <vector>
 #include <utility>
 
 #ifndef BOOST_PFR_HPP
@@ -173,6 +174,11 @@ namespace cpx::sql {
         Statement<Params, std::tuple<>> into_statement() const {
             return {query, params};
         }
+
+        // like
+        Condition<Params> escape(char ch) const {
+            return {query + " escape '" + ch + "'", params};
+        }
     };
 
     template <typename Params>
@@ -307,52 +313,52 @@ namespace cpx::sql {
          */
         template <size_t N>
         auto operator+(const char (&val)[N]) const {
-            auto params = std::tuple_cat(this->params, std::tuple<std::string>{std::string(val, (-1))});
+            auto params = std::tuple_cat(this->params, std::tuple<std::string_view>{std::string_view(val, (-1))});
             return Arithmetics<decltype(params)>{"(" + query + " + ?)", std::move(params)};
         }
         template <size_t N>
         auto operator-(const char (&val)[N]) const {
-            auto params = std::tuple_cat(this->params, std::tuple<std::string>{std::string(val, (-1))});
+            auto params = std::tuple_cat(this->params, std::tuple<std::string_view>{std::string_view(val, (-1))});
             return Arithmetics<decltype(params)>{"(" + query + " - ?)", std::move(params)};
         }
         template <size_t N>
         auto operator*(const char (&val)[N]) const {
-            auto params = std::tuple_cat(this->params, std::tuple<std::string>{std::string(val, (-1))});
+            auto params = std::tuple_cat(this->params, std::tuple<std::string_view>{std::string_view(val, (-1))});
             return Arithmetics<decltype(params)>{"(" + query + " * ?)", std::move(params)};
         }
         template <size_t N>
         auto operator/(const char (&val)[N]) const {
-            auto params = std::tuple_cat(this->params, std::tuple<std::string>{std::string(val, (-1))});
+            auto params = std::tuple_cat(this->params, std::tuple<std::string_view>{std::string_view(val, (-1))});
             return Arithmetics<decltype(params)>{"(" + query + " / ?)", std::move(params)};
         }
         template <size_t N>
         auto operator==(const char (&val)[N]) const {
-            auto params = std::tuple_cat(this->params, std::tuple<std::string>{std::string(val, (-1))});
+            auto params = std::tuple_cat(this->params, std::tuple<std::string_view>{std::string_view(val, (-1))});
             return Condition<decltype(params)>{query + " = ?", std::move(params)};
         }
         template <size_t N>
         auto operator!=(const char (&val)[N]) const {
-            auto params = std::tuple_cat(this->params, std::tuple<std::string>{std::string(val, (-1))});
+            auto params = std::tuple_cat(this->params, std::tuple<std::string_view>{std::string_view(val, (-1))});
             return Condition<decltype(params)>{query + " != ?", std::move(params)};
         }
         template <size_t N>
         auto operator>(const char (&val)[N]) const {
-            auto params = std::tuple_cat(this->params, std::tuple<std::string>{std::string(val, (-1))});
+            auto params = std::tuple_cat(this->params, std::tuple<std::string_view>{std::string_view(val, (-1))});
             return Condition<decltype(params)>{query + " > ?", std::move(params)};
         }
         template <size_t N>
         auto operator<(const char (&val)[N]) const {
-            auto params = std::tuple_cat(this->params, std::tuple<std::string>{std::string(val, (-1))});
+            auto params = std::tuple_cat(this->params, std::tuple<std::string_view>{std::string_view(val, (-1))});
             return Condition<decltype(params)>{query + " < ?", std::move(params)};
         }
         template <size_t N>
         auto operator>=(const char (&val)[N]) const {
-            auto params = std::tuple_cat(this->params, std::tuple<std::string>{std::string(val, (-1))});
+            auto params = std::tuple_cat(this->params, std::tuple<std::string_view>{std::string_view(val, (-1))});
             return Condition<decltype(params)>{query + " >= ?", std::move(params)};
         }
         template <size_t N>
         auto operator<=(const char (&val)[N]) const {
-            auto params = std::tuple_cat(this->params, std::tuple<std::string>{std::string(val, (-1))});
+            auto params = std::tuple_cat(this->params, std::tuple<std::string_view>{std::string_view(val, (-1))});
             return Condition<decltype(params)>{query + " <= ?", std::move(params)};
         }
 
@@ -405,6 +411,7 @@ namespace cpx::sql {
         ARITHMETIC_OPERATOR_FOR(int)
         ARITHMETIC_OPERATOR_FOR(double)
         ARITHMETIC_OPERATOR_FOR(std::string)
+        ARITHMETIC_OPERATOR_FOR(std::string_view)
 
 #undef ARITHMETIC_OPERATOR_FOR
     };
@@ -577,39 +584,39 @@ namespace cpx::sql {
          */
 
         template <size_t N>
-        Assignment<std::tuple<std::string>> operator=(const char (&val)[N]) const {
-            static_assert(std::is_same_v<T, std::string>);
-            return {name() + " = ?", {std::string(val, N - 1)}};
+        Assignment<std::tuple<std::string_view>> operator=(const char (&val)[N]) const {
+            static_assert(std::is_same_v<T, std::string> || std::is_same_v<T, std::string_view>);
+            return {name() + " = ?", {std::string_view(val, N - 1)}};
         }
         template <size_t N>
-        Condition<std::tuple<std::string>> operator==(const char (&val)[N]) const {
-            static_assert(std::is_same_v<T, std::string>);
-            return {qualified_name() + " = ?", {std::string(val, N - 1)}};
+        Condition<std::tuple<std::string_view>> operator==(const char (&val)[N]) const {
+            static_assert(std::is_same_v<T, std::string> || std::is_same_v<T, std::string_view>);
+            return {qualified_name() + " = ?", {std::string_view(val, N - 1)}};
         }
         template <size_t N>
-        Condition<std::tuple<std::string>> operator!=(const char (&val)[N]) const {
-            static_assert(std::is_same_v<T, std::string>);
-            return {qualified_name() + " != ?", {std::string(val, N - 1)}};
+        Condition<std::tuple<std::string_view>> operator!=(const char (&val)[N]) const {
+            static_assert(std::is_same_v<T, std::string> || std::is_same_v<T, std::string_view>);
+            return {qualified_name() + " != ?", {std::string_view(val, N - 1)}};
         }
         template <size_t N>
-        Condition<std::tuple<std::string>> operator>(const char (&val)[N]) const {
-            static_assert(std::is_same_v<T, std::string>);
-            return {qualified_name() + " > ?", {std::string(val, N - 1)}};
+        Condition<std::tuple<std::string_view>> operator>(const char (&val)[N]) const {
+            static_assert(std::is_same_v<T, std::string> || std::is_same_v<T, std::string_view>);
+            return {qualified_name() + " > ?", {std::string_view(val, N - 1)}};
         }
         template <size_t N>
-        Condition<std::tuple<std::string>> operator<(const char (&val)[N]) const {
-            static_assert(std::is_same_v<T, std::string>);
-            return {qualified_name() + " < ?", {std::string(val, N - 1)}};
+        Condition<std::tuple<std::string_view>> operator<(const char (&val)[N]) const {
+            static_assert(std::is_same_v<T, std::string> || std::is_same_v<T, std::string_view>);
+            return {qualified_name() + " < ?", {std::string_view(val, N - 1)}};
         }
         template <size_t N>
-        Condition<std::tuple<std::string>> operator>=(const char (&val)[N]) const {
-            static_assert(std::is_same_v<T, std::string>);
-            return {qualified_name() + " >= ?", {std::string(val, N - 1)}};
+        Condition<std::tuple<std::string_view>> operator>=(const char (&val)[N]) const {
+            static_assert(std::is_same_v<T, std::string> || std::is_same_v<T, std::string_view>);
+            return {qualified_name() + " >= ?", {std::string_view(val, N - 1)}};
         }
         template <size_t N>
-        Condition<std::tuple<std::string>> operator<=(const char (&val)[N]) const {
-            static_assert(std::is_same_v<T, std::string>);
-            return {qualified_name() + " <= ?", {std::string(val, N - 1)}};
+        Condition<std::tuple<std::string_view>> operator<=(const char (&val)[N]) const {
+            static_assert(std::is_same_v<T, std::string> || std::is_same_v<T, std::string_view>);
+            return {qualified_name() + " <= ?", {std::string_view(val, N - 1)}};
         }
 
 
@@ -683,6 +690,20 @@ namespace cpx::sql {
         template <typename Params, typename Row>
         Condition<Params> not_in(Statement<Params, Row> stmt) const {
             return {qualified_name() + " not in (" + stmt.query + ")", std::move(stmt.params)};
+        }
+
+        template <size_t N>
+        Condition<std::tuple<std::string_view>> like(const char (&str)[N]) const {
+            return {qualified_name() + " limit ?", {{str, N - 1}}};
+        }
+        Condition<std::tuple<std::string_view>> like(std::string_view str) const {
+            return {qualified_name() + " limit ?", {str}};
+        }
+        Condition<std::tuple<std::string>> like(std::string &&str) const {
+            return {qualified_name() + " limit ?", {std::move(str)}};
+        }
+        Condition<std::tuple<std::string_view>> like(const std::string &str) const {
+            return {qualified_name() + " limit ?", {str}};
         }
 
     protected:

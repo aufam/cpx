@@ -158,6 +158,10 @@ namespace cpx::sql::sqlite3 {
             }
         }
 
+        ~Connection() override {
+            sqlite3_close(db);
+        }
+
         void begin_transaction() override {
             char *errmsg = nullptr;
             int   ret    = sqlite3_exec(db, "BEGIN TRANSACTION", nullptr, nullptr, &errmsg);
@@ -206,10 +210,6 @@ namespace cpx::sql::sqlite3 {
             );
 
             return {db, stmt, std::move(statement.query)};
-        }
-
-        ~Connection() override {
-            sqlite3_close(db);
         }
 
     protected:
@@ -356,8 +356,6 @@ template <>
 struct DESERIALIZE(std::tm) {
     DESERIALIZER_FIELDS;
     void into(std::tm &value) const {
-        if (auto type = sqlite3_column_type(stmt, index); type != SQLITE_INTEGER)
-            throw type_mismatch_error("integer", cpx::sql::sqlite3::detail::type_of(type));
         std::time_t t;
         DESERIALIZE(std::time_t){stmt, index}.into(t);
         value = *std::gmtime(&t);
@@ -374,18 +372,35 @@ struct DESERIALIZE(T, std::enable_if_t<std::is_floating_point_v<T>>) {
     }
 };
 
+template <typename CT>
+struct DESERIALIZE(std::basic_string_view<char, CT>) {
+    DESERIALIZER_FIELDS;
+    void into(std::basic_string_view<char, CT> &value) const {
+        auto type = sqlite3_column_type(stmt, index);
+        if (type != SQLITE_TEXT && type != SQLITE_BLOB)
+            throw type_mismatch_error("text|blob", cpx::sql::sqlite3::detail::type_of(type));
+
+        const auto *data =
+            static_cast<const char *>(type == SQLITE_TEXT ? sqlite3_column_text(stmt, index) : sqlite3_column_blob(stmt, index));
+        const auto size = (size_t)sqlite3_column_bytes(stmt, index);
+        if (!data || size <= 0)
+            return;
+        value = {data, size};
+    }
+};
+
 template <typename CT, typename A>
 struct DESERIALIZE(std::basic_string<char, CT, A>) {
     DESERIALIZER_FIELDS;
     void into(std::basic_string<char, CT, A> &value) const {
-        if (auto type = sqlite3_column_type(stmt, index); type != SQLITE_TEXT)
-            throw type_mismatch_error("text", cpx::sql::sqlite3::detail::type_of(type));
-        value = (const char *)sqlite3_column_text(stmt, index);
+        std::basic_string_view<char, CT> str;
+        DESERIALIZE(decltype(str)){stmt, index}.into(str);
+        value = std::basic_string<char, CT, A>(str);
     }
 };
 
-template <>
-struct DESERIALIZE(std::vector<uint8_t>) {
+template <typename A>
+struct DESERIALIZE(std::vector<uint8_t, A>) {
     DESERIALIZER_FIELDS;
     void into(std::vector<uint8_t> &value) const {
         if (auto type = sqlite3_column_type(stmt, index); type != SQLITE_BLOB)
