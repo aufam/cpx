@@ -282,7 +282,6 @@ struct SERIALIZE(std::basic_string<char, CT, A>) {
     void from(const std::basic_string<char, CT, A> &value, bool is_blob = false) const {
         return SERIALIZE(std::basic_string_view<char, CT>){stmt, index}.from(value, is_blob);
     }
-    void from(std::basic_string<char, CT, A> &&value) = delete;
 };
 
 template <typename T>
@@ -294,7 +293,6 @@ struct SERIALIZE(std::optional<T>, std::enable_if_t<SERIALIZABLE(T)>) {
         else
             SERIALIZE(T){stmt, index}.from(*value);
     }
-    void from(std::vector<T> &&) = delete;
 };
 
 template <typename T>
@@ -308,7 +306,6 @@ struct SERIALIZE(std::vector<T>, std::enable_if_t<SERIALIZABLE(T)>) {
                 SERIALIZE(T){stmt, index}.from(val);
         }
     }
-    void from(std::vector<T> &&) = delete;
 };
 
 template <typename... Ts>
