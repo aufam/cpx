@@ -69,7 +69,7 @@ TEST(sql, insert) {
 TEST(sql, select) {
     auto s = sql::select_all_from(users).where(users.name == "Sugeng");
 
-    EXPECT_EQ(s.query, "select * from users where users.name = ?");
+    EXPECT_EQ(s.query, "select users.* from users where users.name = ?");
     EXPECT_EQ(s.params, (std::tuple<std::string>{"Sugeng"}));
     EXPECT_EQ(decltype(s)::row_type{}, (std::tuple<int, std::string, int>{}));
 

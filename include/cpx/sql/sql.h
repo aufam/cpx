@@ -890,7 +890,7 @@ namespace cpx::sql {
         using TupleStruct = decltype(boost::pfr::structure_to_tuple(table));
         using Filtered    = cpx::filter_tuple_t<TupleStruct, cpx::sql::detail::is_column>;
         using Tuple       = cpx::apply_tuple_t<Filtered, cpx::sql::detail::column>;
-        return Statement<std::tuple<>, Tuple>{std::string("select * from ") + table.TableName};
+        return Statement<std::tuple<>, Tuple>{std::string("select ") + table.TableName + ".* from " + table.TableName};
     };
 #endif
 
