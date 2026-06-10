@@ -160,7 +160,7 @@ struct fmt::formatter<
         decltype(auto) tpl       = cpx::fmt::reflect_of(v);
         const auto     flattened = cpx::flatten(tpl);
 
-        const auto formattable_tpl = std::apply([](auto &...tpl) { return cpx::tie_if<fmt::is_formattable>(tpl...); }, tpl);
+        const auto formattable_tpl = std::apply([](auto &...tpl) { return cpx::tie_if<fmt::is_formattable>(tpl...); }, flattened);
         fmt::context::iterator out = c.out();
         return fmt::format_to(out, "{}", formattable_tpl);
     }
