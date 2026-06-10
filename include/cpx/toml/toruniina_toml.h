@@ -290,7 +290,7 @@ struct DESERIALIZE(std::array<T, N>, std::enable_if_t<DESERIALIZABLE(T)>) {
 template <typename T, typename A>
 struct SERIALIZE(std::vector<T, A>, std::enable_if_t<SERIALIZABLE(T)>) {
     __toml11::value from(const std::vector<T, A> &v) const {
-        SERIALIZE(std::array<T, 1>){}.from_container(v);
+        return SERIALIZE(std::array<T, 1>){}.from_container(v);
     }
 };
 
