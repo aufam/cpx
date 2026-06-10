@@ -5,7 +5,6 @@
 #include <cpx/serde/serialize.h>
 #include <cpx/serde/deserialize.h>
 #include <cpx/serde/error.h>
-#include <cpx/defer.h>
 #include <cstring>
 #include <mysql/mysql.h>
 
@@ -188,11 +187,21 @@ namespace cpx::sql::mysql {
                 throw std::runtime_error(msg);
             }
 
-            std::vector<MYSQL_BIND> doc;
-            std::vector<uint64_t>   storage;
+            std::vector<MYSQL_BIND>          doc;
+            std::vector<std::array<char, 8>> storage;
             doc.reserve(std::tuple_size_v<Params>);
             storage.reserve(std::tuple_size_v<Params>);
             Serialize<Params>{doc, storage}.from(statement.params);
+
+            for (size_t i = 0; i < doc.size(); ++i) {
+                if (doc[i].buffer == nullptr) {
+                    doc[i].buffer = storage[i].data();
+                }
+                if (doc[i].buffer_type == MYSQL_TYPE_NULL) {
+                    storage[i][0]  = true;
+                    doc[i].is_null = &storage[i][0];
+                }
+            }
 
             if (!doc.empty() && mysql_stmt_bind_param(stmt, doc.data())) {
                 unsigned int err  = mysql_stmt_errno(stmt);
@@ -323,15 +332,15 @@ namespace cpx::sql::mysql::detail {
 
 template <typename T>
 struct SERIALIZE(T, std::enable_if_t<std::is_arithmetic_v<T>>) {
-    std::vector<MYSQL_BIND> &doc;
-    std::vector<uint64_t>   &storage;
+    std::vector<MYSQL_BIND>          &doc;
+    std::vector<std::array<char, 8>> &storage;
 
     void from(T value) {
         storage.emplace_back();
-        std::memcpy(&storage.back(), &value, sizeof(T));
+        std::memcpy(storage.back().data(), &value, sizeof(T));
 
         MYSQL_BIND bind{};
-        bind.buffer        = &storage.back();
+        bind.buffer        = nullptr;
         bind.buffer_length = sizeof(T);
         bind.is_unsigned   = std::is_unsigned_v<T>;
 
@@ -389,21 +398,6 @@ struct SERIALIZE(std::vector<uint8_t, A>) {
     }
 };
 
-template <>
-struct SERIALIZE(std::tm) {
-    std::vector<MYSQL_BIND>          &doc;
-    std::vector<std::array<char, 8>> &storage;
-
-    void from(std::tm value) const {
-#if defined(_WIN32)
-        auto t = _mkgmtime(&value);
-#else
-        auto t = ::timegm(&value);
-#endif
-        SERIALIZE(decltype(t)){doc, storage}.from(t);
-    }
-};
-
 template <typename T>
 struct SERIALIZE(std::optional<T>, std::enable_if_t<SERIALIZABLE(T)>) {
     std::vector<MYSQL_BIND>          &doc;
@@ -411,13 +405,11 @@ struct SERIALIZE(std::optional<T>, std::enable_if_t<SERIALIZABLE(T)>) {
 
     void from(const std::optional<T> &value) const {
         if (!value.has_value()) {
-            storage.emplace_back();
-            auto &nil = storage.back()[0];
-            nil       = 1;
-
             MYSQL_BIND bind{};
-            bind.is_null     = &nil;
+            bind.buffer      = nullptr;
             bind.buffer_type = MYSQL_TYPE_NULL;
+            doc.push_back(bind);
+            storage.emplace_back();
         } else
             SERIALIZE(T){doc, storage}.from(*value);
     }
@@ -498,17 +490,6 @@ struct DESERIALIZE(std::basic_string<char, CT, A>) {
         std::basic_string_view<char, CT> str;
         DESERIALIZE(decltype(str)){bind}.into(str);
         value = std::basic_string<char, CT, A>(str);
-    }
-};
-
-template <>
-struct DESERIALIZE(std::tm) {
-    MYSQL_BIND const &bind;
-
-    void into(std::tm &value) const {
-        std::time_t t;
-        DESERIALIZE(std::time_t){bind}.into(t);
-        value = *std::gmtime(&t);
     }
 };
 
