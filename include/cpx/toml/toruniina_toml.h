@@ -769,7 +769,7 @@ void cpx::toml::toruniina_toml::dump(std::ostream &os, const T &val, const spec 
 
 namespace cpx::toml::toruniina_toml {
     constexpr struct IO {
-        spec _spec = spec::default_version();
+        __toml11::spec _spec = spec::default_version();
 
         constexpr IO spec(spec val) const {
             IO self    = *this;
