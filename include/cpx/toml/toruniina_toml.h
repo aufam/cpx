@@ -282,7 +282,7 @@ struct DESERIALIZE(std::array<T, N>, std::enable_if_t<DESERIALIZABLE(T)>) {
 
         const auto  &arr = node.as_array();
         const size_t n   = arr.size();
-        if (n != N)
+        if (n != v.size())
             on_size_mismatch(n);
 
         for (size_t i = 0; i < n; ++i)
@@ -472,7 +472,8 @@ struct DESERIALIZE(std::variant<T...>, std::enable_if_t<((std::is_default_constr
                     type_names += e.expected_type + '|';
                 }
             }(),
-            ...);
+            ...
+        );
         if (!done) {
             type_names.pop_back();
             throw type_mismatch_error(type_names, ::cpx::toml::toruniina_toml::detail::type(node));
@@ -492,9 +493,8 @@ struct SERIALIZE(std::unordered_map<std::string, T, H, P, A>, std::enable_if_t<S
 };
 
 template <typename T, typename H, typename P, typename A>
-struct DESERIALIZE(
-    std::unordered_map<std::string, T, H, P, A>, std::enable_if_t<std::is_default_constructible_v<T> && DESERIALIZABLE(T)>
-) {
+struct
+    DESERIALIZE(std::unordered_map<std::string, T, H, P, A>, std::enable_if_t<std::is_default_constructible_v<T> && DESERIALIZABLE(T)>) {
     const __toml11::value &node;
 
     void into(std::unordered_map<std::string, T, H, P, A> &v) const {

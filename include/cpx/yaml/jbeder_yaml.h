@@ -243,15 +243,14 @@ template <typename T, size_t N>
 struct DESERIALIZE(std::array<T, N>, std::enable_if_t<DESERIALIZABLE(T)>) {
     const __yaml_cpp::Node &node;
 
-
     template <typename Container, typename F>
-    void into_container(std::array<T, N> &v, F &&on_size_mismatch) const {
+    void into_container(Container &v, F &&on_size_mismatch) const {
         if (!node.IsSequence())
             throw type_mismatch_error("array", ::cpx::yaml::jbeder_yaml::detail::type(node));
 
         const auto  &arr = node;
         const size_t n   = arr.size();
-        if (n != N)
+        if (n != v.size())
             on_size_mismatch(n);
 
         for (size_t i = 0; i < n; ++i)
