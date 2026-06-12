@@ -88,7 +88,7 @@ See [`examples/`](examples/) for runnable demos:
 
 For more detailed usage, check [`tests/`](tests/).
 
-### Struct Reflection
+### Reflection
 
 You can specialize `Reflect<T>` for your custom types without littering your public API:
 ```cpp
@@ -135,8 +135,6 @@ std::string yaml = cpx::jbeder_yaml::dump(u);
 cpx::jbeder_yaml::parse(yaml, u);
 ```
 
-### Format-specific reflection
-
 You can specialize reflection for a specific format.
 
 For example, JSON may prefer camelCase while others use kebab-case:
@@ -172,43 +170,33 @@ cpx::nlohmann_json::dump(u);
 // {"name":"Sucipto","age":24,"createdAt":"..."}
 ```
 
-### Third-party library integration
+In this context, **reflection** may not mean what you expect.
+It is closer to a literal reflection (or mirroring) of custom types into already known representations
+such as **numbers**, **strings**, **tuples**, and **tagged references**.
 
-`cpx` does not care on how your third-party libraries are organized.
+`Reflect<T> : Fields<...> {...}` is simply a convenient way to reflect a struct
+(or a class with public fields) into a tuple of tagged references.
 
-If the header guard matches, cpx will not try to include the default path.
+You can construct one manually:
 
-For example:
 ```cpp
-#include "you/might/locate/nlohmann_json/in/weird/path/json.h"
-#include "as/well/as/toml++.h"
-#include <cpx/json/nlohmann_json.h>
-#include <cpx/toml/marzer_toml.h>
+#include <cpx/fmt.h>
+
+std::string name = "Sucipto";
+int         age  = 24;
+
+TagInfo tag_name = "name";
+TagInfo tag_age  = "age";
+
+auto u = std::make_tuple(
+    cpx::tag_tie(name, tag_name),
+    cpx::tag_tie(age, tag_age)
+); // std::tuple<cpx::TagInfoFor<std::string&, cpx::TagInfo&>, cpx::TagInfoFor<int&, cpx::TagInfo&>>
+
+fmt::println("{}", u); // (name="Sucipto", age=24)
 ```
 
-For libraries with native ADL serializers (such as `fmt` or `nlohmann::json`), `cpx` provides automatic integration:
-```cpp
-fmt::println("{}", u);
-nlohmann::json j = u;
-```
-
-For libraries with SAX streaming support (avoid building an intermediate DOM), cpx provides a streming interface:
-```cpp
-#include <cpx/json/rapid_json.h>
-#include <iostream>
-
-User u = {"Sucipto", 24, now()};
-std::cout << cpx::rapid_json::io << u << std::endl;
-```
-
-
-> **Note**
->
-> `cpx` is only tested against the third-party versions listed in `CMakeLists.txt`.
-
-### Primitive type reflection
-
-As the name suggests, `Reflect<T>` is not exclusive to field reflection. It can also act as a mirror for already-known types.
+As the name suggests, `Reflect<T>` is not limited to reflecting fields. It can also act as a mirror for primitive types.
 
 For example:
 
@@ -249,30 +237,40 @@ struct cpx::Reflect<MyString> {
 };
 ```
 
-### Tuple reflection
+### Third-party library integration
 
-`Reflect<T> : Fields<...> {...}` is just a convenient way to structure tagged fields.
+`cpx` does not care on how your third-party libraries are organized.
 
-Under the hood, reflection is essentially a tuple of tagged references.
+If the header guard matches, cpx will not try to include the default path.
 
-You can construct one manually:
-
+For example:
 ```cpp
-#include <cpx/fmt.h>
-
-std::string name = "Sucipto";
-int         age  = 24;
-
-TagInfo tag_name = "name";
-TagInfo tag_age  = "age";
-
-auto u = std::make_tuple(
-    cpx::tag_tie(name, tag_name),
-    cpx::tag_tie(age, tag_age)
-);
-
-fmt::println("{}", u); // (name="Sucipto", age=24)
+#include "you/might/locate/nlohmann_json/in/weird/path/json.h"
+#include "as/well/as/toml++.h"
+#include <cpx/json/nlohmann_json.h>
+#include <cpx/toml/marzer_toml.h>
 ```
+
+For libraries with native ADL serializers (such as `fmt` or `nlohmann::json`), `cpx` provides automatic integration:
+```cpp
+fmt::println("{}", u);
+nlohmann::json j = u;
+```
+
+For libraries with SAX streaming support (avoid building an intermediate DOM), cpx provides a streming interface:
+```cpp
+#include <cpx/json/rapid_json.h>
+#include <iostream>
+
+User u = {"Sucipto", 24, now()};
+std::cout << cpx::rapid_json::io << u << std::endl;
+```
+
+
+> **Note**
+>
+> `cpx` is only tested against the third-party versions listed in `CMakeLists.txt`.
+
 
 ### Tag properties
 
