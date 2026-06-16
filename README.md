@@ -88,7 +88,7 @@ See [`examples/`](examples/) for runnable demos:
 
 For more detailed usage, check [`tests/`](tests/).
 
-### Reflection
+### Static Reflection
 
 You can specialize `Reflect<T>` for your custom types without littering your public API:
 ```cpp

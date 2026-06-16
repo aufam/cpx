@@ -1,6 +1,7 @@
 #ifndef CPX_TIME_H
 #define CPX_TIME_H
 
+#include <cstdlib>
 #include <ctime>
 #include <string>
 #include <stdexcept>
@@ -45,7 +46,7 @@ namespace cpx {
         }
 
         if (len == 0)
-            throw std::runtime_error("Failed to serialize std::tm");
+            throw std::runtime_error("Failed to stringify std::tm");
 
         str.resize(len);
 
@@ -76,7 +77,7 @@ namespace cpx {
         return str;
     }
 
-    inline std::string ts_to_string(const std::timespec &ts) {
+    inline std::string ts_to_string(const std::timespec &ts, bool iso = false) {
         constexpr auto ten_years = 24l * 3600 * 365;
 
         time_t    seconds     = ts.tv_sec;
@@ -88,6 +89,7 @@ namespace cpx {
             --seconds;
         }
 
+        // assume timestamp if it is more than 10 years
         if (seconds > ten_years || seconds < 0) {
             std::tm tm = *std::gmtime(&seconds);
             return tm_to_string(tm, ts.tv_nsec);
@@ -118,40 +120,61 @@ namespace cpx {
         if (negative)
             str += "-";
 
-        str += "P";
+        if (iso) {
+            str += "P";
 
-        if (days)
-            str += std::to_string(days) + "D";
+            if (days)
+                str += std::to_string(days) + "D";
 
-        bool has_time = hours || minutes || secs || nanos;
+            bool has_time = hours || minutes || secs || nanos;
 
-        if (has_time || days == 0) {
-            str += "T";
+            if (has_time || days == 0) {
+                str += "T";
+
+                if (hours)
+                    str += std::to_string(hours) + "H";
+
+                if (minutes)
+                    str += std::to_string(minutes) + "M";
+
+                if (nanos) {
+                    // fractional seconds
+                    char buf[32];
+                    std::snprintf(buf, sizeof(buf), "%lld.%09lld", secs, nanos);
+
+                    std::string frac = buf;
+
+                    // trim trailing zeros
+                    frac.erase(frac.find_last_not_of('0') + 1);
+
+                    // remove dangling '.'
+                    if (frac.back() == '.')
+                        frac.pop_back();
+
+                    str += frac + "S";
+                } else if (secs || (!hours && !minutes)) {
+                    str += std::to_string(secs) + "S";
+                }
+            }
+        } else {
+            if (days)
+                str += std::to_string(days) + "d";
 
             if (hours)
-                str += std::to_string(hours) + "H";
+                str += std::to_string(hours) + "h";
 
             if (minutes)
-                str += std::to_string(minutes) + "M";
+                str += std::to_string(minutes) + "m";
 
-            if (nanos) {
-                // fractional seconds
-                char buf[32];
-                std::snprintf(buf, sizeof(buf), "%lld.%09lld", secs, nanos);
+            if (secs)
+                str += std::to_string(secs) + "s";
 
-                std::string frac = buf;
+            auto millis = nanos / 1'000'000;
+            if (millis)
+                str += std::to_string(millis) + "ms";
 
-                // trim trailing zeros
-                frac.erase(frac.find_last_not_of('0') + 1);
-
-                // remove dangling '.'
-                if (frac.back() == '.')
-                    frac.pop_back();
-
-                str += frac + "S";
-            } else if (secs || (!hours && !minutes)) {
-                str += std::to_string(secs) + "S";
-            }
+            if (str.empty() || str == "-")
+                str += "0ms";
         }
 
         return str;
@@ -253,51 +276,123 @@ namespace cpx {
         long long total_nanos   = 0;
 
         bool found = false;
+        if (pos < str.size() && str[pos] == 'P') {
+            ++pos;
+            bool in_time = false;
+            found        = true;
 
-        while (pos < str.size()) {
-            if (!std::isdigit(static_cast<unsigned char>(str[pos])))
-                throw std::runtime_error("Expected digit in duration");
+            while (pos < str.size()) {
+                if (str[pos] == 'T') {
+                    in_time = true;
+                    ++pos;
+                    continue;
+                }
 
-            found = true;
+                if (!std::isdigit(static_cast<unsigned char>(str[pos])))
+                    throw std::runtime_error("Expected digit in ISO duration");
 
-            // parse number
-            long long value = 0;
+                // parse integer part
+                long long value = 0;
 
-            while (pos < str.size() && std::isdigit(static_cast<unsigned char>(str[pos]))) {
-                value = value * 10 + (str[pos] - '0');
+                while (pos < str.size() && std::isdigit(static_cast<unsigned char>(str[pos]))) {
+                    value = value * 10 + (str[pos] - '0');
+                    ++pos;
+                }
+
+                // fractional seconds
+                if (pos < str.size() && str[pos] == '.') {
+                    if (pos + 1 >= str.size())
+                        throw std::runtime_error("Invalid fractional seconds");
+
+                    ++pos;
+
+                    std::string frac;
+
+                    while (pos < str.size() && std::isdigit(static_cast<unsigned char>(str[pos]))) {
+                        frac += str[pos++];
+                    }
+
+                    if (pos >= str.size() || str[pos] != 'S')
+                        throw std::runtime_error("Fraction only allowed on seconds");
+
+                    while (frac.size() < 9)
+                        frac.push_back('0');
+
+                    if (frac.size() > 9)
+                        frac.resize(9);
+
+                    total_seconds += value;
+                    total_nanos += std::stoll(frac);
+
+                    ++pos; // S
+                    continue;
+                }
+
+                if (pos >= str.size())
+                    throw std::runtime_error("Missing ISO duration unit");
+
+                switch (str[pos]) {
+                case 'D':
+                    total_seconds += value * 86400ll;
+                    break;
+
+                case 'H':
+                    total_seconds += value * 3600ll;
+                    break;
+
+                case 'M':
+                    if (!in_time)
+                        throw std::runtime_error("Months not supported in ISO duration");
+                    total_seconds += value * 60ll;
+                    break;
+
+                case 'S':
+                    total_seconds += value;
+                    break;
+
+                default:
+                    throw std::runtime_error("Unsupported ISO duration unit");
+                }
+
                 ++pos;
             }
+        } else {
+            while (pos < str.size()) {
+                if (!std::isdigit(static_cast<unsigned char>(str[pos])))
+                    throw std::runtime_error("Expected digit in duration");
 
-            // parse unit
-            if (pos >= str.size())
-                throw std::runtime_error("Missing duration unit");
+                found = true;
 
-            // ms
-            if (str.compare(pos, 2, "ms") == 0) {
-                total_nanos += value * 1'000'000ll;
-                pos += 2;
-            }
-            // days
-            else if (str[pos] == 'd') {
-                total_seconds += value * 24ll * 3600ll;
-                ++pos;
-            }
-            // hours
-            else if (str[pos] == 'h') {
-                total_seconds += value * 3600ll;
-                ++pos;
-            }
-            // minutes
-            else if (str[pos] == 'm') {
-                total_seconds += value * 60ll;
-                ++pos;
-            }
-            // seconds
-            else if (str[pos] == 's') {
-                total_seconds += value;
-                ++pos;
-            } else {
-                throw std::runtime_error("Unknown duration unit");
+                // parse number
+                long long value = 0;
+
+                while (pos < str.size() && std::isdigit(static_cast<unsigned char>(str[pos]))) {
+                    value = value * 10 + (str[pos] - '0');
+                    ++pos;
+                }
+
+                // parse unit
+                if (pos >= str.size())
+                    throw std::runtime_error("Missing duration unit");
+
+                if (str.compare(pos, 2, "ms") == 0) {
+                    total_nanos += value * 1'000'000ll;
+                    pos += 2;
+                } else if (str[pos] == 'd') {
+                    total_seconds += value * 24ll * 3600ll;
+                    ++pos;
+                } else if (str[pos] == 'h') {
+                    total_seconds += value * 3600ll;
+                    ++pos;
+                } else if (str[pos] == 'm') {
+                    total_seconds += value * 60ll;
+                    ++pos;
+                } else if (str[pos] == 's') {
+                    total_seconds += value;
+                    ++pos;
+                } else {
+                    throw std::runtime_error("Unknown duration unit");
+                }
             }
         }
 
