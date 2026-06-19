@@ -220,9 +220,11 @@ namespace cpx {
 
         using std::optional<E>::optional;
 
+        Result(std::nullopt_t) = delete;
+
         // Internal construction helpers — use in_place_index for direct initialization.
         static constexpr Result ok() {
-            return std::nullopt;
+            return {};
         }
 
         static constexpr Result err(E &&e) {
