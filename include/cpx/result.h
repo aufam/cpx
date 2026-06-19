@@ -27,16 +27,12 @@ namespace cpx {
     ///
     /// @endcode
     template <typename T, typename E = std::runtime_error>
-    class [[nodiscard]] Result {
-        std::variant<T, E> data;
-
+    class [[nodiscard]] Result : protected std::variant<T, E> {
     public:
         using value_type = T;
         using error_type = E;
 
-        template <typename U, typename = std::enable_if_t<std::is_constructible_v<decltype(data), U &&>>>
-        constexpr Result(U &&val)
-            : data(std::forward<U>(val)) {}
+        using std::variant<T, E>::variant;
 
         // Internal construction helpers — use in_place_index for direct initialization.
         static constexpr Result ok(T &&v) {
@@ -57,12 +53,12 @@ namespace cpx {
 
         /// Returns true if this is a success value.
         constexpr bool is_ok() const noexcept {
-            return data.index() == 0;
+            return this->index() == 0;
         }
 
         /// Returns true if this is an error value.
         constexpr bool is_err() const noexcept {
-            return data.index() == 1;
+            return this->index() == 1;
         }
 
         constexpr operator T &() & {
@@ -85,28 +81,28 @@ namespace cpx {
 
         /// Access the success value; throws bad_variant_access if this is an error.
         constexpr T &value() & {
-            return std::get<0>(data);
+            return std::get<0>(static_cast<std::variant<T, E> &>(*this));
         }
 
         constexpr const T &value() const & {
-            return std::get<0>(data);
+            return std::get<0>(static_cast<const std::variant<T, E> &>(*this));
         }
 
         constexpr T &&value() && {
-            return std::get<0>(std::move(data));
+            return std::move(std::get<0>(static_cast<std::variant<T, E> &>(*this)));
         }
 
         /// Access the error value; throws bad_variant_access if this is a success.
         constexpr E &error() & {
-            return std::get<1>(data);
+            return std::get<1>(static_cast<std::variant<T, E> &>(*this));
         }
 
         constexpr const E &error() const & {
-            return std::get<1>(data);
+            return std::get<1>(static_cast<const std::variant<T, E> &>(*this));
         }
 
         constexpr E &&error() && {
-            return std::get<1>(std::move(data));
+            return std::move(std::get<1>(static_cast<std::variant<T, E> &>(*this)));
         }
 
         /// Returns the success value or a default if this is an error.
@@ -151,17 +147,29 @@ namespace cpx {
         template <typename F>
         constexpr auto transform(F &&f) const & -> Result<std::invoke_result_t<F, const T &>, E> {
             using U = std::invoke_result_t<F, const T &>;
-            if (is_ok())
+            if (is_err())
+                return Result<U, E>::err(error());
+
+            if constexpr (std::is_same_v<U, void>) {
+                std::forward<F>(f)(value());
+                return Result<U, E>::ok();
+            } else {
                 return Result<U, E>::ok(std::forward<F>(f)(value()));
-            return Result<U, E>::err(error());
+            }
         }
 
         template <typename F>
         constexpr auto transform(F &&f) && -> Result<std::invoke_result_t<F, T &&>, E> {
             using U = std::invoke_result_t<F, T &&>;
-            if (is_ok())
+            if (is_err())
+                return Result<U, E>::err(std::move(error()));
+
+            if constexpr (std::is_same_v<U, void>) {
+                std::forward<F>(f)(std::move(value()));
+                return Result<U, E>::ok();
+            } else {
                 return Result<U, E>::ok(std::forward<F>(f)(std::move(value())));
-            return Result<U, E>::err(std::move(error()));
+            }
         }
 
         /// map_err: applies f (E -> F) if this is Err, returning Result<T, F>.
@@ -201,23 +209,16 @@ namespace cpx {
     private:
         template <std::size_t I, typename U>
         constexpr Result(std::in_place_index_t<I> tag, U &&v)
-            : data(tag, std::forward<U>(v)) {}
+            : std::variant<T, E>(tag, std::forward<U>(v)) {}
     };
 
     template <typename E>
-    class [[nodiscard]] Result<void, E> {
-        std::optional<E> data;
-
+    class [[nodiscard]] Result<void, E> : protected std::optional<E> {
     public:
         using value_type = void;
         using error_type = E;
 
-        template <typename U, typename = std::enable_if_t<std::is_constructible_v<decltype(data), U &&>>>
-        constexpr Result(U &&val)
-            : data(std::forward<U>(val)) {}
-
-        constexpr Result()
-            : data(std::nullopt) {}
+        using std::optional<E>::optional;
 
         // Internal construction helpers — use in_place_index for direct initialization.
         static constexpr Result ok() {
@@ -234,25 +235,25 @@ namespace cpx {
 
         /// Returns true if this is a success value.
         constexpr bool is_ok() const noexcept {
-            return !data.has_value();
+            return !this->has_value();
         }
 
         /// Returns true if this is an error value.
         constexpr bool is_err() const noexcept {
-            return data.has_value();
+            return this->has_value();
         }
 
         /// Access the error value; throws bad_variant_access if this is a success.
         constexpr E &error() & {
-            return data.value();
+            return this->value();
         }
 
         constexpr const E &error() const & {
-            return data.value;
+            return this->value();
         }
 
         constexpr E &&error() && {
-            return std::move(data.value());
+            return std::move(this->value());
         }
 
         /// Monadic and_then: applies f (T -> Result<U, E>) if this is Ok.
@@ -276,19 +277,29 @@ namespace cpx {
         template <typename F>
         constexpr auto transform(F &&f) const & -> Result<std::invoke_result_t<F>, E> {
             using U = std::invoke_result_t<F>;
-            if (is_ok()) {
+            if (is_err())
+                return Result<U, E>::err(error());
+
+            if constexpr (std::is_same_v<U, void>) {
                 std::forward<F>(f)();
                 return Result<U, E>::ok();
+            } else {
+                return Result<U, E>::ok(std::forward<F>(f)());
             }
-            return Result<U, E>::err(error());
         }
 
         template <typename F>
         constexpr auto transform(F &&f) && -> Result<std::invoke_result_t<F>, E> {
             using U = std::invoke_result_t<F>;
-            if (is_ok())
-                return std::forward<F>(f)();
-            return Result<U, E>::err(error());
+            if (is_err())
+                return Result<U, E>::err(std::move(error()));
+
+            if constexpr (std::is_same_v<U, void>) {
+                std::forward<F>(f)();
+                return Result<U, E>::ok();
+            } else {
+                return Result<U, E>::ok(std::forward<F>(f)());
+            }
         }
 
         /// map_err: applies f (E -> F) if this is Err, returning Result<T, F>.

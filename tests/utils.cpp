@@ -80,7 +80,7 @@ TEST(Optional, ValueOrElse_Empty) {
 // ─── Result<T, E> ─────────────────────────────────────────────────────────────
 
 TEST(Result, OkIsOk) {
-    auto r = Result<int>::ok(42);
+    Result<int> r = 42;
     EXPECT_TRUE(r.is_ok());
     EXPECT_FALSE(r.is_err());
     EXPECT_TRUE(bool(r));
@@ -89,7 +89,7 @@ TEST(Result, OkIsOk) {
 }
 
 TEST(Result, ErrIsErr) {
-    auto r = Result<int, std::string>::err("oops");
+    Result<int, std::string> r = "oops";
     EXPECT_FALSE(r.is_ok());
     EXPECT_TRUE(r.is_err());
     EXPECT_EQ(r.error(), "oops");
@@ -131,9 +131,9 @@ TEST(Result, Transform_Ok) {
 }
 
 TEST(Result, Transform_Err) {
-    auto r = Result<int>::err(std::runtime_error("oops")).transform([](int n) { return n * 2; });
+    auto r = Result<int, std::string>::err("oops").transform([](int) {});
     EXPECT_TRUE(r.is_err());
-    EXPECT_EQ(r.error().what(), std::string("oops"));
+    EXPECT_EQ(r.error(), "oops");
 }
 
 TEST(Result, Transform_TypeChange) {
