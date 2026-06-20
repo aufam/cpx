@@ -9,7 +9,6 @@ module;
 #include <cpx/tag.h>
 #include <cpx/tag_info.h>
 #include <cpx/time.h>
-#include <cpx/time.h>
 #include <cpx/tuple.h>
 #include <cpx/reflect_builtin.h>
 
@@ -41,9 +40,6 @@ export namespace cpx {
     using ::cpx::overload;
     using ::cpx::visit;
 
-    using ::cpx::bad_result_access;
-    using ::cpx::Err;
-    using ::cpx::Ok;
     using ::cpx::Result;
 
     using ::cpx::is_tagged;
@@ -60,6 +56,9 @@ export namespace cpx {
     using ::cpx::tm_min;
     using ::cpx::tm_now;
     using ::cpx::tm_to_string;
+    using ::cpx::ts_from_string;
+    using ::cpx::ts_now;
+    using ::cpx::ts_to_string;
 
     using ::cpx::is_invocable_with_tuple;
     using ::cpx::is_invocable_with_tuple_v;
@@ -70,7 +69,6 @@ export namespace cpx {
     using ::cpx::tuple_for_each;
 
     using ::cpx::const_reflect_t;
-    using ::cpx::Field;
     using ::cpx::Fields;
     using ::cpx::has_reflect;
     using ::cpx::has_reflect_v;
