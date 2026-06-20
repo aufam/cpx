@@ -1,78 +1,51 @@
 module;
 
-#include <cpx/defer.h>
-#include <cpx/extend.h>
-#include <cpx/iter.h>
-#include <cpx/optional.h>
-#include <cpx/overload.h>
-#include <cpx/result.h>
-#include <cpx/tag.h>
-#include <cpx/tag_info.h>
-#include <cpx/time.h>
-#include <cpx/tuple.h>
-#include <cpx/reflect_builtin.h>
+#include <cstdlib>
+#include <ctime>
+#include <iterator>
+#include <limits>
+#include <stdexcept>
+#include <type_traits>
+#include <utility>
+
+#include <array>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <tuple>
+#include <variant>
+
+#include <cpx/serde/error.h>
+
+#ifndef BOOST_PFR_HPP
+#    if __has_include(<boost/pfr.hpp>)
+#        include <boost/pfr.hpp>
+#    endif
+#endif
+
+#ifndef NEARGYE_MAGIC_ENUM_HPP
+#    if __has_include(<magic_enum/magic_enum.hpp>)
+#        include <magic_enum/magic_enum.hpp>
+#    endif
+#endif
 
 export module cpx;
 
-export namespace cpx {
-    using ::cpx::defer;
+#undef CPX_EXPORT
+#define CPX_EXPORT export
 
-    using ::cpx::Extend;
-    using ::cpx::flatten;
-    using ::cpx::flatten_one;
-    using ::cpx::is_extended;
-    using ::cpx::is_extended_v;
-    using ::cpx::remove_extend;
-    using ::cpx::remove_extend_t;
+extern "C++" {
+#include "cpx/tuple.h"
+#include "cpx/optional.h"
+#include "cpx/defer.h"
+#include "cpx/overload.h"
+#include "cpx/result.h"
+#include "cpx/tag.h"
+#include "cpx/time.h"
 
-    using ::cpx::Iter;
-    using ::cpx::iterate;
-    using ::cpx::reversed;
-    using ::cpx::zip;
-
-    using ::cpx::and_then;
-    using ::cpx::is_optional;
-    using ::cpx::is_optional_v;
-    using ::cpx::or_else;
-    using ::cpx::transform;
-    using ::cpx::value_or_else;
-
-    using ::cpx::overload;
-    using ::cpx::visit;
-
-    using ::cpx::Result;
-
-    using ::cpx::is_tagged;
-    using ::cpx::is_tagged_v;
-    using ::cpx::remove_tag;
-    using ::cpx::remove_tag_t;
-    using ::cpx::Tag;
-
-    using ::cpx::get_tag_info;
-    using ::cpx::TagInfo;
-
-    using ::cpx::tm_from_string;
-    using ::cpx::tm_max;
-    using ::cpx::tm_min;
-    using ::cpx::tm_now;
-    using ::cpx::tm_to_string;
-    using ::cpx::ts_from_string;
-    using ::cpx::ts_now;
-    using ::cpx::ts_to_string;
-
-    using ::cpx::is_invocable_with_tuple;
-    using ::cpx::is_invocable_with_tuple_v;
-    using ::cpx::is_tuple;
-    using ::cpx::is_tuple_v;
-    using ::cpx::tie_if;
-    using ::cpx::tie_if_one;
-    using ::cpx::tuple_for_each;
-
-    using ::cpx::const_reflect_t;
-    using ::cpx::Fields;
-    using ::cpx::has_reflect;
-    using ::cpx::has_reflect_v;
-    using ::cpx::Reflect;
-    using ::cpx::reflect_of;
-    using ::cpx::reflect_t;
-} // namespace cpx
+#include "cpx/iter.h"
+#include "cpx/extend.h"
+#include "cpx/tag_info.h"
+#include "cpx/reflect.h"
+#include "cpx/reflect_builtin.h"
+}

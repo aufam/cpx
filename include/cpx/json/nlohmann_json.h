@@ -12,27 +12,31 @@
 #    include <nlohmann/json.hpp>
 #endif
 
+#ifndef CPX_EXPORT
+#    define CPX_EXPORT
+#endif
+
 namespace cpx::json::nlohmann_json {
-    template <typename T>
+    CPX_EXPORT template <typename T>
     struct Reflect : std::false_type {
         using const_type = type;
     };
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     struct has_reflect
         : std::bool_constant<(Reflect<T>::value || cpx::json::has_reflect_v<T>) && !std::is_same_v<T, nlohmann::json::value_t>> {
     };
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     inline constexpr bool has_reflect_v = has_reflect<T>::value;
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     using reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::type, cpx::json::reflect_t<T>>;
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     using const_reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::const_type, cpx::json::const_reflect_t<T>>;
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     constexpr decltype(auto) reflect_of(T &&v) {
         if constexpr (Reflect<std::decay_t<T>>::value)
             return Reflect<std::decay_t<T>>::of(std::forward<T>(v));
@@ -42,7 +46,7 @@ namespace cpx::json::nlohmann_json {
 } // namespace cpx::json::nlohmann_json
 
 namespace cpx {
-    namespace nlohmann_json = cpx::json::nlohmann_json;
+    CPX_EXPORT namespace nlohmann_json = cpx::json::nlohmann_json;
 }
 
 #define SERIALIZE(...)      cpx::serde::Serialize<nlohmann::json, __VA_ARGS__>
@@ -53,46 +57,46 @@ namespace cpx {
 #define DUMP(...)           cpx::serde::Dump<nlohmann::json, __VA_ARGS__>
 
 namespace cpx::json::nlohmann_json {
-    template <typename From>
+    CPX_EXPORT template <typename From>
     using Serialize = SERIALIZE(From);
 
-    template <typename To>
+    CPX_EXPORT template <typename To>
     using Deserialize = DESERIALIZE(To);
 
-    template <typename From>
+    CPX_EXPORT template <typename From>
     constexpr bool is_serializable_v = SERIALIZABLE(From);
 
-    template <typename To>
+    CPX_EXPORT template <typename To>
     constexpr bool is_deserializable_v = DESERIALIZABLE(To);
 
-    template <typename To>
+    CPX_EXPORT template <typename To>
     using Dump = DUMP(To);
 
-    template <typename From = std::string>
+    CPX_EXPORT template <typename From = std::string>
     using Parse = PARSE(From);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     std::string dump(const T &val, int indent = -1, char indent_char = ' ', bool ensure_ascii = false);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void dump(std::ostream &, const T &val, int indent = -1, char indent_char = ' ', bool ensure_ascii = false);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     T parse(const std::string &str, bool ignore_comments = false);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     T parse(std::istream &stream, bool ignore_comments = false);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     T parse(FILE *pfile, bool ignore_comments = false);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void parse(const std::string &str, T &val, bool ignore_comments = false);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void parse(std::istream &stream, T &val, bool ignore_comments = false);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void parse(FILE *pfile, T &val, bool ignore_comments = false);
 } // namespace cpx::json::nlohmann_json
 
@@ -137,8 +141,7 @@ struct nlohmann::adl_serializer<std::variant<T...>, std::enable_if_t<((SERIALIZA
                     type_names += e.expected_type + '|';
                 }
             }(),
-            ...
-        );
+            ...);
         if (!done) {
             type_names.pop_back();
             throw cpx::serde::type_mismatch_error(type_names, j.type_name());
@@ -465,7 +468,7 @@ void cpx::json::nlohmann_json::parse(FILE *pfile, T &val, bool ignore_comments) 
 }
 
 namespace cpx::json::nlohmann_json {
-    constexpr struct IO {
+    CPX_EXPORT constexpr struct IO {
         int  _indent          = -1;
         char _indent_char     = ' ';
         bool _ensure_ascii    = true;
@@ -495,11 +498,11 @@ namespace cpx::json::nlohmann_json {
             return self;
         }
 
-        friend DUMP(std::ostream) operator<<(std::ostream & os, const IO & io) {
+        friend DUMP(std::ostream) operator<<(std::ostream &os, const IO &io) {
             return {os, io._indent, io._indent_char, io._ensure_ascii};
         }
 
-        friend PARSE(std::istream) operator>>(std::istream & is, const IO & io) {
+        friend PARSE(std::istream) operator>>(std::istream &is, const IO &io) {
             return {is, io._ignore_comments};
         }
     } io{};

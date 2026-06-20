@@ -14,23 +14,27 @@
 #    include <sqlite3.h>
 #endif
 
+#ifndef CPX_EXPORT
+#    define CPX_EXPORT
+#endif
+
 
 /*
  * Forward declarations
  */
 namespace cpx::sql::sqlite3 {
-    class Connection;
+    CPX_EXPORT class Connection;
 
-    template <typename Row>
+    CPX_EXPORT template <typename Row>
     class Rows;
 
-    template <typename From, typename Enable = void>
+    CPX_EXPORT template <typename From, typename Enable = void>
     using Serialize = cpx::serde::Serialize<sqlite3_stmt, From, Enable>;
 
-    template <typename To, typename Enable = void>
+    CPX_EXPORT template <typename To, typename Enable = void>
     using Deserialize = cpx::serde::Deserialize<sqlite3_stmt, To, Enable>;
 
-    class error : public std::exception {
+    CPX_EXPORT class error : public std::exception {
         mutable std::string what_;
 
     public:
@@ -66,7 +70,7 @@ namespace cpx::sql::sqlite3 {
 } // namespace cpx::sql::sqlite3
 
 namespace cpx {
-    namespace sqlite3 = cpx::sql::sqlite3;
+    CPX_EXPORT namespace sqlite3 = cpx::sql::sqlite3;
 }
 
 /*

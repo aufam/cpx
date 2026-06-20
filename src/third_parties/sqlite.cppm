@@ -1,20 +1,22 @@
 module;
 
-#include <cpx/sql/sqlite3.h>
+#include <cpx/sql/sql.h>
+#include <cpx/serde/serialize.h>
+#include <cpx/serde/deserialize.h>
+#include <cpx/serde/error.h>
+#include <string>
+#include <optional>
+#include <ctime>
+#include <utility>
+
+#include <sqlite3.h>
 
 export module cpx.sqlite;
-import cpx;
+export import cpx.sql;
 
-export namespace cpx::sql::sqlite3 {
-    using ::cpx::sql::sqlite3::Connection;
-    using ::cpx::sql::sqlite3::Rows;
+#undef CPX_EXPORT
+#define CPX_EXPORT export
 
-    using ::cpx::sql::sqlite3::Deserialize;
-    using ::cpx::sql::sqlite3::Serialize;
-
-    using ::cpx::sql::sqlite3::error;
-} // namespace cpx::sql::sqlite3
-
-export namespace cpx {
-    namespace sqlite = ::cpx::sql::sqlite3;
+extern "C++" {
+#include "cpx/sql/sqlite3.h"
 }

@@ -14,32 +14,30 @@
 #    include <fmt/chrono.h>
 #endif
 
-#ifdef CPX_MODULE
-#    define CPX_EXPORT export
-#else
+#ifndef CPX_EXPORT
 #    define CPX_EXPORT
 #endif
 
-CPX_EXPORT namespace cpx::fmt {
-    template <typename T, typename Enable = void>
+namespace cpx::fmt {
+    CPX_EXPORT template <typename T, typename Enable = void>
     struct Reflect : std::false_type {
         using const_type = type;
     };
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     struct has_reflect : std::bool_constant<(Reflect<T>::value || cpx::has_reflect_v<T>) && !cpx::is_time_v<T>> {};
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     inline constexpr bool has_reflect_v = has_reflect<T>::value;
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     using reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::type, cpx::reflect_t<T>>;
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     using const_reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::const_type, cpx::const_reflect_t<T>>;
 
-    template <typename T>
-    constexpr decltype(auto) reflect_of(T & v) {
+    CPX_EXPORT template <typename T>
+    constexpr decltype(auto) reflect_of(T &v) {
         if constexpr (Reflect<std::remove_const_t<T>>::value)
             return Reflect<std::remove_const_t<T>>::of(v);
         else
@@ -98,8 +96,10 @@ struct fmt::formatter<std::variant<T...>, char, std::enable_if_t<(fmt::is_format
         fmt::context::iterator out = c.out();
         return std::visit(
             [&](const auto &var) {
-                if constexpr (std::is_same_v<std::decay_t<decltype(var)>, std::string> ||
-                              std::is_same_v<std::decay_t<decltype(var)>, std::string_view>)
+                if constexpr (
+                    std::is_same_v<std::decay_t<decltype(var)>, std::string> ||
+                    std::is_same_v<std::decay_t<decltype(var)>, std::string_view>
+                )
                     return fmt::format_to(out, "{:?}", var);
                 else
                     return fmt::format_to(out, "{}", var);

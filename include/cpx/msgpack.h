@@ -8,10 +8,16 @@
 #include <optional>
 #include <variant>
 
-#include <msgpack.hpp>
+#ifndef _CPX_MSGPACK_HPP
+#    include <msgpack.hpp>
+#endif
+
+#ifndef CPX_EXPORT
+#    define CPX_EXPORT
+#endif
 
 namespace cpx::msgpack {
-    template <typename T>
+    CPX_EXPORT template <typename T>
     constexpr decltype(auto) get_tag_info(const T &field) {
         if constexpr (cpx::detail::is_tag_info_for_v<T>)
             return field.ti;
@@ -19,25 +25,25 @@ namespace cpx::msgpack {
             return cpx::get_tag_info(field, "msgpack");
     }
 
-    template <typename T, typename Enable = void>
+    CPX_EXPORT template <typename T, typename Enable = void>
     struct Reflect : std::false_type {
         using const_type = type;
     };
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     struct has_reflect
         : std::bool_constant<(Reflect<T>::value || cpx::has_reflect_v<T>) && !cpx::is_time_v<T> && !std::is_enum_v<T>> {};
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     inline constexpr bool has_reflect_v = has_reflect<T>::value;
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     using reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::type, cpx::reflect_t<T>>;
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     using const_reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::const_type, cpx::const_reflect_t<T>>;
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     constexpr decltype(auto) reflect_of(T &v) {
         if constexpr (Reflect<std::remove_const_t<T>>::value)
             return Reflect<std::remove_const_t<T>>::of(v);
@@ -45,35 +51,35 @@ namespace cpx::msgpack {
             return cpx::reflect_of(v);
     }
 
-    template <typename OS, typename From>
+    CPX_EXPORT template <typename OS, typename From>
     using Serialize = cpx::serde::Serialize<::msgpack::packer<OS>, From>;
 
-    template <typename OS, typename To>
+    CPX_EXPORT template <typename OS, typename To>
     using Deserialize = cpx::serde::Serialize<::msgpack::object, To>;
 
-    template <typename To>
+    CPX_EXPORT template <typename To>
     using Dump = cpx::serde::Dump<::msgpack::packer<To>, To>;
 
-    template <typename From>
+    CPX_EXPORT template <typename From>
     using Parse = cpx::serde::Parse<::msgpack::unpacker, From>;
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::string dump(const T &val);
 
-    template <typename OS, typename T>
+    CPX_EXPORT template <typename OS, typename T>
     void dump(OS &os, const T &val);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void parse(const std::string &buffer, T &val);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     std::enable_if_t<std::is_default_constructible_v<T>, T> parse(const std::string &buffer);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void parse(std::istream &, T &val);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     std::enable_if_t<std::is_default_constructible_v<T>, T> parse(std::istream &);
 } // namespace cpx::msgpack
 
@@ -300,8 +306,7 @@ struct cpx::serde::Deserialize<
                     type_names += e.expected_type + '|';
                 }
             }(),
-            ...
-        );
+            ...);
         if (!done) {
             type_names.pop_back();
             throw type_mismatch_error(type_names, "unknown");
@@ -701,7 +706,7 @@ std::enable_if_t<std::is_default_constructible_v<T>, T> cpx::msgpack::parse(std:
 }
 
 namespace cpx::msgpack {
-    constexpr struct IO {
+    CPX_EXPORT constexpr struct IO {
         template <typename OS>
         friend cpx::msgpack::Dump<OS> operator<<(OS &os, const IO &) {
             return {os};

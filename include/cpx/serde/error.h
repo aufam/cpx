@@ -4,8 +4,12 @@
 #include <exception>
 #include <string>
 
+#ifndef CPX_EXPORT
+#    define CPX_EXPORT
+#endif
+
 namespace cpx::serde {
-    class error : public std::exception {
+    CPX_EXPORT class error : public std::exception {
     protected:
         mutable std::string what_;
 
@@ -42,7 +46,7 @@ namespace cpx::serde {
         }
     };
 
-    class type_mismatch_error : public error {
+    CPX_EXPORT class type_mismatch_error : public error {
     public:
         std::string expected_type;
 
@@ -51,15 +55,15 @@ namespace cpx::serde {
             , expected_type(expected_type) {}
     };
 
-    class size_mismatch_error : public error {
+    CPX_EXPORT class size_mismatch_error : public error {
     public:
         size_mismatch_error(size_t expect, size_t got)
             : error("Size mismatch error: expect `" + std::to_string(expect) + "` got `" + std::to_string(got) + "`") {}
     };
 
-    class duplicate_oneof_error : public error {
+    CPX_EXPORT class duplicate_oneof_error : public error {
     public:
-        duplicate_oneof_error(std::string_view oneof_signature)
+        explicit duplicate_oneof_error(std::string_view oneof_signature)
             : error("multiple oneof fields set: `" + std::string(oneof_signature) + "`") {}
     };
 } // namespace cpx::serde

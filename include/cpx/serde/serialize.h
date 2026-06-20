@@ -3,14 +3,18 @@
 
 #include <type_traits>
 
+#ifndef CPX_EXPORT
+#    define CPX_EXPORT
+#endif
+
 namespace cpx::serde {
-    template <typename Serializer, typename From, typename Enable = void>
+    CPX_EXPORT template <typename Serializer, typename From, typename Enable = void>
     struct Serialize;
 
-    template <typename Serializer, typename To, typename Enable = void>
+    CPX_EXPORT template <typename Serializer, typename To, typename Enable = void>
     struct Dump;
 
-    template <typename Serializer, typename From, typename = void>
+    CPX_EXPORT template <typename Serializer, typename From, typename = void>
     struct is_serializable : std::false_type {};
 
     template <typename Serializer, typename From>
@@ -20,7 +24,7 @@ namespace cpx::serde {
         std::void_t<decltype(std::declval<Serialize<Serializer, From>>().from(std::declval<const From &>()))>> : std::true_type {
     };
 
-    template <typename Serializer, typename From>
+    CPX_EXPORT template <typename Serializer, typename From>
     inline constexpr bool is_serializable_v = is_serializable<Serializer, From>::value;
 } // namespace cpx::serde
 

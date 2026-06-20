@@ -24,50 +24,54 @@
 #define DUMP(...)           cpx::serde::Dump<yyjson_mut_doc, __VA_ARGS__>
 #define PARSE(...)          cpx::serde::Parse<yyjson_doc, __VA_ARGS__>
 
+#ifndef CPX_EXPORT
+#    define CPX_EXPORT
+#endif
+
 namespace cpx::json::yy_json {
-    template <typename From>
+    CPX_EXPORT template <typename From>
     using Serialize = SERIALIZE(From);
 
-    template <typename To>
+    CPX_EXPORT template <typename To>
     using Deserialize = DESERIALIZE(To);
 
-    template <typename From>
+    CPX_EXPORT template <typename From>
     constexpr bool is_serializable_v = SERIALIZABLE(From);
 
-    template <typename To>
+    CPX_EXPORT template <typename To>
     constexpr bool is_deserializable_v = DESERIALIZABLE(To);
 
-    template <typename From>
+    CPX_EXPORT template <typename From>
     using Parse = PARSE(From);
 
-    template <typename To>
+    CPX_EXPORT template <typename To>
     using Dump = DUMP(To);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void parse(const std::string &str, T &val, yyjson_read_flag = YYJSON_READ_NOFLAG);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void parse_from_file(const std::string &path, T &val, yyjson_read_flag = YYJSON_READ_NOFLAG);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::enable_if_t<std::is_default_constructible_v<T>, T> parse(const std::string &str, yyjson_read_flag = YYJSON_READ_NOFLAG);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::enable_if_t<std::is_default_constructible_v<T>, T>
     parse_from_file(const std::string &path, yyjson_read_flag = YYJSON_READ_NOFLAG);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::string dump(const T &val, yyjson_write_flag = YYJSON_WRITE_NOFLAG, const yyjson_alc *alc = nullptr);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void dump(const T &&val, yyjson_write_flag = YYJSON_WRITE_NOFLAG, const yyjson_alc *alc = nullptr) = delete;
 } // namespace cpx::json::yy_json
 
 namespace cpx {
-    namespace yy_json = cpx::json::yy_json;
+    CPX_EXPORT namespace yy_json = cpx::json::yy_json;
 }
 
 // bool
@@ -478,8 +482,7 @@ struct DESERIALIZE(std::variant<T...>, std::enable_if_t<((std::is_default_constr
                     type_names += e.expected_type + '|';
                 }
             }(),
-            ...
-        );
+            ...);
         if (!done) {
             type_names.pop_back();
             throw type_mismatch_error(type_names, yyjson_get_type_desc(val));
@@ -508,8 +511,10 @@ struct SERIALIZE(std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A>
 };
 
 template <typename CT, typename CA, typename T, typename H, typename P, typename A>
-struct
-    DESERIALIZE(std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A>, std::enable_if_t<std::is_default_constructible_v<T> && DESERIALIZABLE(T)>) {
+struct DESERIALIZE(
+    std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A>,
+    std::enable_if_t<std::is_default_constructible_v<T> && DESERIALIZABLE(T)>
+) {
     yyjson_val *val;
 
     void into(std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A> &v) {

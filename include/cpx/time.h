@@ -6,8 +6,12 @@
 #include <string>
 #include <stdexcept>
 
+#ifndef CPX_EXPORT
+#    define CPX_EXPORT
+#endif
+
 namespace cpx {
-    template <typename T>
+    CPX_EXPORT template <typename T>
     struct is_time : std::false_type {};
 
     template <>
@@ -16,17 +20,17 @@ namespace cpx {
     template <>
     struct is_time<std::timespec> : std::true_type {};
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     inline constexpr bool is_time_v = is_time<T>::value;
 
-    inline constexpr auto tm_min = []() {
+    CPX_EXPORT inline constexpr auto tm_min = []() {
         std::tm tm_min{};
         tm_min.tm_year = 70;
         tm_min.tm_mday = 1;
         return tm_min;
     }();
 
-    inline constexpr auto tm_max = []() {
+    CPX_EXPORT inline constexpr auto tm_max = []() {
         std::tm tm_max{};
         tm_max.tm_year = 1100;
         tm_max.tm_mday = 1;
@@ -34,7 +38,7 @@ namespace cpx {
     }();
 
 
-    inline std::string tm_to_string(const std::tm &tm, long long nanos = 0, int offset_mins = 0) {
+    CPX_EXPORT inline std::string tm_to_string(const std::tm &tm, long long nanos = 0, int offset_mins = 0) {
         std::string str(64, '\0');
         size_t      len;
         const bool  time_only = tm.tm_mday == 0; // assume time only
@@ -77,7 +81,7 @@ namespace cpx {
         return str;
     }
 
-    inline std::string ts_to_string(const std::timespec &ts, bool iso = false) {
+    CPX_EXPORT inline std::string ts_to_string(const std::timespec &ts, bool iso = false) {
         constexpr auto ten_years = 24l * 3600 * 365;
 
         time_t    seconds     = ts.tv_sec;
@@ -180,7 +184,7 @@ namespace cpx {
         return str;
     }
 
-    inline std::tm tm_from_string(
+    CPX_EXPORT inline std::tm tm_from_string(
         const std::string &str, const std::tm *default_value = nullptr, decltype(std::timespec::tv_nsec) *nanos = nullptr
     ) {
         if (nanos)
@@ -244,7 +248,7 @@ namespace cpx {
         return tm;
     }
 
-    inline std::timespec ts_from_string(const std::string &str, const std::timespec *default_value = nullptr) {
+    CPX_EXPORT inline std::timespec ts_from_string(const std::string &str, const std::timespec *default_value = nullptr) {
         if (str.empty()) {
             if (default_value)
                 return *default_value;
@@ -411,7 +415,7 @@ namespace cpx {
         return {total_seconds, total_nanos};
     }
 
-    inline std::tm tm_now() {
+    CPX_EXPORT inline std::tm tm_now() {
         time_t  t  = time(nullptr);
         std::tm tm = {};
 #if defined(_WIN32)
@@ -422,7 +426,7 @@ namespace cpx {
         return tm;
     }
 
-    inline std::timespec ts_now() {
+    CPX_EXPORT inline std::timespec ts_now() {
         std::timespec ts;
         timespec_get(&ts, TIME_UTC);
         return ts;

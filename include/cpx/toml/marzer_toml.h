@@ -25,56 +25,60 @@ namespace __tomlpp = ::toml;
 #define DUMP(...)           cpx::serde::Dump<__tomlpp::table, __VA_ARGS__>
 #define PARSE(...)          cpx::serde::Parse<__tomlpp::table, __VA_ARGS__>
 
+#ifndef CPX_EXPORT
+#    define CPX_EXPORT
+#endif
+
 namespace cpx::toml::marzer_toml {
-    template <typename From>
+    CPX_EXPORT template <typename From>
     using Serialize = SERIALIZE(From);
 
-    template <typename To>
+    CPX_EXPORT template <typename To>
     using Deserialize = DESERIALIZE(To);
 
-    template <typename From>
+    CPX_EXPORT template <typename From>
     constexpr bool is_serializable_v = SERIALIZABLE(From);
 
-    template <typename To>
+    CPX_EXPORT template <typename To>
     constexpr bool is_deserializable_v = DESERIALIZABLE(To);
 
-    template <typename From>
+    CPX_EXPORT template <typename From>
     using Parse = PARSE(From);
 
-    template <typename To>
+    CPX_EXPORT template <typename To>
     using Dump = DUMP(To);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void parse(const std::string &str, T &val);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void parse(std::istream &stream, T &val);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void parse_from_file(const std::string &path, T &val);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::enable_if_t<std::is_default_constructible_v<T>, T> parse(const std::string &str);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::enable_if_t<std::is_default_constructible_v<T>, T> parse(std::istream &stream);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::enable_if_t<std::is_default_constructible_v<T>, T> parse_from_file(const std::string &path);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::string dump(const T &val);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void dump(std::ostream &, const T &val);
 } // namespace cpx::toml::marzer_toml
 
 namespace cpx {
-    namespace marzer_toml = cpx::toml::marzer_toml;
+    CPX_EXPORT namespace marzer_toml = cpx::toml::marzer_toml;
 }
 
 // bool
@@ -456,8 +460,7 @@ protected:
                     type_names += e.expected_type + '|';
                 }
             }(),
-            ...
-        );
+            ...);
         if (!done) {
             type_names.pop_back();
             throw type_mismatch_error(type_names, std::string(__tomlpp::impl::node_type_friendly_names[(int)node->type()]));
@@ -477,8 +480,9 @@ struct SERIALIZE(std::unordered_map<std::string, T, H, P, A>, std::enable_if_t<S
 };
 
 template <typename T, typename H, typename P, typename A>
-struct
-    DESERIALIZE(std::unordered_map<std::string, T, H, P, A>, std::enable_if_t<std::is_default_constructible_v<T> && DESERIALIZABLE(T)>) {
+struct DESERIALIZE(
+    std::unordered_map<std::string, T, H, P, A>, std::enable_if_t<std::is_default_constructible_v<T> && DESERIALIZABLE(T)>
+) {
     const __tomlpp::node *node;
 
     void into(std::unordered_map<std::string, T, H, P, A> &v) const {
@@ -771,11 +775,11 @@ void cpx::toml::marzer_toml::dump(std::ostream &os, const T &val) {
 }
 
 namespace cpx::toml::marzer_toml {
-    constexpr struct IO {
-        friend DUMP(std::ostream) operator<<(std::ostream & os, const IO &) {
+    CPX_EXPORT constexpr struct IO {
+        friend DUMP(std::ostream) operator<<(std::ostream &os, const IO &) {
             return {os};
         }
-        friend PARSE(std::istream) operator>>(std::istream & is, const IO &) {
+        friend PARSE(std::istream) operator>>(std::istream &is, const IO &) {
             return {is};
         }
     } io{};

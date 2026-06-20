@@ -7,8 +7,12 @@
 #include <vector>
 #include <mutex>
 
+#ifndef CPX_EXPORT
+#    define CPX_EXPORT
+#endif
+
 namespace cpx::multithreading {
-    template <typename T>
+    CPX_EXPORT template <typename T>
     class Queue {
     public:
         Queue() = default;
@@ -85,6 +89,11 @@ namespace cpx::multithreading {
         size_t queued_size() const {
             std::lock_guard<std::mutex> lock(mtx);
             return queue.size();
+        }
+
+        std::queue<T> get_queue() {
+            std::lock_guard<std::mutex> lock(mtx);
+            return std::move(queue);
         }
 
     private:

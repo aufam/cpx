@@ -3,8 +3,12 @@
 
 #include <cpx/tag_info.h>
 
+#ifndef CPX_EXPORT
+#    define CPX_EXPORT
+#endif
+
 namespace cpx {
-    template <typename T, typename Enable = void>
+    CPX_EXPORT template <typename T, typename Enable = void>
     struct Reflect : std::false_type {
         using const_type = type;
     };
@@ -22,10 +26,10 @@ namespace cpx::detail {
 } // namespace cpx::detail
 
 namespace cpx {
-    template <typename Derived, auto... MemberPtr>
+    CPX_EXPORT template <typename Derived, auto... MemberPtr>
     struct Fields;
 
-    template <typename Derived>
+    CPX_EXPORT template <typename Derived>
     struct Fields<Derived> {
         static constexpr bool value = true;
 
@@ -43,7 +47,7 @@ namespace cpx {
         }
     };
 
-    template <typename Derived, auto MemberPtr, auto... MemberPtrs>
+    CPX_EXPORT template <typename Derived, auto MemberPtr, auto... MemberPtrs>
     struct Fields<Derived, MemberPtr, MemberPtrs...> {
         static constexpr bool value = true;
 
@@ -93,43 +97,43 @@ namespace cpx {
 } // namespace cpx
 
 namespace cpx::weak {
-    template <typename T, typename Enable = void>
+    CPX_EXPORT template <typename T, typename Enable = void>
     struct Reflect : std::false_type {
         using const_type = type;
     };
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     struct has_reflect : std::bool_constant<Reflect<T>::value> {};
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     inline constexpr bool has_reflect_v = has_reflect<T>::value;
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     using reflect_t = typename Reflect<T>::type;
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     using const_reflect_t = typename Reflect<T>::const_type;
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     constexpr decltype(auto) reflect_of(T &v) {
         return Reflect<std::remove_const_t<T>>::of(v);
     }
 } // namespace cpx::weak
 
 namespace cpx {
-    template <typename T>
+    CPX_EXPORT template <typename T>
     struct has_reflect : std::bool_constant<Reflect<T>::value || cpx::weak::has_reflect_v<T>> {};
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     inline constexpr bool has_reflect_v = has_reflect<T>::value;
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     using reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::type, cpx::weak::reflect_t<T>>;
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     using const_reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::const_type, cpx::weak::const_reflect_t<T>>;
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     constexpr decltype(auto) reflect_of(T &&v) {
         if constexpr (Reflect<std::decay_t<T>>::value)
             return Reflect<std::decay_t<T>>::of(std::forward<T>(v));

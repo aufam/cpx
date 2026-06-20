@@ -60,55 +60,59 @@
 #define DUMP_SAX(OS, ...)         cpx::serde::Dump<rapidjson::Writer<OS>, __VA_ARGS__>
 #define PARSE_SAX(...)            cpx::serde::Parse<rapidjson::Reader, __VA_ARGS__>
 
+#ifndef CPX_EXPORT
+#    define CPX_EXPORT
+#endif
+
 namespace cpx::json::rapid_json {
-    template <typename From>
+    CPX_EXPORT template <typename From>
     using Serialize = SERIALIZE(From);
 
-    template <typename To>
+    CPX_EXPORT template <typename To>
     using Deserialize = DESERIALIZE(To);
 
-    template <typename From>
+    CPX_EXPORT template <typename From>
     constexpr bool is_serializable_v = SERIALIZABLE(From);
 
-    template <typename To>
+    CPX_EXPORT template <typename To>
     constexpr bool is_deserializable_v = DESERIALIZABLE(To);
 
-    template <typename From>
+    CPX_EXPORT template <typename From>
     using Parse = PARSE(From);
 
-    template <typename To>
+    CPX_EXPORT template <typename To>
     using Dump = DUMP(To);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void parse(const std::string &str, T &val);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void parse(std::istream &, T &val);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::enable_if_t<std::is_default_constructible_v<T>, T> parse(const std::string &str);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::enable_if_t<std::is_default_constructible_v<T>, T> parse(std::istream &);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::string dump(const T &val);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void dump(std::ostream &, const T &val);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void dump(const T &&val) = delete;
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void dump(std::ostream &, const T &&val) = delete;
 } // namespace cpx::json::rapid_json
 
 namespace cpx {
-    namespace rapid_json = cpx::json::rapid_json;
+    CPX_EXPORT namespace rapid_json = cpx::json::rapid_json;
 }
 
 namespace cpx::json::rapid_json::detail {
@@ -366,8 +370,7 @@ struct DESERIALIZE(std::variant<T...>, std::enable_if_t<((std::is_default_constr
                     type_names += e.expected_type + '|';
                 }
             }(),
-            ...
-        );
+            ...);
         if (!done) {
             type_names.pop_back();
             throw type_mismatch_error(type_names, cpx::json::rapid_json::detail::type(val));
@@ -457,8 +460,10 @@ struct SERIALIZE(std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A>
 };
 
 template <typename CT, typename CA, typename T, typename H, typename P, typename A>
-struct
-    DESERIALIZE(std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A>, std::enable_if_t<std::is_default_constructible_v<T> && DESERIALIZABLE(T)>) {
+struct DESERIALIZE(
+    std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A>,
+    std::enable_if_t<std::is_default_constructible_v<T> && DESERIALIZABLE(T)>
+) {
     const rapidjson::Value &val;
 
     void into(std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A> &v) const {
@@ -815,8 +820,9 @@ struct SERIALIZE_SAX(OS, std::vector<T>, std::enable_if_t<SERIALIZABLE_SAX(OS, T
 
 // map
 template <typename OS, typename CT, typename CA, typename T, typename H, typename P, typename A>
-struct
-    SERIALIZE_SAX(OS, std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A>, std::enable_if_t<SERIALIZABLE_SAX(OS, T)>) {
+struct SERIALIZE_SAX(
+    OS, std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A>, std::enable_if_t<SERIALIZABLE_SAX(OS, T)>
+) {
     rapidjson::Writer<OS> &writer;
 
     void from(const std::unordered_map<std::basic_string<char, CT, CA>, T, H, P, A> &v) const {
@@ -1012,7 +1018,7 @@ void cpx::json::rapid_json::dump(std::ostream &os, const T &val) {
 #endif
 
 namespace cpx::json::rapid_json {
-    constexpr struct IO {
+    CPX_EXPORT constexpr struct IO {
 #ifdef RAPIDJSON_OSTREAMWRAPPER_H_
         friend cpx::serde::Dump<rapidjson::Writer<rapidjson::OStreamWrapper>, std::ostream>
         operator<<(std::ostream &os, const IO &) {

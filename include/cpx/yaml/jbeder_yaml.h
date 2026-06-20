@@ -26,56 +26,60 @@ namespace __yaml_cpp = ::YAML;
 #define DUMP(...)           cpx::serde::Dump<__yaml_cpp::Node, __VA_ARGS__>
 #define PARSE(...)          cpx::serde::Parse<__yaml_cpp::Node, __VA_ARGS__>
 
+#ifndef CPX_EXPORT
+#    define CPX_EXPORT
+#endif
+
 namespace cpx::yaml::jbeder_yaml {
-    template <typename From>
+    CPX_EXPORT template <typename From>
     using Serialize = SERIALIZE(From);
 
-    template <typename To>
+    CPX_EXPORT template <typename To>
     using Deserialize = DESERIALIZE(To);
 
-    template <typename From>
+    CPX_EXPORT template <typename From>
     constexpr bool is_serializable_v = SERIALIZABLE(From);
 
-    template <typename To>
+    CPX_EXPORT template <typename To>
     constexpr bool is_deserializable_v = DESERIALIZABLE(To);
 
-    template <typename From>
+    CPX_EXPORT template <typename From>
     using Parse = PARSE(From);
 
-    template <typename To>
+    CPX_EXPORT template <typename To>
     using Dump = DUMP(To);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void parse(const std::string &str, T &val);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void parse(std::istream &stream, T &val, const std::string &filename = "");
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void parse_from_file(const std::string &path, T &val);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::enable_if_t<std::is_default_constructible_v<T>, T> parse(const std::string &str);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::enable_if_t<std::is_default_constructible_v<T>, T> parse(std::istream &stream, const std::string &filename = "");
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::enable_if_t<std::is_default_constructible_v<T>, T> parse_from_file(const std::string &path);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::string dump(const T &val);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void dump(std::ostream &os, const T &val);
 } // namespace cpx::yaml::jbeder_yaml
 
 namespace cpx {
-    namespace jbeder_yaml = cpx::yaml::jbeder_yaml;
+    CPX_EXPORT namespace jbeder_yaml = cpx::yaml::jbeder_yaml;
 }
 
 namespace cpx::yaml::jbeder_yaml::detail {
@@ -443,8 +447,7 @@ struct DESERIALIZE(std::variant<T...>, std::enable_if_t<((std::is_default_constr
                     type_names += e.expected_type + '|';
                 }
             }(),
-            ...
-        );
+            ...);
         if (!done) {
             type_names.pop_back();
             throw type_mismatch_error(type_names, ::cpx::yaml::jbeder_yaml::detail::type(node));
@@ -464,8 +467,9 @@ struct SERIALIZE(std::unordered_map<std::string, T, H, P, A>, std::enable_if_t<S
 };
 
 template <typename T, typename H, typename P, typename A>
-struct
-    DESERIALIZE(std::unordered_map<std::string, T, H, P, A>, std::enable_if_t<std::is_default_constructible_v<T> && DESERIALIZABLE(T)>) {
+struct DESERIALIZE(
+    std::unordered_map<std::string, T, H, P, A>, std::enable_if_t<std::is_default_constructible_v<T> && DESERIALIZABLE(T)>
+) {
     const __yaml_cpp::Node &node;
 
     void into(std::unordered_map<std::string, T, H, P, A> &v) const {
@@ -635,7 +639,7 @@ void cpx::yaml::jbeder_yaml::dump(std::ostream &os, const T &val) {
 }
 
 namespace cpx::yaml::jbeder_yaml {
-    constexpr struct IO {
+    CPX_EXPORT constexpr struct IO {
         friend Dump<std::ostream> operator<<(std::ostream &os, const IO &) {
             return {os};
         }

@@ -9,16 +9,18 @@
 #    endif
 #endif
 
-namespace cpx {
-    template <
-        typename T,
-        typename Enable = std::enable_if_t<
-            is_tuple_v<T>
-#ifdef BOOST_PFR_HPP
-            || std::is_aggregate_v<T>
+#ifndef CPX_EXPORT
+#    define CPX_EXPORT
 #endif
-            >>
-    class Extend {
+
+namespace cpx {
+    CPX_EXPORT template <
+        typename T,
+        typename Enable = std::enable_if_t < is_tuple_v<T>
+#ifdef BOOST_PFR_HPP
+                          || std::is_aggregate_v<T>
+#endif
+                                 >> class Extend {
 
     protected:
         T value;
@@ -77,17 +79,17 @@ namespace cpx {
         }
     };
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     struct is_extended : std::false_type {};
 
     template <typename T>
     struct is_extended<Extend<T>> : std::true_type {};
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     inline constexpr bool is_extended_v = is_extended<T>::value;
 
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     struct remove_extend;
 
     template <typename T>
@@ -95,10 +97,10 @@ namespace cpx {
         using type = typename Extend<T>::type;
     };
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     using remove_extend_t = typename remove_extend<T>::type;
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     auto flatten_one(T &v) {
         if constexpr (is_extended_v<std::decay_t<T>>)
             return std::apply([](auto &...items) { return std::tuple_cat(flatten_one(items)...); }, v.as_tuple());
@@ -106,17 +108,17 @@ namespace cpx {
             return std::tie(v);
     }
 
-    template <typename... Ts>
+    CPX_EXPORT template <typename... Ts>
     auto flatten(std::tuple<Ts &...> tpl) {
         return std::apply([](auto &...items) { return std::tuple_cat(flatten_one(items)...); }, tpl);
     }
 
-    template <typename... Ts>
+    CPX_EXPORT template <typename... Ts>
     auto flatten(const std::tuple<Ts...> &tpl) {
         return std::apply([](auto &...items) { return std::tuple_cat(flatten_one(items)...); }, tpl);
     }
 
-    template <typename... Ts>
+    CPX_EXPORT template <typename... Ts>
     auto flatten(std::tuple<Ts...> &tpl) {
         return std::apply([](auto &...items) { return std::tuple_cat(flatten_one(items)...); }, tpl);
     }

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.14 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.28 FATAL_ERROR)
 
 # project settings
 project(cpx
@@ -45,9 +45,35 @@ endif()
 
 
 # system libraries
-find_package(SQLite3 REQUIRED)
-find_package(Protobuf REQUIRED STATIC)
-find_package(absl REQUIRED)
+find_package(SQLite3)
+if(SQLite3_FOUND)
+    message(STATUS "SQLite3 found.")
+endif()
+
+find_package(PostgreSQL)
+if(PostgreSQL_FOUND)
+    message(STATUS "PostgreSQL found.")
+endif()
+
+find_package(MySQL)
+if(MySQL_FOUND)
+    message(STATUS "MySQL found.")
+endif()
+
+find_package(MariaDB)
+if(MariaDB_FOUND)
+    message(STATUS "MariaDB found.")
+endif()
+
+find_package(Protobuf)
+if(Protobuf_FOUND)
+    message(STATUS "Protobuf found.")
+endif()
+
+find_package(absl)
+if(absl_FOUND)
+    message(STATUS "absl found.")
+endif()
 
 
 # external libraries
@@ -58,7 +84,6 @@ CPMAddPackage(
     NAME            fmt
     GIT_REPOSITORY  "https://github.com/fmtlib/fmt"
     GIT_TAG         11.2.0
-    COMPONENTS      fmt
 )
 
 ## Logging
@@ -67,7 +92,6 @@ CPMAddPackage(
     GIT_REPOSITORY  "https://github.com/gabime/spdlog"
     GIT_TAG         v1.15.3
     OPTIONS         "SPDLOG_FMT_EXTERNAL ON"
-    COMPONENTS      spdlog
 )
 
 ## JSON lib
@@ -105,8 +129,9 @@ CPMAddPackage(
     NAME            toml11
     GIT_REPOSITORY  "https://github.com/ToruNiina/toml11"
     GIT_TAG         v4.4.0
-    OPTIONS         "TOML11_INSTALL OFF"
+    OPTIONS         "TOML11_INSTALL OFF" "TOML11_PRECOMPILE ON"
 )
+target_compile_options(toml11 PUBLIC "-Wno-deprecated-literal-operator")
 
 ## yaml
 CPMAddPackage(
@@ -123,7 +148,6 @@ CPMAddPackage(
     GIT_REPOSITORY  "https://github.com/boostorg/pfr"
     GIT_TAG         boost-1.88.0
     OPTIONS         "BOOST_USE_MODULES OFF"
-    COMPONENTS      Boost::pfr
 )
 
 ## Enum reflection
@@ -147,6 +171,7 @@ CPMAddPackage(
     GIT_TAG         v0.41.0
     OPTIONS         "HTTPLIB_COMPILE ON" "HTTPLIB_USE_ZSTD_IF_AVAILABLE OFF" "HTTPLIB_REQUIRE_OPENSSL ON" "HTTPLIB_INSTALL OFF"
 )
+target_compile_options(httplib PRIVATE -Wno-deprecated-declarations)
 
 ## msgpack
 CPMAddPackage(
@@ -162,20 +187,20 @@ CPMAddPackage(
     GIT_REPOSITORY  "https://github.com/google/googletest"
     GIT_TAG         v1.15.2
     OPTIONS         "INSTALL_GTEST OFF"
-    COMPONENTS      gtest_main
 )
 
 CPMAddPackage(
     NAME            benchmark
     GIT_REPOSITORY  "https://github.com/google/benchmark"
     GIT_TAG         v1.9.2
-    OPTIONS         "BENCHMARK_ENABLE_INSTALL OFF" 
-                    "BENCHMARK_INSTALL_DOCS OFF" 
-                    "BENCHMARK_INSTALL_TOOLS OFF" 
+    OPTIONS         "BENCHMARK_ENABLE_INSTALL OFF"
+                    "BENCHMARK_INSTALL_DOCS OFF"
+                    "BENCHMARK_INSTALL_TOOLS OFF"
                     "BENCHMARK_USE_BUNDLED_GTEST OFF"
                     "BENCHMARK_ENABLE_TESTING OFF"
-    COMPONENTS      benchmark_main
 )
+target_compile_options(benchmark PRIVATE -Wno-c2y-extensions)
+target_compile_options(benchmark_main PRIVATE -Wno-c2y-extensions)
 
 # only setup the exeternal libraries
 if (CPX_REQUIREMENTS)
@@ -202,6 +227,35 @@ target_link_libraries(cpx_private INTERFACE
     protobuf::libprotobuf
     msgpack-cxx
 )
+
+if (CPX_MODULES)
+    target_sources(cpx_mod
+        PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
+            src/third_parties/fmt.cppm
+            src/third_parties/cli11.cppm
+            src/third_parties/yy_json.cppm
+            src/third_parties/nlohmann_json.cppm
+            src/third_parties/rapid_json.cppm
+            src/third_parties/toruniina_toml.cppm
+            src/third_parties/marzer_toml.cppm
+            src/third_parties/jbeder_yaml.cppm
+            src/third_parties/msgpack.cppm
+    )
+
+    target_link_libraries(cpx_mod PRIVATE
+        CLI11
+        fmt
+        Boost::pfr
+        magic_enum
+        nlohmann_json
+        yyjson
+        rapidjson
+        toml11::toml11
+        tomlplusplus::tomlplusplus
+        yaml-cpp
+        msgpack-cxx
+    )
+endif()
 
 if (TARGET absl::log)
     target_link_libraries(cpx_private INTERFACE absl::log)
@@ -243,7 +297,7 @@ if (CPX_BUILD_TESTS)
         SQLite::SQLite3
     )
 
-	enable_testing()
+    enable_testing()
     add_test(NAME test_all COMMAND test_all)
 endif()
 

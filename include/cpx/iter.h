@@ -6,6 +6,10 @@
 #include <tuple>
 #include <limits>
 
+#ifndef CPX_EXPORT
+#    define CPX_EXPORT
+#endif
+
 namespace cpx::iter_detail {
     template <typename Item>
     decltype(auto) deref(Item item) {
@@ -26,22 +30,19 @@ namespace cpx::iter_detail {
 } // namespace cpx::iter_detail
 
 namespace cpx {
-    template <template <typename...> typename To, typename From>
+    CPX_EXPORT template <template <typename...> typename To, typename From>
     struct template_rebind;
 
-    template <
-        template <typename...> typename To,
-        template <typename...> typename From,
-        typename... Ts>
+    template <template <typename...> typename To, template <typename...> typename From, typename... Ts>
     struct template_rebind<To, From<Ts...>> {
         using type = To<Ts...>;
     };
 
-    template <template <typename...> typename To, typename From>
+    CPX_EXPORT template <template <typename...> typename To, typename From>
     using template_rebind_t = typename template_rebind<To, From>::type;
 
 
-    template <typename... Iterables>
+    CPX_EXPORT template <typename... Iterables>
     class TupleIterable {
         std::tuple<Iterables...> tpl;
 
@@ -50,10 +51,7 @@ namespace cpx {
             : tpl{i...} {}
     };
 
-    template <
-        typename T1,
-        typename T2 = T1,
-        typename F  = template_rebind_t<iter_detail::DefaultMapper, T1>>
+    CPX_EXPORT template <typename T1, typename T2 = T1, typename F = template_rebind_t<iter_detail::DefaultMapper, T1>>
     class Iter {
     public:
         constexpr Iter(T1 start, T2 stop, F mapper)
@@ -62,9 +60,7 @@ namespace cpx {
             , mapper(std::move(mapper)) {}
 
         constexpr decltype(auto) get() const {
-            return std::apply(
-                [this](const auto &...elems) { return mapper(iter_detail::deref(elems)...); }, start
-            );
+            return std::apply([this](const auto &...elems) { return mapper(iter_detail::deref(elems)...); }, start);
         }
 
         constexpr operator bool() const {
@@ -81,10 +77,7 @@ namespace cpx {
 
         template <typename I = int>
         constexpr auto enumerate(I start = 0, I stop = std::numeric_limits<I>::max()) const {
-            static_assert(
-                std::is_same_v<F, template_rebind_t<iter_detail::DefaultMapper, T1>>,
-                "Only if mapper is default"
-            );
+            static_assert(std::is_same_v<F, template_rebind_t<iter_detail::DefaultMapper, T1>>, "Only if mapper is default");
             auto cat_start = std::tuple_cat(std::make_tuple(start), this->start);
             auto cat_stop  = std::tuple_cat(std::make_tuple(stop), this->stop);
             return Iter<decltype(cat_start), decltype(cat_stop)>(cat_start, cat_stop, {});
@@ -92,10 +85,7 @@ namespace cpx {
 
         template <typename... U>
         constexpr auto zip(const Iter<std::tuple<U...>> &other) const {
-            static_assert(
-                std::is_same_v<F, template_rebind_t<iter_detail::DefaultMapper, T1>>,
-                "Only if mapper is default"
-            );
+            static_assert(std::is_same_v<F, template_rebind_t<iter_detail::DefaultMapper, T1>>, "Only if mapper is default");
             auto cat_start = std::tuple_cat(start, other.start);
             auto cat_stop  = std::tuple_cat(stop, other.stop);
             return Iter<decltype(cat_start), decltype(cat_stop)>(cat_start, cat_stop, {});
@@ -116,9 +106,7 @@ namespace cpx {
 
         template <typename FF>
         constexpr auto map(FF &&fn) {
-            static_assert(
-                is_invocable_with_tuple_v<FF, decltype(get())>, "Must be invocable with get()"
-            );
+            static_assert(is_invocable_with_tuple_v<FF, decltype(get())>, "Must be invocable with get()");
             return Iter<T1, T2, FF>(start, stop, std::forward<FF>(fn));
         }
 
@@ -156,40 +144,38 @@ namespace cpx {
         }
     };
 
-    template <typename T1, typename T2>
+    CPX_EXPORT template <typename T1, typename T2>
     auto iterate(T1 start, T2 stop) {
-        return Iter<std::tuple<T1>, std::tuple<T2>>(
-            std::make_tuple(start), std::make_tuple(stop), {}
-        );
+        return Iter<std::tuple<T1>, std::tuple<T2>>(std::make_tuple(start), std::make_tuple(stop), {});
     }
 
-    template <typename Iterable>
+    CPX_EXPORT template <typename Iterable>
     auto iterate(const Iterable &iterable) {
         return iterate(std::begin(iterable), std::end(iterable));
     }
 
-    template <typename Iterable>
+    CPX_EXPORT template <typename Iterable>
     auto iterate(Iterable &iterable) {
         return iterate(std::begin(iterable), std::end(iterable));
     }
 
-    template <typename Iterable>
+    CPX_EXPORT template <typename Iterable>
     void iterate(Iterable &&iterable) = delete;
 
-    template <typename Iterable>
+    CPX_EXPORT template <typename Iterable>
     auto reversed(const Iterable &iterable) {
         return iterate(std::rbegin(iterable), std::rend(iterable));
     }
 
-    template <typename Iterable>
+    CPX_EXPORT template <typename Iterable>
     auto reversed(Iterable &iterable) {
         return iterate(std::rbegin(iterable), std::rend(iterable));
     }
 
-    template <typename Iterable>
+    CPX_EXPORT template <typename Iterable>
     void reversed(Iterable &&iterable) = delete;
 
-    template <typename... T, typename... U, typename... Others>
+    CPX_EXPORT template <typename... T, typename... U, typename... Others>
     auto zip(const Iter<T...> &iter_a, const Iter<U...> &iter_b, const Others &...others) {
         if constexpr (sizeof...(Others) == 0) {
             return iter_a.zip(iter_b);

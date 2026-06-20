@@ -4,8 +4,12 @@
 #include <condition_variable>
 #include <mutex>
 
+#ifndef CPX_EXPORT
+#    define CPX_EXPORT
+#endif
+
 namespace cpx::multithreading {
-    class Semaphore {
+    CPX_EXPORT class Semaphore {
     public:
         explicit Semaphore(int count = 0)
             : count(count) {}

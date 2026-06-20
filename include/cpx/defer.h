@@ -4,8 +4,12 @@
 #include <utility>
 #include <type_traits>
 
+#ifndef CPX_EXPORT
+#    define CPX_EXPORT
+#endif
+
 namespace cpx {
-    template <typename F>
+    CPX_EXPORT template <typename F>
     class defer {
     public:
         static_assert(std::is_invocable_v<F>, "F must be invocable");

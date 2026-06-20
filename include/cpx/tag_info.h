@@ -5,8 +5,12 @@
 #include <cpx/optional.h>
 #include <cpx/tuple.h>
 
+#ifndef CPX_EXPORT
+#    define CPX_EXPORT
+#endif
+
 namespace cpx {
-    struct TagInfo {
+    CPX_EXPORT struct TagInfo {
         std::string_view key = "";
 
         // for cli
@@ -97,7 +101,7 @@ namespace cpx {
         void operator=(std::string_view) = delete;
     };
 
-    template <typename T, typename TI>
+    CPX_EXPORT template <typename T, typename TI>
     struct TagInfoFor {
         T  value;
         TI ti;
@@ -107,12 +111,12 @@ namespace cpx {
             , ti(ti) {}
     };
 
-    template <typename T, typename TI>
+    CPX_EXPORT template <typename T, typename TI>
     constexpr auto tag_tie(T &val, TI &ti) {
         return TagInfoFor<T &, TI &>(val, ti);
     }
 
-    class TagInfoBuilder {
+    CPX_EXPORT class TagInfoBuilder {
         TagInfo t = {};
 
     public:
@@ -175,7 +179,7 @@ namespace cpx {
         }
     };
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     constexpr TagInfo get_tag_info(const T &field, std::string_view tag) {
         std::string_view sv;
         if constexpr (is_tagged_v<T>)

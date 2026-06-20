@@ -10,34 +10,38 @@
 
 #include <CLI/CLI.hpp>
 
-namespace cpx::cli::cli11 {
-    using Parse = cpx::serde::Parse<CLI::App, std::pair<int, char **>>;
+#ifndef CPX_EXPORT
+#    define CPX_EXPORT
+#endif
 
-    template <typename To>
+namespace cpx::cli::cli11 {
+    CPX_EXPORT using Parse = cpx::serde::Parse<CLI::App, std::pair<int, char **>>;
+
+    CPX_EXPORT template <typename To>
     using Deserialize = cpx::serde::Deserialize<CLI::App, To>;
 
-    template <typename To>
+    CPX_EXPORT template <typename To>
     using is_deserializable = cpx::serde::is_deserializable<CLI::App, To>;
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void parse(const std::string &app_desc, int argc, char **argv, T &v);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     std::enable_if_t<std::is_default_constructible_v<T>, T> parse(const std::string &app_desc, int argc, char **argv);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     std::vector<std::string> parse_with_subcommands(const std::string &app_desc, int argc, char **argv, T &v);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     std::enable_if_t<std::is_default_constructible_v<T>, std::pair<T, std::vector<std::string>>>
     parse_with_subcommands(const std::string &app_desc, int argc, char **argv);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     std::string help(const std::string &app_desc, int argc, char **argv, T &v);
 } // namespace cpx::cli::cli11
 
 namespace cpx {
-    namespace cli11 = cpx::cli::cli11;
+    CPX_EXPORT namespace cli11 = cpx::cli::cli11;
 }
 
 namespace cpx::cli::cli11::detail {
@@ -188,8 +192,7 @@ struct cpx::serde::
                                 v = std::move(element);
                         }
                     }(),
-                    ...
-                );
+                    ...);
                 if (!done)
                     throw type_mismatch_error("variant", "unknown"); // TODO
             },

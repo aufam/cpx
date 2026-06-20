@@ -30,8 +30,12 @@
 #    include <google/protobuf/wire_format_lite.h>
 #endif
 
+#ifndef CPX_EXPORT
+#    define CPX_EXPORT
+#endif
+
 namespace cpx::protobuf {
-    template <typename T>
+    CPX_EXPORT template <typename T>
     constexpr decltype(auto) get_tag_info(const T &field) {
         if constexpr (cpx::detail::is_tag_info_for_v<T>)
             return field.ti;
@@ -39,25 +43,25 @@ namespace cpx::protobuf {
             return cpx::get_tag_info(field, "protobuf");
     }
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     struct Reflect : std::false_type {
         using const_type = type;
     };
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     struct has_reflect
         : std::bool_constant<(Reflect<T>::value || cpx::has_reflect_v<T>) && !cpx::is_time_v<T> && !std::is_enum_v<T>> {};
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     inline constexpr bool has_reflect_v = has_reflect<T>::value;
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     using reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::type, cpx::reflect_t<T>>;
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     using const_reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::const_type, cpx::const_reflect_t<T>>;
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     constexpr decltype(auto) reflect_of(T &&v) {
         if constexpr (Reflect<std::decay_t<T>>::value)
             return Reflect<std::decay_t<T>>::of(std::forward<T>(v));
@@ -74,42 +78,42 @@ namespace cpx::protobuf {
 #define PARSE(...)          cpx::serde::Parse<google::protobuf::io::CodedInputStream, __VA_ARGS__>
 
 namespace cpx::protobuf {
-    template <typename From>
+    CPX_EXPORT template <typename From>
     using Serialize = SERIALIZE(From);
 
-    template <typename To>
+    CPX_EXPORT template <typename To>
     using Deserialize = DESERIALIZE(To);
 
-    template <typename From>
+    CPX_EXPORT template <typename From>
     constexpr bool is_serializable_v = SERIALIZABLE(From);
 
-    template <typename To>
+    CPX_EXPORT template <typename To>
     constexpr bool is_deserializable_v = DESERIALIZABLE(To);
 
-    template <typename To>
+    CPX_EXPORT template <typename To>
     using Dump = DUMP(To);
 
-    template <typename From>
+    CPX_EXPORT template <typename From>
     using Parse = PARSE(From);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::string dump(const T &val);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void dump(std::ostream &os, const T &val);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void parse(const std::string &str, T &val);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::enable_if_t<std::is_default_constructible_v<T>, T> parse(const std::string &str);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void parse(std::istream &is, T &val);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::enable_if_t<std::is_default_constructible_v<T>, T> parse(std::istream &is);
 } // namespace cpx::protobuf
@@ -476,8 +480,9 @@ struct SERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_repeated_serializ
 };
 
 template <typename T>
-struct
-    DESERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_repeated_deserializable<T>::value && cpx::detail::is_std_array<T>::value>) {
+struct DESERIALIZE(
+    T, std::enable_if_t<cpx::protobuf::detail::is_repeated_deserializable<T>::value && cpx::detail::is_std_array<T>::value>
+) {
     DESERIALIZER_FIELDS
 
     void into(T &) const {
@@ -486,8 +491,9 @@ struct
 };
 
 template <typename T>
-struct
-    DESERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_repeated_deserializable<T>::value && !cpx::detail::is_std_array<T>::value>) {
+struct DESERIALIZE(
+    T, std::enable_if_t<cpx::protobuf::detail::is_repeated_deserializable<T>::value && !cpx::detail::is_std_array<T>::value>
+) {
     DESERIALIZER_FIELDS
     using value_type = typename T::value_type;
 
@@ -626,8 +632,11 @@ struct SERIALIZE(std::unordered_map<K, T, H, P, A>, std::enable_if_t<SERIALIZABL
 };
 
 template <typename K, typename T, typename H, typename P, typename A>
-struct
-    DESERIALIZE(std::unordered_map<K, T, H, P, A>, std::enable_if_t<DESERIALIZABLE(K) && DESERIALIZABLE(T) && std::is_default_constructible_v<K> && std::is_default_constructible_v<T>>) {
+struct DESERIALIZE(
+    std::unordered_map<K, T, H, P, A>,
+    std::enable_if_t<
+        DESERIALIZABLE(K) && DESERIALIZABLE(T) && std::is_default_constructible_v<K> && std::is_default_constructible_v<T>>
+) {
     DESERIALIZER_FIELDS
 
     void into(std::unordered_map<K, T, H, P, A> &map) const {
@@ -930,7 +939,7 @@ std::enable_if_t<std::is_default_constructible_v<T>, T> cpx::protobuf::parse(std
 }
 
 namespace cpx::protobuf {
-    inline constexpr class IO {
+    CPX_EXPORT inline constexpr class IO {
         friend Dump<std::ostream> operator<<(std::ostream &os, const IO &) {
             return {os};
         }

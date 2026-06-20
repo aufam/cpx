@@ -16,32 +16,36 @@
 #    endif
 #endif
 
+#ifndef CPX_EXPORT
+#    define CPX_EXPORT
+#endif
+
 
 /*
  * Forward declarations
  */
 namespace cpx::sql {
-    class Connection;
+    CPX_EXPORT class Connection;
 
-    template <typename Row>
+    CPX_EXPORT template <typename Row>
     class Rows;
 
-    template <typename Params = std::tuple<>, typename Row = std::tuple<>>
+    CPX_EXPORT template <typename Params = std::tuple<>, typename Row = std::tuple<>>
     struct Statement;
 
-    template <typename Table, typename T>
+    CPX_EXPORT template <typename Table, typename T>
     class Column;
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     class Alias;
 
-    template <typename Params = std::tuple<>>
+    CPX_EXPORT template <typename Params = std::tuple<>>
     struct Assignment;
 
-    template <typename Params = std::tuple<>>
+    CPX_EXPORT template <typename Params = std::tuple<>>
     struct Condition;
 
-    template <typename Params = std::tuple<>>
+    CPX_EXPORT template <typename Params = std::tuple<>>
     struct Arithmetics;
 } // namespace cpx::sql
 
@@ -851,41 +855,41 @@ namespace cpx::sql {
         };
     };
 
-    template <const auto &table, typename... Tables, typename... Ts>
+    CPX_EXPORT template <const auto &table, typename... Tables, typename... Ts>
     auto create_table(const Column<Tables, Ts> &...cols) {
         auto q = std::string("create table ") + table.TableName + " ";
         q += "(" + cpx::sql::detail::string_cat(", ", cols.column()...) + ")";
         return Statement<>{std::move(q)};
     }
 
-    template <const auto &table, typename... Tables, typename... Ts>
+    CPX_EXPORT template <const auto &table, typename... Tables, typename... Ts>
     auto create_table_if_not_exists(const Column<Tables, Ts> &...cols) {
         auto q = std::string("create table if not exists ") + table.TableName + " ";
         q += "(" + cpx::sql::detail::string_cat(", ", cols.column()...) + ")";
         return Statement<>{std::move(q)};
     }
 
-    template <const auto &table>
+    CPX_EXPORT template <const auto &table>
     inline const Statement<> alter_table = {std::string("alter table ") + table.TableName};
 
-    template <const auto &table>
+    CPX_EXPORT template <const auto &table>
     inline const Statement<> update = {std::string("update ") + table.TableName};
 
-    template <const auto &table, typename... Tables, typename... Ts>
+    CPX_EXPORT template <const auto &table, typename... Tables, typename... Ts>
     auto insert_into(const Column<Tables, Ts> &...cols) {
         auto q = std::string("insert into ") + table.TableName + " (" + cpx::sql::detail::string_cat(", ", cols.name()...) + ")";
         return Statement<std::tuple<Ts...>>{std::move(q)};
     }
 
     // TODO: select literals?
-    template <typename... Tables, typename... Ts>
+    CPX_EXPORT template <typename... Tables, typename... Ts>
     auto select(const Column<Tables, Ts> &...cols) {
         auto q = std::string("select ") + cpx::sql::detail::string_cat(", ", cols.qualified_name()...);
         return Statement<std::tuple<>, std::tuple<Ts...>>{std::move(q)};
     };
 
 #ifdef BOOST_PFR_HPP
-    template <typename Table>
+    CPX_EXPORT template <typename Table>
     auto select_all_from(const Table &table) {
         using TupleStruct = decltype(boost::pfr::structure_to_tuple(table));
         using Filtered    = cpx::filter_tuple_t<TupleStruct, cpx::sql::detail::is_column>;
@@ -894,7 +898,7 @@ namespace cpx::sql {
     };
 #endif
 
-    template <typename Table>
+    CPX_EXPORT template <typename Table>
     auto delete_from(const Table &table) {
         return Statement<>{std::string("delete from ") + table.TableName};
     };

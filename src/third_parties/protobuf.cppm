@@ -1,21 +1,27 @@
 module;
 
-#include <cpx/proto/protobuf.h>
+#include <cpx/serde/serialize.h>
+#include <cpx/serde/deserialize.h>
+#include <cpx/reflect_builtin.h>
+#include <cpx/extend.h>
+#include <cpx/defer.h>
+#include <array>
+#include <tuple>
+#include <string>
+#include <vector>
+#include <unordered_map>
+
+#include <google/protobuf/io/coded_stream.h>
+#include <google/protobuf/io/zero_copy_stream_impl_lite.h>
+#include <google/protobuf/io/zero_copy_stream_impl.h>
+#include <google/protobuf/wire_format_lite.h>
 
 export module cpx.protobuf;
 import cpx;
 
-export namespace cpx::proto::protobuf {
-    using ::cpx::proto::protobuf::Deserialize;
-    using ::cpx::proto::protobuf::dump;
-    using ::cpx::proto::protobuf::Dump;
-    using ::cpx::proto::protobuf::get_tag_info;
-    using ::cpx::proto::protobuf::parse;
-    using ::cpx::proto::protobuf::Parse;
-    using ::cpx::proto::protobuf::Serialize;
-    using ::cpx::proto::protobuf::TagInfo;
-} // namespace cpx::proto::protobuf
+#undef CPX_EXPORT
+#define CPX_EXPORT export
 
-export namespace cpx {
-    namespace protobuf = ::cpx::proto::protobuf;
+extern "C++" {
+#include "cpx/protobuf.h"
 }

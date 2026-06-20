@@ -1,26 +1,23 @@
 module;
 
-#include <cpx/sql/sql.h>
+#include <cpx/tuple.h>
+#include <optional>
+#include <string>
+#include <vector>
+#include <utility>
+
+#ifndef BOOST_PFR_HPP
+#    if __has_include(<boost/pfr.hpp>)
+#        include <boost/pfr.hpp>
+#    endif
+#endif
 
 export module cpx.sql;
 import cpx;
 
-export namespace cpx::sql {
-    using ::cpx::sql::Alias;
-    using ::cpx::sql::Column;
-    using ::cpx::sql::Connection;
-    using ::cpx::sql::Rows;
-    using ::cpx::sql::Statement;
+#undef CPX_EXPORT
+#define CPX_EXPORT export
 
-    using ::cpx::sql::alter_table;
-    using ::cpx::sql::create_table;
-    using ::cpx::sql::create_table_if_not_exists;
-    using ::cpx::sql::delete_from;
-    using ::cpx::sql::insert_into;
-    using ::cpx::sql::select;
-    using ::cpx::sql::update;
-
-#ifdef BOOST_PFR_HPP
-    using ::cpx::sql::select_all_from;
-#endif
-} // namespace cpx::sql
+extern "C++" {
+#include "cpx/sql/sql.h"
+}

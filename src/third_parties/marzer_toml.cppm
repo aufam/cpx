@@ -1,20 +1,24 @@
 module;
 
-#include <cpx/json/json.h>
+#include <cpx/toml/toml.h>
 #include <cpx/serde/serialize.h>
 #include <cpx/serde/deserialize.h>
 #include <cpx/reflect_builtin.h>
 #include <cpx/extend.h>
+#include <array>
+#include <tuple>
+#include <unordered_map>
 #include <variant>
+#include <vector>
 
-#include <nlohmann/json.hpp>
+#include <toml++/toml.h>
 
-export module cpx.nlohmann_json;
-export import cpx.json;
+export module cpx.marzer_toml;
+export import cpx.toml;
 
 #undef CPX_EXPORT
 #define CPX_EXPORT export
 
 extern "C++" {
-#include "cpx/json/nlohmann_json.h"
+#include "cpx/toml/marzer_toml.h"
 }

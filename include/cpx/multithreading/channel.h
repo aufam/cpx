@@ -5,10 +5,13 @@
 #include <queue>
 #include <future>
 
-namespace cpx::multithreading {
-    template <typename T>
-    class Channel {
+#ifndef CPX_EXPORT
+#    define CPX_EXPORT
+#endif
 
+namespace cpx::multithreading {
+    CPX_EXPORT template <typename T>
+    class Channel {
     public:
         static_assert(!std::is_reference_v<T>, "T must not be a reference type");
 

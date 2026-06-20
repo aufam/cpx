@@ -1,21 +1,20 @@
 module;
 
-#include <cpx/cli/cli11.h>
+#include <cpx/cli/cli.h>
+#include <cpx/serde/deserialize.h>
+#include <cpx/serde/error.h>
+#include <cpx/extend.h>
+#include <cpx/reflect_builtin.h>
+#include <variant>
+
+#include <CLI/CLI.hpp>
 
 export module cpx.cli11;
-import cpx;
 export import cpx.cli;
-export import cli11;
 
-export namespace cpx::cli::cli11 {
-    using ::cpx::cli::cli11::Deserialize;
-    using ::cpx::cli::cli11::help;
-    using ::cpx::cli::cli11::is_deserializable;
-    using ::cpx::cli::cli11::parse;
-    using ::cpx::cli::cli11::Parse;
-    using ::cpx::cli::cli11::parse_with_subcommands;
-} // namespace cpx::cli::cli11
+#undef CPX_EXPORT
+#define CPX_EXPORT export
 
-export namespace cpx {
-    namespace cli11 = ::cpx::cli::cli11;
+extern "C++" {
+#include "cpx/cli/cli11.h"
 }

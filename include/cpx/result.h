@@ -7,6 +7,10 @@
 #include <variant>
 #include <optional>
 
+#ifndef CPX_EXPORT
+#    define CPX_EXPORT
+#endif
+
 namespace cpx {
     /// A C++17 Result<T, E> type representing either a success value (Ok) or an error (Err).
     /// Provides monadic operations: and_then, transform, map_err, or_else.
@@ -26,6 +30,9 @@ namespace cpx {
     /// int number = result; // implicit conversion or throw E
     ///
     /// @endcode
+    CPX_EXPORT template <typename T, typename E>
+    class Result;
+
     template <typename T, typename E = std::runtime_error>
     class [[nodiscard]] Result : protected std::variant<T, E> {
     public:

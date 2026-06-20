@@ -3,6 +3,10 @@
 
 #include <variant>
 
+#ifndef CPX_EXPORT
+#    define CPX_EXPORT
+#endif
+
 namespace cpx {
     /// Combines multiple callable objects into one overload set.
     /// Useful with std::visit on std::variant.
@@ -15,16 +19,16 @@ namespace cpx {
     ///     [](std::string s) { fmt::println("string: {}", s); },
     /// }, v);
     /// @endcode
-    template <typename... Fs>
+    CPX_EXPORT template <typename... Fs>
     struct overload : Fs... {
         using Fs::operator()...;
     };
 
-    template <typename... Fs>
+    CPX_EXPORT template <typename... Fs>
     overload(Fs...) -> overload<Fs...>;
 
     /// Convenience wrapper around std::visit using cpx::overload.
-    template <typename Variant, typename... Fs>
+    CPX_EXPORT template <typename Variant, typename... Fs>
     constexpr decltype(auto) visit(Variant &&v, Fs &&...fs) {
         return std::visit(overload{std::forward<Fs>(fs)...}, std::forward<Variant>(v));
     }

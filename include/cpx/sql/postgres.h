@@ -17,6 +17,10 @@
 #    error "Cannot find libpq-fe.h"
 #endif
 
+#ifndef CPX_EXPORT
+#    define CPX_EXPORT
+#endif
+
 
 namespace cpx::sql::postgres {
     struct Value {
@@ -27,15 +31,15 @@ namespace cpx::sql::postgres {
         char        small_buffer[8];
     };
 
-    class Connection;
+    CPX_EXPORT class Connection;
 
-    template <typename Row>
+    CPX_EXPORT template <typename Row>
     class Rows;
 
-    template <typename From, typename Enable = void>
+    CPX_EXPORT template <typename From, typename Enable = void>
     using Serialize = ::cpx::serde::Serialize<PGresult, From, Enable>;
 
-    template <typename To, typename Enable = void>
+    CPX_EXPORT template <typename To, typename Enable = void>
     using Deserialize = ::cpx::serde::Deserialize<PGresult, To, Enable>;
 
     template <typename T>
@@ -92,7 +96,7 @@ namespace cpx::sql::postgres {
 } // namespace cpx::sql::postgres
 
 namespace cpx {
-    namespace postgres = cpx::sql::postgres;
+    CPX_EXPORT namespace postgres = cpx::sql::postgres;
 }
 
 namespace cpx::sql::postgres::detail {
@@ -114,7 +118,7 @@ namespace cpx::sql::postgres::detail {
 
 
 namespace cpx::sql::postgres {
-    template <typename Row>
+    CPX_EXPORT template <typename Row>
     class Rows : public cpx::sql::Rows<Row> {
         friend class Connection;
 
@@ -213,7 +217,7 @@ namespace cpx::sql::postgres {
         bool      is_binary;
     };
 
-    class Connection : public cpx::sql::Connection {
+    CPX_EXPORT class Connection : public cpx::sql::Connection {
     public:
         Connection(const std::string &spec) {
             db = PQconnectdb(spec.c_str());

@@ -3,6 +3,10 @@
 
 #include <string_view>
 
+#ifndef CPX_EXPORT
+#    define CPX_EXPORT
+#endif
+
 namespace cpx::detail {
     inline constexpr std::string_view get_tag(std::string_view tags, std::string_view key) {
         const std::string_view tag = tags;
@@ -61,6 +65,9 @@ namespace cpx {
     ///     }; // with default value
     /// };
     /// @endcode
+    CPX_EXPORT template <typename T>
+    class Tag;
+
     template <typename T>
     class Tag {
     protected:
@@ -148,17 +155,17 @@ namespace cpx {
     };
 
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     struct is_tagged : std::false_type {};
 
     template <typename T>
     struct is_tagged<Tag<T>> : std::true_type {};
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     inline constexpr bool is_tagged_v = is_tagged<T>::value;
 
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     struct remove_tag;
 
     template <typename T>
@@ -166,7 +173,7 @@ namespace cpx {
         using type = typename Tag<T>::type;
     };
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     using remove_tag_t = typename remove_tag<T>::type;
 } // namespace cpx
 

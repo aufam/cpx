@@ -25,61 +25,65 @@ namespace __toml11 = ::toml;
 #define DUMP(...)           cpx::serde::Dump<__toml11::value, __VA_ARGS__>
 #define PARSE(...)          cpx::serde::Parse<__toml11::value, __VA_ARGS__>
 
-namespace cpx::toml::toruniina_toml {
-    using spec = __toml11::spec;
+#ifndef CPX_EXPORT
+#    define CPX_EXPORT
+#endif
 
-    template <typename From>
+namespace cpx::toml::toruniina_toml {
+    CPX_EXPORT using spec = __toml11::spec;
+
+    CPX_EXPORT template <typename From>
     using Serialize = SERIALIZE(From);
 
-    template <typename To>
+    CPX_EXPORT template <typename To>
     using Deserialize = DESERIALIZE(To);
 
-    template <typename From>
+    CPX_EXPORT template <typename From>
     constexpr bool is_serializable_v = SERIALIZABLE(From);
 
-    template <typename To>
+    CPX_EXPORT template <typename To>
     constexpr bool is_deserializable_v = DESERIALIZABLE(To);
 
-    template <typename From>
+    CPX_EXPORT template <typename From>
     using Parse = PARSE(From);
 
-    template <typename To>
+    CPX_EXPORT template <typename To>
     using Dump = DUMP(To);
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void parse(const std::string &str, T &val, const spec &s = spec::default_version());
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void parse(std::istream &stream, T &val, const spec &s = spec::default_version(), const std::string &filename = "");
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void parse_from_file(const std::string &path, T &val, const spec &s = spec::default_version());
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::enable_if_t<std::is_default_constructible_v<T>, T>
     parse(const std::string &str, const spec &s = spec::default_version());
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::enable_if_t<std::is_default_constructible_v<T>, T>
     parse(std::istream &str, const spec &s = spec::default_version(), const std::string &filename = "");
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::enable_if_t<std::is_default_constructible_v<T>, T>
     parse_from_file(const std::string &path, const spec &s = spec::default_version());
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::string dump(const T &val, const spec &s = spec::default_version());
 
-    template <typename T>
+    CPX_EXPORT template <typename T>
     void dump(std::ostream &os, const T &val, const spec &s = spec::default_version());
 } // namespace cpx::toml::toruniina_toml
 
 namespace cpx {
-    namespace toruniina_toml = cpx::toml::toruniina_toml;
+    CPX_EXPORT namespace toruniina_toml = cpx::toml::toruniina_toml;
 }
 
 namespace cpx::toml::toruniina_toml::detail {
@@ -472,8 +476,7 @@ struct DESERIALIZE(std::variant<T...>, std::enable_if_t<((std::is_default_constr
                     type_names += e.expected_type + '|';
                 }
             }(),
-            ...
-        );
+            ...);
         if (!done) {
             type_names.pop_back();
             throw type_mismatch_error(type_names, ::cpx::toml::toruniina_toml::detail::type(node));
@@ -493,8 +496,9 @@ struct SERIALIZE(std::unordered_map<std::string, T, H, P, A>, std::enable_if_t<S
 };
 
 template <typename T, typename H, typename P, typename A>
-struct
-    DESERIALIZE(std::unordered_map<std::string, T, H, P, A>, std::enable_if_t<std::is_default_constructible_v<T> && DESERIALIZABLE(T)>) {
+struct DESERIALIZE(
+    std::unordered_map<std::string, T, H, P, A>, std::enable_if_t<std::is_default_constructible_v<T> && DESERIALIZABLE(T)>
+) {
     const __toml11::value &node;
 
     void into(std::unordered_map<std::string, T, H, P, A> &v) const {
@@ -780,7 +784,7 @@ void cpx::toml::toruniina_toml::dump(std::ostream &os, const T &val, const spec 
 }
 
 namespace cpx::toml::toruniina_toml {
-    constexpr struct IO {
+    CPX_EXPORT constexpr struct IO {
         __toml11::spec _spec = spec::default_version();
 
         constexpr IO spec(spec val) const {
