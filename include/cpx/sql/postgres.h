@@ -12,7 +12,7 @@
 #if __has_include(<postgresql/libpq-fe.h>)
 #    include <postgresql/libpq-fe.h>
 #elif __has_include(<libpq-fe.h>)
-#    include <postgresql/libpq-fe.h>
+#    include <libpq-fe.h>
 #else
 #    error "Cannot find libpq-fe.h"
 #endif

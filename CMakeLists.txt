@@ -37,41 +37,140 @@ if (CPX_MODULES)
     file(GLOB MOD_SOURCES src/*.cppm)
     target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES ${MOD_SOURCES})
     target_link_libraries(cpx_mod PRIVATE cpx)
+
+    add_executable(app src/main.cpp)
+    target_link_libraries(app PRIVATE cpx_mod cpx)
 endif()
 
+function(cpx_configure_modules)
+    if (CPX_MODULES)
+        if (TARGET fmt)
+            target_link_libraries(cpx_mod PRIVATE fmt)
+            target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
+                src/third_parties/fmt.cppm
+            )
+        endif()
+
+        if (TARGET CLI11)
+            target_link_libraries(cpx_mod PRIVATE CLI11)
+            target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
+                src/third_parties/cli11.cppm
+            )
+        endif()
+
+        if (TARGET yyjson)
+            target_link_libraries(cpx_mod PRIVATE yyjson)
+            target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
+                src/third_parties/yy_json.cppm
+            )
+        endif()
+
+        if (TARGET nlohmann_json)
+            target_link_libraries(cpx_mod PRIVATE nlohmann_json)
+            target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
+                src/third_parties/nlohmann_json.cppm
+            )
+        endif()
+
+        if (TARGET rapidjson)
+            target_link_libraries(cpx_mod PRIVATE rapidjson)
+            target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
+                src/third_parties/rapid_json.cppm
+            )
+        endif()
+
+        if (TARGET toml11)
+            target_link_libraries(cpx_mod PRIVATE toml11)
+            target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
+                src/third_parties/toruniina_toml.cppm
+            )
+        endif()
+
+        if (TARGET tomlplusplus)
+            target_link_libraries(cpx_mod PRIVATE tomlplusplus)
+            target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
+                src/third_parties/marzer_toml.cppm
+            )
+        endif()
+
+        if (TARGET yaml-cpp)
+            target_link_libraries(cpx_mod PRIVATE yaml-cpp)
+            target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
+                src/third_parties/jbeder_yaml.cppm
+            )
+        endif()
+
+        if (TARGET msgpack-cxx)
+            target_link_libraries(cpx_mod PRIVATE msgpack-cxx)
+            target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
+                src/third_parties/msgpack.cppm
+            )
+        endif()
+
+        if (SQLite3_FOUND)
+            target_link_libraries(cpx_mod PRIVATE SQLite::SQLite3)
+            target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
+                src/third_parties/sqlite.cppm
+            )
+        endif()
+
+        if (PostgreSQL_FOUND)
+            target_link_libraries(cpx_mod PRIVATE PostgreSQL::PostgreSQL)
+            target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
+                src/third_parties/postgres.cppm
+            )
+        endif()
+
+        if (MySQL_FOUND AND NOT MariaDB_FOUND)
+            target_link_libraries(cpx_mod PRIVATE MySQL::mysql)
+            target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
+                src/third_parties/mysql.cppm
+            )
+        endif()
+
+        if (MariaDB_FOUND)
+            target_link_libraries(cpx_mod PRIVATE MariaDB::mariadb)
+            target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
+                src/third_parties/mysql.cppm
+            )
+        endif()
+    endif()
+endfunction()
+
 if (NOT CPX_BUILD_TESTS AND NOT CPX_BUILD_EXAMPLES AND NOT CPX_REQUIREMENTS)
+    cpx_configure_modules()
     return()
 endif()
 
 
 # system libraries
 find_package(SQLite3)
-if(SQLite3_FOUND)
+if (SQLite3_FOUND)
     message(STATUS "SQLite3 found.")
 endif()
 
 find_package(PostgreSQL)
-if(PostgreSQL_FOUND)
+if (PostgreSQL_FOUND)
     message(STATUS "PostgreSQL found.")
 endif()
 
 find_package(MySQL)
-if(MySQL_FOUND)
+if (MySQL_FOUND)
     message(STATUS "MySQL found.")
 endif()
 
 find_package(MariaDB)
-if(MariaDB_FOUND)
+if (MariaDB_FOUND)
     message(STATUS "MariaDB found.")
 endif()
 
 find_package(Protobuf)
-if(Protobuf_FOUND)
+if (Protobuf_FOUND)
     message(STATUS "Protobuf found.")
 endif()
 
 find_package(absl)
-if(absl_FOUND)
+if (absl_FOUND)
     message(STATUS "absl found.")
 endif()
 
@@ -83,7 +182,7 @@ include(cmake/CPM.cmake)
 CPMAddPackage(
     NAME            fmt
     GIT_REPOSITORY  "https://github.com/fmtlib/fmt"
-    GIT_TAG         11.2.0
+    GIT_TAG         12.1.0
 )
 
 ## Logging
@@ -207,6 +306,16 @@ if (CPX_REQUIREMENTS)
     return()
 endif()
 
+# configure module third parties
+cpx_configure_modules()
+
+if (NOT Protobuf_FOUND)
+    message(FATAL_ERROR "Protobuf not found.")
+endif()
+
+if (NOT SQLite3_FOUND)
+    message(FATAL_ERROR "SQLite3 not found.")
+endif()
 
 # private components
 add_library(cpx_private INTERFACE)
@@ -227,35 +336,6 @@ target_link_libraries(cpx_private INTERFACE
     protobuf::libprotobuf
     msgpack-cxx
 )
-
-if (CPX_MODULES)
-    target_sources(cpx_mod
-        PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
-            src/third_parties/fmt.cppm
-            src/third_parties/cli11.cppm
-            src/third_parties/yy_json.cppm
-            src/third_parties/nlohmann_json.cppm
-            src/third_parties/rapid_json.cppm
-            src/third_parties/toruniina_toml.cppm
-            src/third_parties/marzer_toml.cppm
-            src/third_parties/jbeder_yaml.cppm
-            src/third_parties/msgpack.cppm
-    )
-
-    target_link_libraries(cpx_mod PRIVATE
-        CLI11
-        fmt
-        Boost::pfr
-        magic_enum
-        nlohmann_json
-        yyjson
-        rapidjson
-        toml11::toml11
-        tomlplusplus::tomlplusplus
-        yaml-cpp
-        msgpack-cxx
-    )
-endif()
 
 if (TARGET absl::log)
     target_link_libraries(cpx_private INTERFACE absl::log)

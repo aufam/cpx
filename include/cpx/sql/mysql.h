@@ -8,18 +8,22 @@
 #include <cstring>
 #include <mysql/mysql.h>
 
+#ifndef CPX_EXPORT
+#    define CPX_EXPORT
+#endif
+
 namespace cpx::sql::mysql {
     using Value = MYSQL_BIND;
 
-    class Connection;
+    CPX_EXPORT class Connection;
 
-    template <typename Row>
+    CPX_EXPORT template <typename Row>
     class Rows;
 
-    template <typename From, typename Enable = void>
+    CPX_EXPORT template <typename From, typename Enable = void>
     using Serialize = ::cpx::serde::Serialize<Value, From, Enable>;
 
-    template <typename To, typename Enable = void>
+    CPX_EXPORT template <typename To, typename Enable = void>
     using Deserialize = ::cpx::serde::Deserialize<Value, To, Enable>;
 } // namespace cpx::sql::mysql
 
