@@ -13,6 +13,7 @@
 #include <vector>
 #include <tuple>
 #include <unordered_map>
+#include <iostream>
 
 #ifndef RAPIDJSON_DOCUMENT_H_
 #    include <rapidjson/document.h>
@@ -59,10 +60,6 @@
 #define DESERIALIZABLE_SAX(...)   cpx::serde::is_deserializable_v<rapidjson::Reader, __VA_ARGS__>
 #define DUMP_SAX(OS, ...)         cpx::serde::Dump<rapidjson::Writer<OS>, __VA_ARGS__>
 #define PARSE_SAX(...)            cpx::serde::Parse<rapidjson::Reader, __VA_ARGS__>
-
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
-#endif
 
 namespace cpx::json::rapid_json {
     CPX_EXPORT template <typename From>

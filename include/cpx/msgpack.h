@@ -8,12 +8,8 @@
 #include <optional>
 #include <variant>
 
-#ifndef _CPX_MSGPACK_HPP
+#ifndef CPX_MODULE
 #    include <msgpack.hpp>
-#endif
-
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
 #endif
 
 namespace cpx::msgpack {

@@ -1,15 +1,12 @@
 #ifndef CPX_RESULT_H
 #define CPX_RESULT_H
 
+#include <cpx/nomodule.h>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
 #include <variant>
 #include <optional>
-
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
-#endif
 
 namespace cpx {
     /// A C++17 Result<T, E> type representing either a success value (Ok) or an error (Err).

@@ -7,17 +7,16 @@
 #include <cpx/serde/error.h>
 #include <string>
 #include <optional>
-#include <ctime>
 #include <utility>
+
+#ifndef CPX_MODULE
+#    include <ctime>
+#    include <cstdint>
+#endif
 
 #ifndef SQLITE3_H
 #    include <sqlite3.h>
 #endif
-
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
-#endif
-
 
 /*
  * Forward declarations

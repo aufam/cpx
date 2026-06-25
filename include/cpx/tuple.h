@@ -1,12 +1,9 @@
 #ifndef CPX_TUPLE_H
 #define CPX_TUPLE_H
 
+#include <cpx/nomodule.h>
 #include <tuple>
 #include <type_traits>
-
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
-#endif
 
 namespace cpx {
     CPX_EXPORT template <typename T>

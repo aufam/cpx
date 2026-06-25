@@ -1,11 +1,8 @@
 #ifndef CPX_SERDE_DESERIALIZE_H
 #define CPX_SERDE_DESERIALIZE_H
 
+#include "cpx/nomodule.h"
 #include <type_traits>
-
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
-#endif
 
 namespace cpx::serde {
     CPX_EXPORT template <typename Deserializer, typename To, typename Enable = void>

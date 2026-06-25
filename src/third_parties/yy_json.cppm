@@ -6,6 +6,8 @@ module;
 #include <cpx/reflect_builtin.h>
 #include <cpx/extend.h>
 #include <cpx/defer.h>
+#include <cpx/module.h>
+
 #include <array>
 #include <variant>
 #include <vector>
@@ -17,9 +19,6 @@ module;
 
 export module cpx.yy_json;
 export import cpx.json;
-
-#undef CPX_EXPORT
-#define CPX_EXPORT export
 
 extern "C++" {
 #include "cpx/json/yy_json.h"

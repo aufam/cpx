@@ -10,10 +10,6 @@
 
 #include <CLI/CLI.hpp>
 
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
-#endif
-
 namespace cpx::cli::cli11 {
     CPX_EXPORT using Parse = cpx::serde::Parse<CLI::App, std::pair<int, char **>>;
 

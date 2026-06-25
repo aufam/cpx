@@ -26,10 +26,6 @@ namespace __yaml_cpp = ::YAML;
 #define DUMP(...)           cpx::serde::Dump<__yaml_cpp::Node, __VA_ARGS__>
 #define PARSE(...)          cpx::serde::Parse<__yaml_cpp::Node, __VA_ARGS__>
 
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
-#endif
-
 namespace cpx::yaml::jbeder_yaml {
     CPX_EXPORT template <typename From>
     using Serialize = SERIALIZE(From);

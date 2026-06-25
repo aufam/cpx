@@ -15,24 +15,18 @@ module;
 #include <tuple>
 #include <variant>
 
+#if __has_include(<boost/pfr.hpp>)
+#    include <boost/pfr.hpp>
+#endif
+
+#if __has_include(<magic_enum/magic_enum.hpp>)
+#    include <magic_enum/magic_enum.hpp>
+#endif
+
 #include <cpx/serde/error.h>
-
-#ifndef BOOST_PFR_HPP
-#    if __has_include(<boost/pfr.hpp>)
-#        include <boost/pfr.hpp>
-#    endif
-#endif
-
-#ifndef NEARGYE_MAGIC_ENUM_HPP
-#    if __has_include(<magic_enum/magic_enum.hpp>)
-#        include <magic_enum/magic_enum.hpp>
-#    endif
-#endif
+#include <cpx/module.h>
 
 export module cpx;
-
-#undef CPX_EXPORT
-#define CPX_EXPORT export
 
 extern "C++" {
 #include "cpx/tuple.h"

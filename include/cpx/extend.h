@@ -9,10 +9,6 @@
 #    endif
 #endif
 
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
-#endif
-
 namespace cpx {
     CPX_EXPORT template <
         typename T,

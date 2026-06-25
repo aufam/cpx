@@ -1,13 +1,13 @@
 #ifndef CPX_TIME_H
 #define CPX_TIME_H
 
-#include <cstdlib>
-#include <ctime>
+#include <cpx/nomodule.h>
 #include <string>
 #include <stdexcept>
 
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
+#ifndef CPX_MODULE
+#    include <cstdlib>
+#    include <ctime>
 #endif
 
 namespace cpx {

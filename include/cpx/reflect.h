@@ -3,10 +3,6 @@
 
 #include <cpx/tag_info.h>
 
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
-#endif
-
 namespace cpx {
     CPX_EXPORT template <typename T, typename Enable = void>
     struct Reflect : std::false_type {

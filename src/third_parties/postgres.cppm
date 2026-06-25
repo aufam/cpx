@@ -5,6 +5,8 @@ module;
 #include <cpx/serde/deserialize.h>
 #include <cpx/serde/error.h>
 #include <cpx/time.h>
+#include <cpx/module.h>
+
 #include <cstring>
 #include <netinet/in.h>
 
@@ -18,9 +20,6 @@ module;
 
 export module cpx.postgres;
 export import cpx.sql;
-
-#undef CPX_EXPORT
-#define CPX_EXPORT export
 
 extern "C++" {
 #include "cpx/sql/postgres.h"

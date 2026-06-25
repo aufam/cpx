@@ -1,11 +1,8 @@
 #ifndef CPX_TAG_H
 #define CPX_TAG_H
 
+#include <cpx/nomodule.h>
 #include <string_view>
-
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
-#endif
 
 namespace cpx::detail {
     inline constexpr std::string_view get_tag(std::string_view tags, std::string_view key) {

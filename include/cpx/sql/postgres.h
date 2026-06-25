@@ -6,8 +6,11 @@
 #include <cpx/serde/deserialize.h>
 #include <cpx/serde/error.h>
 #include <cpx/time.h>
-#include <cstring>
-#include <netinet/in.h>
+
+#ifndef CPX_MODULE
+#    include <cstring>
+#    include <netinet/in.h>
+#endif
 
 #if __has_include(<postgresql/libpq-fe.h>)
 #    include <postgresql/libpq-fe.h>
@@ -16,11 +19,6 @@
 #else
 #    error "Cannot find libpq-fe.h"
 #endif
-
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
-#endif
-
 
 namespace cpx::sql::postgres {
     struct Value {

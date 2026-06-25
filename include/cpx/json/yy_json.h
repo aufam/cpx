@@ -24,10 +24,6 @@
 #define DUMP(...)           cpx::serde::Dump<yyjson_mut_doc, __VA_ARGS__>
 #define PARSE(...)          cpx::serde::Parse<yyjson_doc, __VA_ARGS__>
 
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
-#endif
-
 namespace cpx::json::yy_json {
     CPX_EXPORT template <typename From>
     using Serialize = SERIALIZE(From);

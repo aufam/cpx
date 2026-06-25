@@ -5,6 +5,8 @@ module;
 #include <cpx/reflect_builtin.h>
 #include <cpx/extend.h>
 #include <cpx/defer.h>
+#include <cpx/module.h>
+
 #include <array>
 #include <tuple>
 #include <string>
@@ -18,9 +20,6 @@ module;
 
 export module cpx.protobuf;
 import cpx;
-
-#undef CPX_EXPORT
-#define CPX_EXPORT export
 
 extern "C++" {
 #include "cpx/protobuf.h"

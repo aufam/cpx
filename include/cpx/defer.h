@@ -1,12 +1,9 @@
 #ifndef CPX_DEFER_H
 #define CPX_DEFER_H
 
+#include <cpx/nomodule.h>
 #include <utility>
 #include <type_traits>
-
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
-#endif
 
 namespace cpx {
     CPX_EXPORT template <typename F>

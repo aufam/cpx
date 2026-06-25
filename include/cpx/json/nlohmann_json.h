@@ -12,10 +12,6 @@
 #    include <nlohmann/json.hpp>
 #endif
 
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
-#endif
-
 namespace cpx::json::nlohmann_json {
     CPX_EXPORT template <typename T>
     struct Reflect : std::false_type {

@@ -6,10 +6,6 @@
 #include <tuple>
 #include <limits>
 
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
-#endif
-
 namespace cpx::iter_detail {
     template <typename Item>
     decltype(auto) deref(Item item) {

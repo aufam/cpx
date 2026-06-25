@@ -4,8 +4,11 @@ module;
 #include <mutex>
 #include <optional>
 #include <queue>
+#include <deque>
 #include <vector>
 #include <future>
+#include <cpx/module.h>
+#include <cpx/nomodule.h>
 
 export module cpx.multithreading;
 import cpx;

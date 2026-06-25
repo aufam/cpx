@@ -1,12 +1,9 @@
 #ifndef CPX_SERDE_ERROR_H
 #define CPX_SERDE_ERROR_H
 
+#include "cpx/nomodule.h"
 #include <exception>
 #include <string>
-
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
-#endif
 
 namespace cpx::serde {
     CPX_EXPORT class error : public std::exception {

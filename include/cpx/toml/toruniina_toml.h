@@ -25,10 +25,6 @@ namespace __toml11 = ::toml;
 #define DUMP(...)           cpx::serde::Dump<__toml11::value, __VA_ARGS__>
 #define PARSE(...)          cpx::serde::Parse<__toml11::value, __VA_ARGS__>
 
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
-#endif
-
 namespace cpx::toml::toruniina_toml {
     CPX_EXPORT using spec = __toml11::spec;
 

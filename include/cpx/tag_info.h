@@ -5,10 +5,6 @@
 #include <cpx/optional.h>
 #include <cpx/tuple.h>
 
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
-#endif
-
 namespace cpx {
     CPX_EXPORT struct TagInfo {
         std::string_view key = "";

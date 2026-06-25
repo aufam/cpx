@@ -2,17 +2,14 @@ module;
 
 #include <cpx/reflect_builtin.h>
 #include <cpx/extend.h>
+#include <cpx/module.h>
+#include <fmt/ranges.h>
+#include <fmt/chrono.h>
 #include <optional>
 #include <variant>
 
-#include <fmt/ranges.h>
-#include <fmt/chrono.h>
-
 export module cpx.fmt;
 import cpx;
-
-#undef CPX_EXPORT
-#define CPX_EXPORT export
 
 extern "C++" {
 #include "cpx/fmt.h"

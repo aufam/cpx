@@ -1,12 +1,9 @@
 #ifndef CPX_OPTIONAL_H
 #define CPX_OPTIONAL_H
 
+#include <cpx/nomodule.h>
 #include <optional>
 #include <type_traits>
-
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
-#endif
 
 namespace cpx {
     CPX_EXPORT template <typename T>

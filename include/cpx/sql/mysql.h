@@ -5,11 +5,10 @@
 #include <cpx/serde/serialize.h>
 #include <cpx/serde/deserialize.h>
 #include <cpx/serde/error.h>
-#include <cstring>
 #include <mysql/mysql.h>
 
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
+#ifndef CPX_MODULE
+#    include <cstring>
 #endif
 
 namespace cpx::sql::mysql {

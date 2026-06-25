@@ -5,10 +5,6 @@
 #include <queue>
 #include <future>
 
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
-#endif
-
 namespace cpx::multithreading {
     CPX_EXPORT template <typename T>
     class Channel {

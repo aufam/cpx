@@ -1,15 +1,12 @@
 #ifndef CPX_MULTITHREADING_QUEUE
 #define CPX_MULTITHREADING_QUEUE
 
+#include "cpx/nomodule.h"
 #include <condition_variable>
 #include <optional>
 #include <queue>
 #include <vector>
 #include <mutex>
-
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
-#endif
 
 namespace cpx::multithreading {
     CPX_EXPORT template <typename T>

@@ -4,10 +4,6 @@
 #include <cpx/reflect.h>
 #include <cpx/time.h>
 
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
-#endif
-
 namespace cpx::toml {
     CPX_EXPORT template <typename T>
     constexpr decltype(auto) get_tag_info(const T &field) {

@@ -16,10 +16,6 @@
 #    endif
 #endif
 
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
-#endif
-
 
 /*
  * Forward declarations
@@ -472,8 +468,8 @@ namespace cpx::sql {
         std::string qualified_name() const {
             const char    *table    = Table::TableName;
             constexpr bool is_tuple = cpx::is_tuple_v<T>;
-            return (is_tuple ? "(" : "") +                                                              //
-                   (table ? std::string(Table::TableName) + "." : std::string()) + std::string(name_) + //
+            return (is_tuple ? "(" : "") +                                                   //
+                   (table ? std::string(table) + "." : std::string()) + std::string(name_) + //
                    (is_tuple ? ")" : "");
         }
 

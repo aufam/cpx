@@ -3,11 +3,10 @@ module;
 #include <type_traits>
 #include <exception>
 #include <string>
+#include <cpx/module.h>
+#include <cpx/nomodule.h>
 
 export module cpx.serde;
-
-#undef CPX_EXPORT
-#define CPX_EXPORT export
 
 extern "C++" {
 #include "cpx/serde/serialize.h"

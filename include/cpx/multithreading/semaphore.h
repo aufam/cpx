@@ -1,12 +1,9 @@
 #ifndef CPX_MULTITHREADING_SEMAPHORE
 #define CPX_MULTITHREADING_SEMAPHORE
 
+#include "cpx/nomodule.h"
 #include <condition_variable>
 #include <mutex>
-
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
-#endif
 
 namespace cpx::multithreading {
     CPX_EXPORT class Semaphore {

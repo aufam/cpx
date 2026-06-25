@@ -5,15 +5,13 @@ module;
 #include <cpx/serde/deserialize.h>
 #include <cpx/reflect_builtin.h>
 #include <cpx/extend.h>
-#include <variant>
+#include <cpx/module.h>
 
+#include <variant>
 #include <nlohmann/json.hpp>
 
 export module cpx.nlohmann_json;
 export import cpx.json;
-
-#undef CPX_EXPORT
-#define CPX_EXPORT export
 
 extern "C++" {
 #include "cpx/json/nlohmann_json.h"

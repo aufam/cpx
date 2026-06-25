@@ -14,10 +14,6 @@
 #    include <fmt/chrono.h>
 #endif
 
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
-#endif
-
 namespace cpx::fmt {
     CPX_EXPORT template <typename T, typename Enable = void>
     struct Reflect : std::false_type {

@@ -1,11 +1,8 @@
 #ifndef CPX_OVERLOAD_H
 #define CPX_OVERLOAD_H
 
+#include <cpx/nomodule.h>
 #include <variant>
-
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
-#endif
 
 namespace cpx {
     /// Combines multiple callable objects into one overload set.

@@ -6,11 +6,14 @@ module;
 #include <cpx/reflect_builtin.h>
 #include <cpx/extend.h>
 #include <cpx/defer.h>
+#include <cpx/module.h>
+
 #include <array>
 #include <variant>
 #include <vector>
 #include <tuple>
 #include <unordered_map>
+#include <iostream>
 
 #include <rapidjson/document.h>
 #include <rapidjson/writer.h>
@@ -26,9 +29,6 @@ module;
 
 export module cpx.rapid_json;
 export import cpx.json;
-
-#undef CPX_EXPORT
-#define CPX_EXPORT export
 
 extern "C++" {
 #include "cpx/json/rapid_json.h"

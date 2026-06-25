@@ -25,10 +25,6 @@ namespace __tomlpp = ::toml;
 #define DUMP(...)           cpx::serde::Dump<__tomlpp::table, __VA_ARGS__>
 #define PARSE(...)          cpx::serde::Parse<__tomlpp::table, __VA_ARGS__>
 
-#ifndef CPX_EXPORT
-#    define CPX_EXPORT
-#endif
-
 namespace cpx::toml::marzer_toml {
     CPX_EXPORT template <typename From>
     using Serialize = SERIALIZE(From);

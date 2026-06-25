@@ -107,6 +107,13 @@ function(cpx_configure_modules)
             )
         endif()
 
+        if (Protobuf_FOUND)
+            target_link_libraries(cpx_mod PRIVATE protobuf::libprotobuf)
+            target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
+                src/third_parties/protobuf.cppm
+            )
+        endif()
+
         if (SQLite3_FOUND)
             target_link_libraries(cpx_mod PRIVATE SQLite::SQLite3)
             target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
