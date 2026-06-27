@@ -64,6 +64,37 @@ namespace cpx::json::yy_json {
 
     CPX_EXPORT template <typename T>
     void dump(const T &&val, yyjson_write_flag = YYJSON_WRITE_NOFLAG, const yyjson_alc *alc = nullptr) = delete;
+
+    CPX_EXPORT struct read_flag {
+        static constexpr auto noflag                  = YYJSON_READ_NOFLAG;
+        static constexpr auto insitu                  = YYJSON_READ_INSITU;
+        static constexpr auto stop_when_done          = YYJSON_READ_STOP_WHEN_DONE;
+        static constexpr auto allow_trailing_commas   = YYJSON_READ_ALLOW_TRAILING_COMMAS;
+        static constexpr auto allow_comments          = YYJSON_READ_ALLOW_COMMENTS;
+        static constexpr auto allow_inf_and_nan       = YYJSON_READ_ALLOW_INF_AND_NAN;
+        static constexpr auto number_as_raw           = YYJSON_READ_NUMBER_AS_RAW;
+        static constexpr auto allow_invalid_unicode   = YYJSON_READ_ALLOW_INVALID_UNICODE;
+        static constexpr auto bignum_as_raw           = YYJSON_READ_BIGNUM_AS_RAW;
+        static constexpr auto allow_bom               = YYJSON_READ_ALLOW_BOM;
+        static constexpr auto allow_ext_number        = YYJSON_READ_ALLOW_EXT_NUMBER;
+        static constexpr auto allow_ext_escape        = YYJSON_READ_ALLOW_EXT_ESCAPE;
+        static constexpr auto allow_ext_whitespace    = YYJSON_READ_ALLOW_EXT_WHITESPACE;
+        static constexpr auto allow_single_quoted_str = YYJSON_READ_ALLOW_SINGLE_QUOTED_STR;
+        static constexpr auto allow_unquoted_key      = YYJSON_READ_ALLOW_UNQUOTED_KEY;
+        static constexpr auto json5                   = YYJSON_READ_JSON5;
+    };
+
+    CPX_EXPORT struct write_flag {
+        static constexpr auto noflag                = YYJSON_WRITE_NOFLAG;
+        static constexpr auto pretty                = YYJSON_WRITE_PRETTY;
+        static constexpr auto escape_unicode        = YYJSON_WRITE_ESCAPE_UNICODE;
+        static constexpr auto escape_slashes        = YYJSON_WRITE_ESCAPE_SLASHES;
+        static constexpr auto allow_inf_and_nan     = YYJSON_WRITE_ALLOW_INF_AND_NAN;
+        static constexpr auto inf_and_nan_as_null   = YYJSON_WRITE_INF_AND_NAN_AS_NULL;
+        static constexpr auto allow_invalid_unicode = YYJSON_WRITE_ALLOW_INVALID_UNICODE;
+        static constexpr auto pretty_two_spaces     = YYJSON_WRITE_PRETTY_TWO_SPACES;
+        static constexpr auto newline_at_end        = YYJSON_WRITE_NEWLINE_AT_END;
+    };
 } // namespace cpx::json::yy_json
 
 namespace cpx {
