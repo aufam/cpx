@@ -36,10 +36,7 @@ if (CPX_MODULES)
 
     file(GLOB MOD_SOURCES src/*.cppm)
     target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES ${MOD_SOURCES})
-    target_link_libraries(cpx_mod PRIVATE cpx)
-
-    add_executable(app src/main.cpp)
-    target_link_libraries(app PRIVATE cpx_mod cpx)
+    target_link_libraries(cpx_mod PUBLIC cpx)
 endif()
 
 function(cpx_configure_modules)
