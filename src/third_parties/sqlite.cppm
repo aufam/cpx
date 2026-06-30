@@ -6,9 +6,10 @@ module;
 #include <cpx/serde/error.h>
 #include <cpx/module.h>
 
+#include <ctime>
+#include <cstdint>
 #include <string>
 #include <optional>
-#include <ctime>
 #include <utility>
 #include <sqlite3.h>
 
