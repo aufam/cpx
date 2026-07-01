@@ -41,99 +41,113 @@ endif()
 
 function(cpx_configure_modules)
     if (CPX_MODULES)
+        if (TARGET Boost::pfr)
+            target_link_libraries(cpx_mod PUBLIC Boost::pfr)
+            target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
+                src/third_parties/fmt.cppm
+            )
+        endif()
+
+        if (TARGET magic_enum)
+            target_link_libraries(cpx_mod PUBLIC magic_enum)
+            target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
+                src/third_parties/fmt.cppm
+            )
+        endif()
+
         if (TARGET fmt)
-            target_link_libraries(cpx_mod PRIVATE fmt)
+            target_link_libraries(cpx_mod PUBLIC fmt)
             target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
                 src/third_parties/fmt.cppm
             )
         endif()
 
         if (TARGET CLI11)
-            target_link_libraries(cpx_mod PRIVATE CLI11)
+            target_link_libraries(cpx_mod PUBLIC CLI11)
             target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
                 src/third_parties/cli11.cppm
             )
         endif()
 
         if (TARGET yyjson)
-            target_link_libraries(cpx_mod PRIVATE yyjson)
+            target_link_libraries(cpx_mod PUBLIC yyjson)
             target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
                 src/third_parties/yy_json.cppm
             )
         endif()
 
         if (TARGET nlohmann_json)
-            target_link_libraries(cpx_mod PRIVATE nlohmann_json)
+            target_link_libraries(cpx_mod PUBLIC nlohmann_json)
             target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
                 src/third_parties/nlohmann_json.cppm
             )
         endif()
 
         if (TARGET rapidjson)
-            target_link_libraries(cpx_mod PRIVATE rapidjson)
+            target_link_libraries(cpx_mod PUBLIC rapidjson)
             target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
                 src/third_parties/rapid_json.cppm
             )
         endif()
 
         if (TARGET toml11)
-            target_link_libraries(cpx_mod PRIVATE toml11)
+            target_link_libraries(cpx_mod PUBLIC toml11)
             target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
                 src/third_parties/toruniina_toml.cppm
             )
         endif()
 
         if (TARGET tomlplusplus)
-            target_link_libraries(cpx_mod PRIVATE tomlplusplus)
+            target_link_libraries(cpx_mod PUBLIC tomlplusplus)
             target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
                 src/third_parties/marzer_toml.cppm
             )
         endif()
 
         if (TARGET yaml-cpp)
-            target_link_libraries(cpx_mod PRIVATE yaml-cpp)
+            target_link_libraries(cpx_mod PUBLIC yaml-cpp)
             target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
                 src/third_parties/jbeder_yaml.cppm
             )
         endif()
 
         if (TARGET msgpack-cxx)
-            target_link_libraries(cpx_mod PRIVATE msgpack-cxx)
+            target_link_libraries(cpx_mod PUBLIC msgpack-cxx)
             target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
                 src/third_parties/msgpack.cppm
             )
         endif()
 
         if (Protobuf_FOUND)
-            target_link_libraries(cpx_mod PRIVATE protobuf::libprotobuf)
+            target_link_libraries(cpx_mod PUBLIC protobuf::libprotobuf)
             target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
                 src/third_parties/protobuf.cppm
             )
         endif()
 
         if (SQLite3_FOUND)
-            target_link_libraries(cpx_mod PRIVATE SQLite::SQLite3)
+            target_link_libraries(cpx_mod PUBLIC SQLite::SQLite3)
             target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
                 src/third_parties/sqlite.cppm
             )
         endif()
 
         if (PostgreSQL_FOUND)
-            target_link_libraries(cpx_mod PRIVATE PostgreSQL::PostgreSQL)
+            target_link_libraries(cpx_mod PUBLIC PostgreSQL::PostgreSQL)
             target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
                 src/third_parties/postgres.cppm
             )
         endif()
 
         if (MySQL_FOUND AND NOT MariaDB_FOUND)
-            target_link_libraries(cpx_mod PRIVATE MySQL::mysql)
+            target_link_libraries(cpx_mod PUBLIC MySQL::mysql)
             target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
                 src/third_parties/mysql.cppm
             )
         endif()
 
         if (MariaDB_FOUND)
-            target_link_libraries(cpx_mod PRIVATE MariaDB::mariadb)
+            target_link_libraries(cpx_mod PUBLIC MariaDB::mariadb)
             target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
                 src/third_parties/mysql.cppm
             )
