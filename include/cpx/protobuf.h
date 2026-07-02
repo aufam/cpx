@@ -104,7 +104,7 @@ namespace cpx::protobuf {
 
     CPX_EXPORT template <typename T>
     [[nodiscard]]
-    std::enable_if_t<std::is_default_constructible_v<T>, T> parse(const std::string &str);
+    std::enable_if_t<std::is_default_constructible_v<T>, T> parse(std::string_view &str);
 
     CPX_EXPORT template <typename T>
     void parse(std::istream &is, T &val);
@@ -915,7 +915,7 @@ void cpx::protobuf::parse(std::string_view str, T &val) {
 
 template <typename T>
 [[nodiscard]]
-std::enable_if_t<std::is_default_constructible_v<T>, T> cpx::protobuf::parse(const std::string &str) {
+std::enable_if_t<std::is_default_constructible_v<T>, T> cpx::protobuf::parse(std::string_view str) {
     T val = {};
     Parse<std::string_view>{str}.into(val);
     return val;

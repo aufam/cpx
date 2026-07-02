@@ -70,7 +70,7 @@ namespace cpx::msgpack {
     void parse(std::string_view buffer, T &val);
 
     CPX_EXPORT template <typename T>
-    std::enable_if_t<std::is_default_constructible_v<T>, T> parse(const std::string &buffer);
+    std::enable_if_t<std::is_default_constructible_v<T>, T> parse(std::string_view buffer);
 
     CPX_EXPORT template <typename T>
     void parse(std::istream &, T &val);
@@ -683,7 +683,7 @@ void cpx::msgpack::parse(std::string_view buffer, T &val) {
 }
 
 template <typename T>
-std::enable_if_t<std::is_default_constructible_v<T>, T> cpx::msgpack::parse(const std::string &buffer) {
+std::enable_if_t<std::is_default_constructible_v<T>, T> cpx::msgpack::parse(std::string_view buffer) {
     T val = {};
     Parse<std::string_view>{buffer}.into(val);
     return val;
