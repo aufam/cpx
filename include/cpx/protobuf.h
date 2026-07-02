@@ -100,7 +100,7 @@ namespace cpx::protobuf {
     void dump(std::ostream &os, const T &val);
 
     CPX_EXPORT template <typename T>
-    void parse(const std::string &str, T &val);
+    void parse(std::string_view str, T &val);
 
     CPX_EXPORT template <typename T>
     [[nodiscard]]
@@ -846,8 +846,8 @@ struct DUMP(std::ostream) {
 };
 
 template <>
-struct PARSE(std::string) {
-    const std::string &buffer;
+struct PARSE(std::string_view) {
+    std::string_view buffer;
 
     template <typename T>
     void into(T &v) const {
@@ -909,15 +909,15 @@ void cpx::protobuf::dump(std::ostream &os, const T &val) {
 }
 
 template <typename T>
-void cpx::protobuf::parse(const std::string &str, T &val) {
-    Parse<std::string>{str}.into(val);
+void cpx::protobuf::parse(std::string_view str, T &val) {
+    Parse<std::string_view>{str}.into(val);
 }
 
 template <typename T>
 [[nodiscard]]
 std::enable_if_t<std::is_default_constructible_v<T>, T> cpx::protobuf::parse(const std::string &str) {
     T val = {};
-    Parse<std::string>{str}.into(val);
+    Parse<std::string_view>{str}.into(val);
     return val;
 }
 

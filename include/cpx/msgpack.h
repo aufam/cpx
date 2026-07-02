@@ -67,7 +67,7 @@ namespace cpx::msgpack {
     void dump(OS &os, const T &val);
 
     CPX_EXPORT template <typename T>
-    void parse(const std::string &buffer, T &val);
+    void parse(std::string_view buffer, T &val);
 
     CPX_EXPORT template <typename T>
     std::enable_if_t<std::is_default_constructible_v<T>, T> parse(const std::string &buffer);
@@ -605,8 +605,8 @@ struct cpx::serde::Deserialize<::msgpack::object, std::timespec> {
 
 
 template <>
-struct cpx::serde::Parse<::msgpack::unpacker, std::string> {
-    const std::string &buffer;
+struct cpx::serde::Parse<::msgpack::unpacker, std::string_view> {
+    std::string_view buffer;
 
     template <typename T>
     void into(T &v) const {
@@ -678,14 +678,14 @@ void cpx::msgpack::dump(OS &os, const T &val) {
 }
 
 template <typename T>
-void cpx::msgpack::parse(const std::string &buffer, T &val) {
-    Parse<std::string>{buffer}.into(val);
+void cpx::msgpack::parse(std::string_view buffer, T &val) {
+    Parse<std::string_view>{buffer}.into(val);
 }
 
 template <typename T>
 std::enable_if_t<std::is_default_constructible_v<T>, T> cpx::msgpack::parse(const std::string &buffer) {
     T val = {};
-    Parse<std::string>{buffer}.into(val);
+    Parse<std::string_view>{buffer}.into(val);
     return val;
 }
 
