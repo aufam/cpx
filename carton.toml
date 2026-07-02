@@ -3,34 +3,56 @@ name = "cpx"
 version = "0.1.0"
 edition = 17
 
-[lib]
-mod = ["src/*.cppm"]
 
 [dependencies]
-pfr = { version = "?1.88.0", optional = true }
-magic_enum = { version = "?0.9.7", optional = true  }
-fmt = { version = "?12.1.0", optional = true  }
-cli = { version = "?2.6.2", optional = true  }
-yyjson = { version = "?0.12.0", optional = true  }
-nlohmann-json = { version = "?3.12.0", optional = true  }
-toml = { version = "?4.4.0", optional = true  }
-yaml = { version = "?0.9.0", optional = true  }
-spdlog = { version = "?1.15.3", default-features = false, optional = true }
+pfr = { version = "1.88.0", optional = true }
+magic_enum = { version = "0.9.7", optional = true  }
 
+fmt = { version = "12.1.0", optional = true  }
 fmt-mod = { mod = ["src/third_parties/fmt.cppm"], optional = true }
+
+cli = { version = "2.6.2", optional = true  }
 cli-mod = { mod = ["src/third_parties/cli11.cppm"], optional = true }
+
+yyjson = { version = "0.12.0", optional = true  }
 yyjson-mod = { mod = ["src/third_parties/yy_json.cppm"], optional = true }
+
+nlohmann-json = { version = "3.12.0", optional = true  }
 nlohmann-json-mod = { mod = ["src/third_parties/nlohmann_json.cppm"], optional = true }
-toml-mod = { mod = ["src/third_parties/toruniina_toml.cppm"], optional = true }
-yaml-mod = { mod = ["src/third_parties/jbeder_yaml.cppm"], optional = true }
+
+rapidjson = { version = "1", optional = true  }
+rapidjson-mod = { mod = ["src/third_parties/rapid_json.cppm"], optional = true }
+
+toml11 = { version = "4.4.0", optional = true  }
+toml11-mod = { mod = ["src/third_parties/toruniina_toml.cppm"], optional = true }
+
+'toml++' = { version = "3.4.0", optional = true  }
+'toml++-mod' = { mod = ["src/third_parties/marzer_toml.cppm"], optional = true }
+
+yaml-cpp = { version = "0.9.0", optional = true  }
+yaml-cpp-mod = { mod = ["src/third_parties/jbeder_yaml.cppm"], optional = true }
+
+msgpack = { version = "7.0.0", optional = true  }
+msgpack-mod = { mod = ["src/third_parties/msgpack.cppm"], optional = true }
+
+protobuf = { version = "3.21.12", optional = true  }
+protobuf-mod = { mod = ["src/third_parties/protobuf.cppm"], optional = true }
+
 
 [features]
 fmt = ["dep:fmt", "dep:fmt-mod"]
 cli = ["dep:cli", "dep:cli-mod"]
-json = ["yyjson"]
-toml = ["dep:toml", "dep:toml-mod"]
-yaml = ["dep:yaml", "dep:yaml-mod"]
 
 yyjson = ["dep:yyjson", "dep:yyjson-mod"]
 nlohmann-json = ["dep:nlohmann-json", "dep:nlohmann-json-mod"]
-spdlog = ["fmt", "dep:spdlog"]
+rapidjson = ["dep:rapidjson", "dep:rapidjson-mod"]
+toml11 = ["dep:toml11", "dep:toml11-mod"]
+'toml++' = ["dep:toml++", "dep:toml++-mod"]
+yaml-cpp = ["dep:yaml-cpp", "dep:yaml-cpp-mod"]
+
+msgpack = ["dep:msgpack", "dep:msgpack-mod"]
+protobuf = ["dep:protobuf", "dep:protobuf-mod"]
+
+json = ["yyjson"]
+toml = ["toml11"]
+yaml = ["yaml"]
