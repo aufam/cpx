@@ -43,16 +43,10 @@ function(cpx_configure_modules)
     if (CPX_MODULES)
         if (TARGET Boost::pfr)
             target_link_libraries(cpx_mod PUBLIC Boost::pfr)
-            target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
-                src/third_parties/fmt.cppm
-            )
         endif()
 
         if (TARGET magic_enum)
             target_link_libraries(cpx_mod PUBLIC magic_enum)
-            target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
-                src/third_parties/fmt.cppm
-            )
         endif()
 
         if (TARGET fmt)
