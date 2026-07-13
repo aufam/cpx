@@ -107,11 +107,6 @@ namespace cpx {
             , ti(ti) {}
     };
 
-    CPX_EXPORT template <typename T, typename TI>
-    constexpr auto tag_tie(T &val, TI &ti) {
-        return TagInfoFor<T &, TI &>(val, ti);
-    }
-
     CPX_EXPORT class TagInfoBuilder {
         TagInfo t = {};
 
@@ -120,7 +115,7 @@ namespace cpx {
             t.key = key;
         }
 
-        constexpr operator TagInfo() const {
+        constexpr operator const TagInfo &() const {
             return t;
         }
 
@@ -184,50 +179,82 @@ namespace cpx {
         return {sv};
     }
 
-    CPX_EXPORT template <auto MemberPtr>
+    CPX_EXPORT template <auto Member>
     struct FieldTag {
         TagInfo tag;
     };
 
-    CPX_EXPORT template <auto MemberPtr>
+    CPX_EXPORT template <auto Member>
     struct _Field {
         template <size_t N>
-        constexpr FieldTag<MemberPtr> operator=(const char (&str)[N]) const {
+        constexpr FieldTag<Member> operator=(const char (&str)[N]) const {
             return {TagInfo(str)};
         }
 
-        template <size_t N>
-        constexpr FieldTag<MemberPtr> operator=(const TagInfoBuilder t) const {
+        constexpr FieldTag<Member> operator=(const TagInfoBuilder t) const {
             return {t};
         }
 
-        template <size_t N>
-        constexpr FieldTag<MemberPtr> operator=(const TagInfo t) const {
+        constexpr FieldTag<Member> operator=(const TagInfo &t) const {
             return {t};
         }
     };
 
-    CPX_EXPORT template <auto MemberPtr>
-    inline constexpr _Field<MemberPtr> field{};
+    CPX_EXPORT template <auto Member>
+    inline constexpr _Field<Member> field{};
 
-    template <typename T, auto... MemberPtr, std::size_t... i>
-    auto apply_field_tags(const T &v, const std::tuple<FieldTag<MemberPtr>...> &fields, std::index_sequence<i...>) {
-        return std::make_tuple(tag_tie(v.*MemberPtr, std::get<i>(fields).tag)...);
+    CPX_EXPORT template <typename T>
+    struct _FieldBindFor {
+        T value;
+
+        template <size_t N>
+        constexpr TagInfoFor<T, TagInfo> operator=(const char (&str)[N]) const {
+            return TagInfoFor<T, TagInfo>(value, TagInfo(str));
+        }
+
+        constexpr TagInfoFor<T, TagInfo> operator=(const TagInfoBuilder &t) const {
+            return {value, t};
+        }
+
+        constexpr TagInfoFor<T, const TagInfo &> operator=(const TagInfo &t) const {
+            return {value, t};
+        }
+
+        constexpr TagInfoFor<T, TagInfo> operator=(TagInfo &&t) const {
+            return {value, t};
+        }
+    };
+
+    CPX_EXPORT struct _FieldBind {
+        template <typename T>
+        constexpr auto operator()(T &field) const {
+            return _FieldBindFor<T &>{field};
+        }
+    };
+
+    CPX_EXPORT template <typename T>
+    constexpr auto field_ref(T &value) {
+        return _FieldBindFor<T &>{value};
     }
 
-    template <typename T, auto... MemberPtr, std::size_t... i>
-    auto apply_field_tags(T &v, const std::tuple<FieldTag<MemberPtr>...> &fields, std::index_sequence<i...>) {
-        return std::make_tuple(tag_tie(v.*MemberPtr, std::get<i>(fields).tag)...);
+    template <typename T, auto... Member, std::size_t... i>
+    constexpr auto apply_field_tags(const T &v, const std::tuple<FieldTag<Member>...> &fields, std::index_sequence<i...>) {
+        return std::make_tuple((field_ref(v.*Member) = std::get<i>(fields).tag)...);
     }
 
-    CPX_EXPORT template <typename T, auto... MemberPtr>
-    auto apply_field_tags(const T &v, const std::tuple<FieldTag<MemberPtr>...> &fields) {
-        return apply_field_tags(v, fields, std::index_sequence_for<FieldTag<MemberPtr>...>{});
+    template <typename T, auto... Member, std::size_t... i>
+    constexpr auto apply_field_tags(T &v, const std::tuple<FieldTag<Member>...> &fields, std::index_sequence<i...>) {
+        return std::make_tuple((field_ref(v.*Member) = std::get<i>(fields).tag)...);
     }
 
-    CPX_EXPORT template <typename T, auto... MemberPtr>
-    auto apply_field_tags(T &v, const std::tuple<FieldTag<MemberPtr>...> &fields) {
-        return apply_field_tags(v, fields, std::index_sequence_for<FieldTag<MemberPtr>...>{});
+    CPX_EXPORT template <typename T, auto... Member>
+    constexpr auto apply_field_tags(const T &v, const std::tuple<FieldTag<Member>...> &fields) {
+        return apply_field_tags(v, fields, std::index_sequence_for<FieldTag<Member>...>{});
+    }
+
+    CPX_EXPORT template <typename T, auto... Member>
+    constexpr auto apply_field_tags(T &v, const std::tuple<FieldTag<Member>...> &fields) {
+        return apply_field_tags(v, fields, std::index_sequence_for<FieldTag<Member>...>{});
     }
 } // namespace cpx
 

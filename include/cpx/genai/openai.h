@@ -16,12 +16,6 @@ namespace cpx::genai::openai {
         );
 
         bool empty() const {
-            int a, b, c;
-            std::make_tuple(
-                a = 1, //
-                b = 1, //
-                c = 1
-            );
             return type.empty() && text.empty();
         }
     };
@@ -31,7 +25,7 @@ namespace cpx::genai::openai {
         std::variant<std::string, std::vector<Content>> content;
 
         static constexpr auto __field_tags__ = std::make_tuple(
-            cpx::field<&Message::role>    = "role,skipmissing,omitempty",
+            cpx::field<&Message::role>    = "role   ,skipmissing,omitempty",
             cpx::field<&Message::content> = "content,skipmissing,omitempty"
         );
 
@@ -71,8 +65,8 @@ namespace cpx::genai::openai {
         }
 
         static constexpr auto __field_tags__ = std::make_tuple(
-            cpx::field<&Usage::prompt_tokens>     = "prompt_tokens,skipmissing,omitempty",
-            cpx::field<&Usage::completion_tokens> = "completion_tokens,skipmissing,omitempty",
+            cpx::field<&Usage::prompt_tokens>     = "prompt_tokens     , skipmissing , omitempty",
+            cpx::field<&Usage::completion_tokens> = "completion_tokens , skipmissing , omitempty",
             cpx::field<&Usage::total_tokens>      = "total_tokens"
         );
     };
@@ -97,8 +91,8 @@ namespace cpx::genai::openai {
         static constexpr auto __field_tags__ = std::make_tuple(
             cpx::field<&Error::message> = "message",
             cpx::field<&Error::type>    = "type",
-            cpx::field<&Error::param>   = "param,skipmissing,omitempty",
-            cpx::field<&Error::code>    = "code,skipmissing,omitempty"
+            cpx::field<&Error::param>   = "param    , skipmissing , omitempty",
+            cpx::field<&Error::code>    = "code     , skipmissing , omitempty"
         );
 
         bool empty() const {
@@ -129,8 +123,8 @@ namespace cpx::genai::openai {
             cpx::field<&ChatCompletionsResponse::model>   = "model",
             cpx::field<&ChatCompletionsResponse::choices> = "choices",
             cpx::field<&ChatCompletionsResponse::object>  = "object,skipmissing,omitempty",
-            cpx::field<&ChatCompletionsResponse::created> = "stream,skipmissing,omitempty",
-            cpx::field<&ChatCompletionsResponse::usage>   = "stream,skipmissing,omitempty"
+            cpx::field<&ChatCompletionsResponse::created> = "created,skipmissing,omitempty",
+            cpx::field<&ChatCompletionsResponse::usage>   = "usage,skipmissing,omitempty"
         );
     };
 
@@ -162,7 +156,7 @@ namespace cpx::genai::openai {
             cpx::field<&ResponsesResponse::object>       = "object,skipmissing,omitempty",
             cpx::field<&ResponsesResponse::created_at>   = "created_at,skipmissing,omitempty",
             cpx::field<&ResponsesResponse::completed_at> = "completed_at,skipmissing,omitempty",
-            cpx::field<&ResponsesResponse::usage>        = "stream,skipmissing,omitempty"
+            cpx::field<&ResponsesResponse::usage>        = "usage,skipmissing,omitempty"
         );
     };
 } // namespace cpx::genai::openai

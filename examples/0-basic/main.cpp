@@ -10,15 +10,6 @@
 #include <iostream>
 
 int main() {
-    constexpr cpx::TagInfo name_tag     = "name,field_number=1";
-    constexpr cpx::TagInfo nickname_tag = "nickname"; // protobuf will skip this
-    constexpr cpx::TagInfo age_tag      = "age,field_number=2";
-    constexpr cpx::TagInfo address_tag  = "address,field_number=3";
-    constexpr cpx::TagInfo city_tag     = "city,field_number=1";
-    constexpr cpx::TagInfo zip_tag      = "zip,field_number=2"
-        // ",omitempty" // uncomment this line to see the output diff
-        ;
-
     std::string        name     = "Sucipto";
     std::string        nickname = "The Shark";
     int                age      = 23;
@@ -26,15 +17,16 @@ int main() {
     std::optional<int> zip_code = std::nullopt; // if not omitempty, toml will output 0
 
     std::tuple address = {
-        cpx::tag_tie(city, city_tag),
-        cpx::tag_tie(zip_code, zip_tag),
+        cpx::field_ref(city)     = "city,field_number=1",
+        cpx::field_ref(zip_code) = "zip,field_number=2",
     };
 
     std::tuple p = {
-        cpx::tag_tie(name, name_tag),
-        cpx::tag_tie(nickname, nickname_tag),
-        cpx::tag_tie(age, age_tag),
-        cpx::tag_tie(address, address_tag),
+        cpx::field_ref(name)     = "name,field_number=1",
+        cpx::field_ref(nickname) = "nickname", // protobuf will skip this
+        cpx::field_ref(age)      = "age,field_number=2",
+        cpx::field_ref(address)  = "address,field_number=3"
+        // ",omitempty" // uncomment this line to see the output diff
     };
 
     // formatting using fmtlib
