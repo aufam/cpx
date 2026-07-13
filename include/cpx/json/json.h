@@ -12,30 +12,22 @@ namespace cpx::json {
             return cpx::get_tag_info(field, "json");
     }
 
-    CPX_EXPORT template <typename T>
-    struct Reflect : std::false_type {
-        using const_type = type;
-    };
+    CPX_EXPORT template <typename T, typename Enable = void>
+    struct Reflect;
 
     CPX_EXPORT template <typename T>
-    struct has_reflect : std::bool_constant<Reflect<T>::value || cpx::has_reflect_v<T>> {};
+    struct has_reflect
+        : std::bool_constant<
+              cpx::detail::has_reflect_traits<cpx::json::Reflect, T>::value ||
+              cpx::detail::has_reflect_traits<cpx::Reflect, T>::value ||
+              cpx::detail::has_reflect_traits<cpx::weak::Reflect, T>::value
+          > {};
 
     CPX_EXPORT template <typename T>
     inline constexpr bool has_reflect_v = has_reflect<T>::value;
 
     CPX_EXPORT template <typename T>
-    using reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::type, cpx::reflect_t<T>>;
-
-    CPX_EXPORT template <typename T>
-    using const_reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::const_type, cpx::const_reflect_t<T>>;
-
-    CPX_EXPORT template <typename T>
-    constexpr decltype(auto) reflect_of(T &&v) {
-        if constexpr (Reflect<std::decay_t<T>>::value)
-            return Reflect<std::decay_t<T>>::of(std::forward<T>(v));
-        else
-            return cpx::reflect_of(std::forward<T>(v));
-    }
+    struct reflect_traits : cpx::detail::reflect_traits_selector<T, cpx::json::Reflect, cpx::Reflect, cpx::weak::Reflect> {};
 } // namespace cpx::json
 
 #endif

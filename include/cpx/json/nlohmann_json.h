@@ -13,32 +13,26 @@
 #endif
 
 namespace cpx::json::nlohmann_json {
-    CPX_EXPORT template <typename T>
-    struct Reflect : std::false_type {
-        using const_type = type;
-    };
+    CPX_EXPORT template <typename T, typename Enable = void>
+    struct Reflect;
 
     CPX_EXPORT template <typename T>
     struct has_reflect
-        : std::bool_constant<(Reflect<T>::value || cpx::json::has_reflect_v<T>) && !std::is_same_v<T, nlohmann::json::value_t>> {
-    };
+        : std::bool_constant<
+              ( //
+                  cpx::detail::has_reflect_traits<cpx::json::nlohmann_json::Reflect, T>::value ||
+                  cpx::detail::has_reflect_traits<cpx::json::Reflect, T>::value ||
+                  cpx::detail::has_reflect_traits<cpx::Reflect, T>::value ||
+                  cpx::detail::has_reflect_traits<cpx::weak::Reflect, T>::value
+              ) &&
+              !std::is_same_v<T, nlohmann::json::value_t>
+          > {};
 
     CPX_EXPORT template <typename T>
     inline constexpr bool has_reflect_v = has_reflect<T>::value;
 
     CPX_EXPORT template <typename T>
-    using reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::type, cpx::json::reflect_t<T>>;
-
-    CPX_EXPORT template <typename T>
-    using const_reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::const_type, cpx::json::const_reflect_t<T>>;
-
-    CPX_EXPORT template <typename T>
-    constexpr decltype(auto) reflect_of(T &&v) {
-        if constexpr (Reflect<std::decay_t<T>>::value)
-            return Reflect<std::decay_t<T>>::of(std::forward<T>(v));
-        else
-            return cpx::json::reflect_of(std::forward<T>(v));
-    }
+    struct reflect_traits : cpx::detail::reflect_traits_selector<T, cpx::json::Reflect, cpx::Reflect, cpx::weak::Reflect> {};
 } // namespace cpx::json::nlohmann_json
 
 namespace cpx {
@@ -271,12 +265,14 @@ struct nlohmann::adl_serializer<std::tuple<Ts...>> {
 template <typename T>
 struct nlohmann::adl_serializer<T, std::enable_if_t<cpx::json::nlohmann_json::has_reflect_v<T>>> {
     static void to_json(nlohmann::json &j, const T &v) {
-        j = SERIALIZE(cpx::json::nlohmann_json::const_reflect_t<T>){}.from(cpx::json::nlohmann_json::reflect_of(v));
+        j = SERIALIZE(typename cpx::json::nlohmann_json::reflect_traits<T>::const_type){}.from(
+            cpx::json::nlohmann_json::reflect_traits<T>::of(v)
+        );
     }
 
     static void from_json(const nlohmann::json &j, T &v) {
-        decltype(auto) proxy = cpx::json::nlohmann_json::reflect_of(v);
-        DESERIALIZE(cpx::json::nlohmann_json::reflect_t<T>){j}.into(proxy);
+        decltype(auto) proxy = cpx::json::nlohmann_json::reflect_traits<T>::of(v);
+        DESERIALIZE(typename cpx::json::nlohmann_json::reflect_traits<T>::type){j}.into(proxy);
     }
 };
 

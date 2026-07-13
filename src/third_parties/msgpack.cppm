@@ -1,5 +1,6 @@
 module;
 
+#include <cpx/msgpack_reflect.h>
 #include <cpx/reflect_builtin.h>
 #include <cpx/extend.h>
 #include <cpx/serde/serialize.h>

@@ -5,137 +5,171 @@
 
 namespace cpx {
     CPX_EXPORT template <typename T, typename Enable = void>
-    struct Reflect : std::false_type {
-        using const_type = type;
-    };
-} // namespace cpx
+    struct Reflect;
 
-namespace cpx::detail {
-    template <typename T>
-    struct member_pointer_traits;
+    CPX_EXPORT template <typename T>
+    struct has_reflect;
 
-    template <typename Class, typename Member>
-    struct member_pointer_traits<Member Class::*> {
-        using class_type  = Class;
-        using member_type = Member;
-    };
-} // namespace cpx::detail
+    CPX_EXPORT template <typename T>
+    inline constexpr bool has_reflect_v = has_reflect<T>::value;
 
-namespace cpx {
-    CPX_EXPORT template <typename Derived, auto... MemberPtr>
-    struct Fields;
-
-    CPX_EXPORT template <typename Derived>
-    struct Fields<Derived> {
-        static constexpr bool value = true;
-
-        using const_type = std::tuple<>;
-        using type       = std::tuple<>;
-
-        template <typename T>
-        static const_type of(const T &) {
-            return {};
-        }
-
-        template <typename T>
-        static type of(T &) {
-            return {};
-        }
-    };
-
-    CPX_EXPORT template <typename Derived, auto MemberPtr, auto... MemberPtrs>
-    struct Fields<Derived, MemberPtr, MemberPtrs...> {
-        static constexpr bool value = true;
-
-        using class_type = typename cpx::detail::member_pointer_traits<decltype(MemberPtr)>::class_type;
-
-        using const_type = //
-            std::tuple<
-                TagInfoFor<
-                    const typename cpx::detail::member_pointer_traits<decltype(MemberPtr)>::member_type &,
-                    const TagInfo &>,
-                TagInfoFor<
-                    const typename cpx::detail::member_pointer_traits<decltype(MemberPtrs)>::member_type &,
-                    const TagInfo &>...>;
-
-        using type = //
-            std::tuple<
-                TagInfoFor<typename cpx::detail::member_pointer_traits<decltype(MemberPtr)>::member_type &, const TagInfo &>,
-                TagInfoFor<typename cpx::detail::member_pointer_traits<decltype(MemberPtrs)>::member_type &, const TagInfo &>...>;
-
-        using tags_type = std::tuple<const TagInfo &, std::conditional_t<false, decltype(MemberPtrs), const TagInfo &>...>;
-
-        static const_type of(const class_type &obj) {
-            return impl(obj, std::index_sequence_for<decltype(MemberPtrs)...>{});
-        }
-
-        static type of(class_type &obj) {
-            return impl(obj, std::index_sequence_for<decltype(MemberPtrs)...>{});
-        }
-
-    private:
-        template <std::size_t... Is>
-        static const_type impl(const class_type &obj, std::index_sequence<Is...>) {
-            tags_type tags = Derived::tags();
-            return std::make_tuple(
-                cpx::tag_tie(obj.*MemberPtr, std::get<0>(tags)), cpx::tag_tie(obj.*MemberPtrs, std::get<Is + 1>(tags))...
-            );
-        }
-
-        template <std::size_t... Is>
-        static type impl(class_type &obj, std::index_sequence<Is...>) {
-            tags_type tags = Derived::tags();
-            return std::make_tuple(
-                cpx::tag_tie(obj.*MemberPtr, std::get<0>(tags)), cpx::tag_tie(obj.*MemberPtrs, std::get<Is + 1>(tags))...
-            );
-        }
-    };
+    CPX_EXPORT template <typename T>
+    struct reflect_traits;
 } // namespace cpx
 
 namespace cpx::weak {
     CPX_EXPORT template <typename T, typename Enable = void>
-    struct Reflect : std::false_type {
-        using const_type = type;
-    };
+    struct Reflect;
 
     CPX_EXPORT template <typename T>
-    struct has_reflect : std::bool_constant<Reflect<T>::value> {};
+    struct has_reflect;
 
     CPX_EXPORT template <typename T>
     inline constexpr bool has_reflect_v = has_reflect<T>::value;
 
     CPX_EXPORT template <typename T>
-    using reflect_t = typename Reflect<T>::type;
+    struct reflect_traits;
+} // namespace cpx::weak
 
-    CPX_EXPORT template <typename T>
-    using const_reflect_t = typename Reflect<T>::const_type;
+namespace cpx::detail {
+    // T::__field_tags__
+    template <typename T, typename = void>
+    struct has_field_tags : std::false_type {};
 
-    CPX_EXPORT template <typename T>
-    constexpr decltype(auto) reflect_of(T &v) {
-        return Reflect<std::remove_const_t<T>>::of(v);
-    }
+    template <typename T>
+    struct has_field_tags<T, std::void_t<decltype(T::__field_tags__)>> : std::true_type {};
+
+
+    // R<T>::field_tags
+    template <template <typename> typename R, typename T, typename Enable = void>
+    struct has_reflect_field_tags : std::false_type {};
+
+    template <template <typename> typename R, typename T>
+    struct has_reflect_field_tags<R, T, std::void_t<decltype(R<T>::field_tags)>> : std::true_type {};
+
+
+    // R<T>::type && R<T>::const_type && R<T>::of(T&) && R<T>::of(const T&)
+    template <template <typename> typename Reflect, typename T, typename Enable = void>
+    struct has_reflect_default_traits : std::false_type {};
+
+    template <template <typename> typename Reflect, typename T>
+    struct has_reflect_default_traits<
+        Reflect,
+        T,
+        std::void_t<
+            typename Reflect<T>::type,
+            typename Reflect<T>::const_type,
+            decltype(Reflect<T>::of(std::declval<T &>())),
+            decltype(Reflect<T>::of(std::declval<const T &>()))
+        >
+    > : std::true_type {};
+
+    template <template <typename> typename R, typename T>
+    struct has_reflect_traits
+        : std::bool_constant<
+              detail::has_reflect_default_traits<R, T>::value || //
+              detail::has_reflect_field_tags<R, T>::value ||     //
+              detail::has_field_tags<T>::value
+          > {};
+
+
+    template <template <typename> typename R, typename T, typename Enable = void>
+    struct reflect_traits;
+
+    // R<T>::type && R<T>::const_type && R<T>::of(T&) && R<T>::of(const T&)
+    template <template <typename> typename R, typename T>
+    struct reflect_traits<R, T, std::enable_if_t<has_reflect_default_traits<R, T>::value>> {
+        using type       = typename R<T>::type;
+        using const_type = typename R<T>::const_type;
+
+        static constexpr decltype(auto) of(T &v) {
+            return R<T>::of(v);
+        }
+
+        static constexpr decltype(auto) of(const T &v) {
+            return R<T>::of(v);
+        }
+    };
+
+    // R<T>::field_tags
+    template <template <typename> typename R, typename T>
+    struct reflect_traits<
+        R,
+        T,
+        std::enable_if_t<!has_reflect_default_traits<R, T>::value && has_reflect_field_tags<R, T>::value>
+    > {
+        using type       = decltype(apply_field_tags(std::declval<T &>(), R<T>::field_tags));
+        using const_type = decltype(apply_field_tags(std::declval<const T &>(), R<T>::field_tags));
+
+        static constexpr decltype(auto) of(T &v) {
+            return apply_field_tags(v, R<T>::field_tags);
+        }
+
+        static constexpr decltype(auto) of(const T &v) {
+            return apply_field_tags(v, R<T>::field_tags);
+        }
+    };
+
+    // T::__field_tags__
+    template <template <typename> typename R, typename T>
+    struct reflect_traits<
+        R,
+        T,
+        std::enable_if_t<
+            !has_reflect_default_traits<R, T>::value && //
+            !has_reflect_field_tags<R, T>::value &&     //
+            has_field_tags<T>::value
+        >
+    > {
+        using type       = decltype(apply_field_tags(std::declval<T &>(), T::__field_tags__));
+        using const_type = decltype(apply_field_tags(std::declval<const T &>(), T::__field_tags__));
+
+        static constexpr decltype(auto) of(T &v) {
+            return apply_field_tags(v, T::__field_tags__);
+        }
+
+        static constexpr decltype(auto) of(const T &v) {
+            return apply_field_tags(v, T::__field_tags__);
+        }
+    };
+
+
+    template <typename T, template <typename> typename... Rs>
+    struct reflect_traits_selector;
+
+    template <typename T>
+    struct reflect_traits_selector<T> {
+        static_assert(sizeof(T) == 0, "No reflect_traits specialization found.");
+    };
+
+    template <typename T, template <typename> typename R, template <typename> typename... Rs>
+    struct reflect_traits_selector<T, R, Rs...>
+        : std::conditional_t<
+              has_reflect_traits<R, T>::value, //
+              reflect_traits<R, T>,
+              reflect_traits_selector<T, Rs...>
+          > {};
+
+} // namespace cpx::detail
+
+namespace cpx::weak {
+    template <typename T>
+    struct has_reflect : std::bool_constant<cpx::detail::has_reflect_traits<Reflect, T>::value> {};
+
+    template <typename T>
+    struct reflect_traits : cpx::detail::reflect_traits<Reflect, T> {};
 } // namespace cpx::weak
 
 namespace cpx {
-    CPX_EXPORT template <typename T>
-    struct has_reflect : std::bool_constant<Reflect<T>::value || cpx::weak::has_reflect_v<T>> {};
+    template <typename T>
+    struct has_reflect
+        : std::bool_constant<
+              cpx::detail::has_reflect_traits<cpx::Reflect, T>::value || //
+              cpx::detail::has_reflect_traits<cpx::weak::Reflect, T>::value
+          > {};
 
-    CPX_EXPORT template <typename T>
-    inline constexpr bool has_reflect_v = has_reflect<T>::value;
-
-    CPX_EXPORT template <typename T>
-    using reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::type, cpx::weak::reflect_t<T>>;
-
-    CPX_EXPORT template <typename T>
-    using const_reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::const_type, cpx::weak::const_reflect_t<T>>;
-
-    CPX_EXPORT template <typename T>
-    constexpr decltype(auto) reflect_of(T &&v) {
-        if constexpr (Reflect<std::decay_t<T>>::value)
-            return Reflect<std::decay_t<T>>::of(std::forward<T>(v));
-        else
-            return cpx::weak::reflect_of(std::forward<T>(v));
-    }
+    template <typename T>
+    struct reflect_traits : cpx::detail::reflect_traits_selector<T, cpx::Reflect, cpx::weak::Reflect> {};
 } // namespace cpx
 
 #endif

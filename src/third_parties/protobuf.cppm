@@ -1,5 +1,6 @@
 module;
 
+#include <cpx/protobuf_reflect.h>
 #include <cpx/serde/serialize.h>
 #include <cpx/serde/deserialize.h>
 #include <cpx/reflect_builtin.h>

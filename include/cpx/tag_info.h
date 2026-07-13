@@ -184,97 +184,51 @@ namespace cpx {
         return {sv};
     }
 
-    template <auto MemberPtr>
-    CPX_EXPORT struct Field {
+    CPX_EXPORT template <auto MemberPtr>
+    struct FieldTag {
         TagInfo tag;
     };
 
+    CPX_EXPORT template <auto MemberPtr>
+    struct _Field {
+        template <size_t N>
+        constexpr FieldTag<MemberPtr> operator=(const char (&str)[N]) const {
+            return {TagInfo(str)};
+        }
+
+        template <size_t N>
+        constexpr FieldTag<MemberPtr> operator=(const TagInfoBuilder t) const {
+            return {t};
+        }
+
+        template <size_t N>
+        constexpr FieldTag<MemberPtr> operator=(const TagInfo t) const {
+            return {t};
+        }
+    };
+
+    CPX_EXPORT template <auto MemberPtr>
+    inline constexpr _Field<MemberPtr> field{};
+
     template <typename T, auto... MemberPtr, std::size_t... i>
-    auto apply_field_tags(const T &v, const std::tuple<Field<MemberPtr>...> &fields, std::index_sequence<i...>) {
+    auto apply_field_tags(const T &v, const std::tuple<FieldTag<MemberPtr>...> &fields, std::index_sequence<i...>) {
         return std::make_tuple(tag_tie(v.*MemberPtr, std::get<i>(fields).tag)...);
     }
 
     template <typename T, auto... MemberPtr, std::size_t... i>
-    auto apply_field_tags(T &v, const std::tuple<Field<MemberPtr>...> &fields, std::index_sequence<i...>) {
+    auto apply_field_tags(T &v, const std::tuple<FieldTag<MemberPtr>...> &fields, std::index_sequence<i...>) {
         return std::make_tuple(tag_tie(v.*MemberPtr, std::get<i>(fields).tag)...);
     }
 
-    template <typename T, auto... MemberPtr>
-    CPX_EXPORT auto apply_field_tags(const T &v, const std::tuple<Field<MemberPtr>...> &fields) {
-        return apply_field_tags(v, fields, std::index_sequence_for<Field<MemberPtr>...>{});
+    CPX_EXPORT template <typename T, auto... MemberPtr>
+    auto apply_field_tags(const T &v, const std::tuple<FieldTag<MemberPtr>...> &fields) {
+        return apply_field_tags(v, fields, std::index_sequence_for<FieldTag<MemberPtr>...>{});
     }
 
-    template <typename T, auto... MemberPtr>
-    CPX_EXPORT auto apply_field_tags(T &v, const std::tuple<Field<MemberPtr>...> &fields) {
-        return apply_field_tags(v, fields, std::index_sequence_for<Field<MemberPtr>...>{});
+    CPX_EXPORT template <typename T, auto... MemberPtr>
+    auto apply_field_tags(T &v, const std::tuple<FieldTag<MemberPtr>...> &fields) {
+        return apply_field_tags(v, fields, std::index_sequence_for<FieldTag<MemberPtr>...>{});
     }
-
-    template <typename T, typename = void>
-    struct has_field_tags_member : std::false_type {};
-
-    template <typename T>
-    struct has_field_tags_member<T, std::void_t<typename T::__field_tags__>> : std::true_type {};
-
-    template <template <typename> typename Reflect, typename T, typename Enable = void>
-    struct has_field_tag_reflect : std::false_type {};
-
-    template <template <typename> typename Reflect, typename T>
-    struct has_field_tag_reflect<Reflect, T, std::void_t<typename Reflect<T>::field_tags>> : std::true_type {};
-
-
-    // Helper to check for the presence of:
-    // - Reflect<T>::type
-    // - Reflect<T>::const_type
-    // - Reflect<T>::of(T&)
-    // - Reflect<T>::of(const T&)
-    template <template <typename> typename Reflect, typename T, typename Enable = void>
-    struct has_reflect_methods_and_types : std::false_type {};
-
-    template <template <typename> typename Reflect, typename T>
-    struct has_reflect_methods_and_types<
-        Reflect,
-        T,
-        std::void_t<
-            typename Reflect<T>::type,
-            typename Reflect<T>::const_type,
-            decltype(Reflect<T>::of(std::declval<T &>())),
-            decltype(Reflect<T>::of(std::declval<const T &>()))>> : std::true_type {};
-
-
-    // Primary has_reflect trait combining all three conditions
-    template <template <typename> typename Reflect, typename T>
-    struct has_reflect_traits : std::bool_constant<
-                                    has_field_tags_member<T>::value || has_field_tag_reflect<Reflect, T>::value ||
-                                    has_reflect_methods_and_types<Reflect, T>::value> {};
-
-    template <template <typename> typename Reflect, typename T, typename Enable = void>
-    struct reflect_type;
-
-    template <template <typename> typename Reflect, typename T>
-    struct reflect_type<Reflect, T, std::enable_if_t<has_reflect_methods_and_types<Reflect, T>::value>> {
-        using type       = typename Reflect<T>::type;
-        using const_type = typename Reflect<T>::const_type;
-    };
-
-    template <template <typename> typename Reflect, typename T>
-    struct reflect_type<
-        Reflect,
-        T,
-        std::enable_if_t<!has_reflect_methods_and_types<Reflect, T>::value && has_field_tag_reflect<Reflect, T>::value>> {
-        using type       = decltype(apply_field_tags(std::declval<T &>(), Reflect<T>::field_tags));
-        using const_type = decltype(apply_field_tags(std::declval<const T &>(), Reflect<T>::field_tags));
-    };
-
-    template <template <typename> typename Reflect, typename T>
-    struct reflect_type<
-        Reflect,
-        T,
-        std::enable_if_t<
-            !has_reflect_methods_and_types<Reflect, T>::value && !has_field_tag_reflect<Reflect, T>::value &&
-            !has_field_tags_member<T>::value>> {
-        using type       = decltype(apply_field_tags(std::declval<T &>(), T::__field_tags__));
-        using const_type = decltype(apply_field_tags(std::declval<const T &>(), T::__field_tags__));
-    };
 } // namespace cpx
 
 namespace cpx::detail {
@@ -287,7 +241,6 @@ namespace cpx::detail {
     template <typename T>
     inline constexpr bool is_tag_info_for_v = is_tag_info_for<T>::value;
 
-
     template <typename T>
     struct tuple_has_any_tagged_type : std::false_type {};
 
@@ -295,17 +248,18 @@ namespace cpx::detail {
     struct tuple_has_any_tagged_type<std::tuple<T, Ts...>>
         : std::bool_constant<
               is_tag_info_for_v<std::decay_t<T>> || is_tagged_v<std::decay_t<T>> ||
-              ((is_tag_info_for_v<std::decay_t<Ts>> || is_tagged_v<std::decay_t<Ts>>) || ...)> {};
+              ((is_tag_info_for_v<std::decay_t<Ts>> || is_tagged_v<std::decay_t<Ts>>) || ...)
+          > {};
 
     template <typename T, typename... Ts>
     struct tuple_has_any_tagged_type<const std::tuple<T, Ts...>>
         : std::bool_constant<
               is_tag_info_for_v<std::decay_t<T>> || is_tagged_v<std::decay_t<T>> ||
-              ((is_tag_info_for_v<std::decay_t<Ts>> || is_tagged_v<std::decay_t<Ts>>) || ...)> {};
+              ((is_tag_info_for_v<std::decay_t<Ts>> || is_tagged_v<std::decay_t<Ts>>) || ...)
+          > {};
 
     template <typename T>
     inline constexpr bool tuple_has_any_tagged_type_v = tuple_has_any_tagged_type<T>::value;
-
 
     template <typename T>
     decltype(auto) get_underlying_value(T &value) {

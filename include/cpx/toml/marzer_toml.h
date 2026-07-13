@@ -612,12 +612,11 @@ struct DESERIALIZE(std::timespec) {
     }
 };
 
-
 // generic reflection
 template <typename T>
 struct SERIALIZE(T, std::enable_if_t<cpx::toml::has_reflect_v<T>>) {
     std::unique_ptr<__tomlpp::node> from(const T &v) const {
-        return SERIALIZE(cpx::toml::const_reflect_t<T>){}.from(cpx::toml::reflect_of(v));
+        return SERIALIZE(typename cpx::toml::reflect_traits<T>::const_type){}.from(cpx::toml::reflect_traits<T>::of(v));
     }
 };
 
@@ -626,8 +625,8 @@ struct DESERIALIZE(T, std::enable_if_t<cpx::toml::has_reflect_v<T>>) {
     const __tomlpp::node *node;
 
     void into(T &v) const {
-        decltype(auto) r = cpx::toml::reflect_of(v);
-        DESERIALIZE(cpx::toml::reflect_t<T>){node}.into(r);
+        decltype(auto) r = cpx::toml::reflect_traits<T>::of(v);
+        DESERIALIZE(typename cpx::toml::reflect_traits<T>::type){node}.into(r);
     }
 };
 
@@ -775,6 +774,7 @@ namespace cpx::toml::marzer_toml {
         friend DUMP(std::ostream) operator<<(std::ostream &os, const IO &) {
             return {os};
         }
+
         friend PARSE(std::istream) operator>>(std::istream &is, const IO &) {
             return {is};
         }

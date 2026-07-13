@@ -20,8 +20,6 @@
 
 template <>
 struct cpx::weak::Reflect<std::tm> {
-    static constexpr bool value = true;
-
     using type       = std::string;
     using const_type = std::string;
 
@@ -52,8 +50,6 @@ struct cpx::weak::Reflect<std::tm> {
 
 template <>
 struct cpx::weak::Reflect<std::timespec> {
-    static constexpr bool value = true;
-
     using type       = std::string;
     using const_type = std::string;
 
@@ -108,6 +104,18 @@ struct cpx::weak::
         return boost::pfr::structure_tie(v);
     }
 };
+
+namespace cpx::test::reflect_builtin {
+    struct Foo {
+        int   i;
+        float f;
+    };
+
+    static_assert(std::is_same_v<std::tuple<int &, float &>, typename cpx::weak::reflect_traits<Foo>::type>);
+    static_assert(std::is_same_v<std::tuple<const int &, const float &>, typename cpx::weak::reflect_traits<Foo>::const_type>);
+}; // namespace cpx::test::reflect_builtin
+
+
 #endif
 
 #ifdef NEARGYE_MAGIC_ENUM_HPP

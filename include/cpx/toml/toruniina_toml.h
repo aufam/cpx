@@ -85,28 +85,17 @@ namespace cpx {
 namespace cpx::toml::toruniina_toml::detail {
     inline std::string type(const __toml11::value &val) {
         switch (val.type()) {
-        case __toml11::value_t::empty:
-            return "null";
-        case __toml11::value_t::boolean:
-            return "boolean";
-        case __toml11::value_t::integer:
-            return "integer";
-        case __toml11::value_t::floating:
-            return "floating";
-        case __toml11::value_t::string:
-            return "string";
-        case __toml11::value_t::offset_datetime:
-            return "offset_datetime";
-        case __toml11::value_t::local_datetime:
-            return "local_datetime";
-        case __toml11::value_t::local_date:
-            return "local_date";
-        case __toml11::value_t::local_time:
-            return "local_time";
-        case __toml11::value_t::array:
-            return "array";
-        case __toml11::value_t::table:
-            return "table";
+        case __toml11::value_t::empty: return "null";
+        case __toml11::value_t::boolean: return "boolean";
+        case __toml11::value_t::integer: return "integer";
+        case __toml11::value_t::floating: return "floating";
+        case __toml11::value_t::string: return "string";
+        case __toml11::value_t::offset_datetime: return "offset_datetime";
+        case __toml11::value_t::local_datetime: return "local_datetime";
+        case __toml11::value_t::local_date: return "local_date";
+        case __toml11::value_t::local_time: return "local_time";
+        case __toml11::value_t::array: return "array";
+        case __toml11::value_t::table: return "table";
         }
         return "unknown";
     }
@@ -623,7 +612,7 @@ struct DESERIALIZE(std::timespec) {
 template <typename T>
 struct SERIALIZE(T, std::enable_if_t<cpx::toml::has_reflect_v<T>>) {
     __toml11::value from(const T &v) const {
-        return SERIALIZE(cpx::toml::const_reflect_t<T>){}.from(cpx::toml::reflect_of(v));
+        return SERIALIZE(typename cpx::toml::reflect_traits<T>::const_type){}.from(cpx::toml::reflect_traits<T>::of(v));
     }
 };
 
@@ -632,8 +621,8 @@ struct DESERIALIZE(T, std::enable_if_t<cpx::toml::has_reflect_v<T>>) {
     const __toml11::value &node;
 
     void into(T &v) const {
-        decltype(auto) r = cpx::toml::reflect_of(v);
-        DESERIALIZE(cpx::toml::reflect_t<T>){node}.into(r);
+        decltype(auto) r = cpx::toml::reflect_traits<T>::of(v);
+        DESERIALIZE(typename cpx::toml::reflect_traits<T>::type){node}.into(r);
     }
 };
 

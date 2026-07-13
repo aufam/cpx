@@ -2,12 +2,12 @@
 #include <cpx/fmt.h>
 #include <cpx/cli/cli11.h>
 
-// public API
 struct App {
     std::string my_name;
     bool        verbose = false;
 
     enum LogLevel { Debug, Info, Warn };
+
     LogLevel log_level = Info;
 
     std::timespec delay{};
@@ -17,41 +17,24 @@ struct App {
             fmt::println("Hello from greet {}", name);
         }
     };
+
     std::optional<Greet> greet;
 
     struct Add {
         int num1;
         int num2;
     };
+
     Add add;
-};
 
-template <>
-struct cpx::Reflect<App> //
-    : Fields<cpx::Reflect<App>, &App::my_name, &App::verbose, &App::log_level, &App::delay, &App::greet, &App::add> {
-    static constexpr TagInfo my_name   = "name,      short=n,     help=Name to greet,        env=USER";
-    static constexpr TagInfo verbose   = "verbose,   short=v,     help=Enable verbose output";
-    static constexpr TagInfo log_level = "log-level,              help=Log level,            skipmissing";
-    static constexpr TagInfo delay     = "delay,                  help=specify delay,        skipmissing";
-    static constexpr TagInfo greet     = "greet,                  help=Greet the name";
-    static constexpr TagInfo add       = "add,                    help=Add two numbers";
-
-    static constexpr tags_type tags() {
-        return std::tie(my_name, verbose, log_level, delay, greet, add);
-    }
-};
-
-template <>
-struct cpx::Reflect<App::Greet> : Fields<cpx::Reflect<App::Greet>> {};
-
-template <>
-struct cpx::Reflect<App::Add> : Fields<cpx::Reflect<App::Add>, &App::Add::num1, &App::Add::num2> {
-    static constexpr TagInfo num1 = "num1, positional, help=First number";
-    static constexpr TagInfo num2 = "num2, positional, help=Second number";
-
-    static constexpr tags_type tags() {
-        return std::tie(num1, num2);
-    }
+    static constexpr auto __field_tags__ = std::make_tuple(
+        cpx::field<&App::my_name>   = "name,      short=n,     help=Name to greet,        env=USER   ",
+        cpx::field<&App::verbose>   = "verbose,   short=v,     help=Enable verbose output            ",
+        cpx::field<&App::log_level> = "log-level,              help=Log level,            skipmissing",
+        cpx::field<&App::delay>     = "delay,                  help=specify delay,        skipmissing",
+        cpx::field<&App::greet>     = "greet,                  help=Greet the name                   ",
+        cpx::field<&App::add>       = "add,                    help=Add two numbers                  "
+    );
 };
 
 int main(int argc, char **argv) {

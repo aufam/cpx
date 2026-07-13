@@ -1,7 +1,6 @@
 #include <cpx/toml/toruniina_toml.h>
 #include <gtest/gtest.h>
 
-
 struct Package {
     std::string              name;
     std::string              version;
@@ -9,6 +8,15 @@ struct Package {
     std::vector<std::string> authors;
     std::string              description;
     std::string              license;
+
+    static constexpr auto __field_tags__ = std::make_tuple(
+        cpx::field<&Package::name>        = "name",
+        cpx::field<&Package::version>     = "version,skipmissing",
+        cpx::field<&Package::edition>     = "edition,skipmissing",
+        cpx::field<&Package::authors>     = "authors,skipmissing",
+        cpx::field<&Package::description> = "description,skipmissing",
+        cpx::field<&Package::license>     = "license,skipmissing"
+    );
 };
 
 struct Carton {
@@ -18,38 +26,12 @@ struct Carton {
 };
 
 template <>
-struct cpx::Reflect<Package> //
-    : Fields<
-          Reflect<Package>, //
-          &Package::name,
-          &Package::version,
-          &Package::edition,
-          &Package::authors,
-          &Package::description,
-          &Package::license> {
-    static constexpr TagInfo name        = "name";
-    static constexpr TagInfo version     = "version,skipmissing";
-    static constexpr TagInfo edition     = "edition,skipmissing";
-    static constexpr TagInfo authors     = "authors,skipmissing";
-    static constexpr TagInfo description = "description,skipmissing";
-    static constexpr TagInfo license     = "license,skipmissing";
-
-    static constexpr tags_type tags() {
-        return std::tie(name, version, edition, authors, description, license);
-    }
-};
-
-template <>
-struct cpx::Reflect<Carton> //
-    : Fields<Reflect<Carton>, &Carton::package, &Carton::features, &Carton::no_default_features> {
-
-    static constexpr TagInfo package             = "package";
-    static constexpr TagInfo features            = "features,skipmissing";
-    static constexpr TagInfo no_default_features = "no-default-features,skipmissing";
-
-    static constexpr tags_type tags() {
-        return std::tie(package, features, no_default_features);
-    }
+struct cpx::Reflect<Carton> {
+    static constexpr auto field_tags = std::make_tuple(
+        cpx::field<&Carton::package>             = "package",
+        cpx::field<&Carton::features>            = "features,skipmissing",
+        cpx::field<&Carton::no_default_features> = "no-default-features,skipmissing"
+    );
 };
 
 TEST(toml, toml11) {

@@ -1,6 +1,7 @@
 #ifndef CPX_MSGPACK_H
 #define CPX_MSGPACK_H
 
+#include <cpx/msgpack_reflect.h>
 #include <cpx/reflect_builtin.h>
 #include <cpx/extend.h>
 #include <cpx/serde/serialize.h>
@@ -19,32 +20,6 @@ namespace cpx::msgpack {
             return field.ti;
         else
             return cpx::get_tag_info(field, "msgpack");
-    }
-
-    CPX_EXPORT template <typename T, typename Enable = void>
-    struct Reflect : std::false_type {
-        using const_type = type;
-    };
-
-    CPX_EXPORT template <typename T>
-    struct has_reflect
-        : std::bool_constant<(Reflect<T>::value || cpx::has_reflect_v<T>) && !cpx::is_time_v<T> && !std::is_enum_v<T>> {};
-
-    CPX_EXPORT template <typename T>
-    inline constexpr bool has_reflect_v = has_reflect<T>::value;
-
-    CPX_EXPORT template <typename T>
-    using reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::type, cpx::reflect_t<T>>;
-
-    CPX_EXPORT template <typename T>
-    using const_reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::const_type, cpx::const_reflect_t<T>>;
-
-    CPX_EXPORT template <typename T>
-    constexpr decltype(auto) reflect_of(T &v) {
-        if constexpr (Reflect<std::remove_const_t<T>>::value)
-            return Reflect<std::remove_const_t<T>>::of(v);
-        else
-            return cpx::reflect_of(v);
     }
 
     CPX_EXPORT template <typename OS, typename From>
@@ -235,7 +210,8 @@ template <typename OS, typename T>
 struct cpx::serde::Serialize<
     ::msgpack::packer<OS>,
     std::optional<T>,
-    std::enable_if_t<cpx::serde::is_serializable_v<::msgpack::packer<OS>, T>>> {
+    std::enable_if_t<cpx::serde::is_serializable_v<::msgpack::packer<OS>, T>>
+> {
     ::msgpack::packer<OS> &doc;
 
     void from(const std::optional<T> &v) const {
@@ -250,7 +226,8 @@ template <typename T>
 struct cpx::serde::Deserialize<
     ::msgpack::object,
     std::optional<T>,
-    std::enable_if_t<cpx::serde::is_deserializable_v<::msgpack::object, T> && std::is_default_constructible_v<T>>> {
+    std::enable_if_t<cpx::serde::is_deserializable_v<::msgpack::object, T> && std::is_default_constructible_v<T>>
+> {
     const ::msgpack::object &obj;
 
     void into(std::optional<T> &v) const {
@@ -269,7 +246,8 @@ template <typename OS, typename... T>
 struct cpx::serde::Serialize<
     ::msgpack::packer<OS>,
     std::variant<T...>,
-    std::enable_if_t<(cpx::serde::is_serializable_v<::msgpack::packer<OS>, T> && ...)>> {
+    std::enable_if_t<(cpx::serde::is_serializable_v<::msgpack::packer<OS>, T> && ...)>
+> {
     ::msgpack::packer<OS> &doc;
 
     void from(const std::variant<T...> &v) const {
@@ -283,7 +261,8 @@ template <typename... T>
 struct cpx::serde::Deserialize<
     ::msgpack::object,
     std::variant<T...>,
-    std::enable_if_t<((cpx::serde::is_deserializable_v<::msgpack::object, T> && std::is_default_constructible_v<T>) && ...)>> {
+    std::enable_if_t<((cpx::serde::is_deserializable_v<::msgpack::object, T> && std::is_default_constructible_v<T>) && ...)>
+> {
     const ::msgpack::object &obj;
 
     void into(std::variant<T...> &v) const {
@@ -315,7 +294,8 @@ template <typename OS, typename T, size_t N>
 struct cpx::serde::Serialize<
     ::msgpack::packer<OS>,
     std::array<T, N>,
-    std::enable_if_t<!std::is_same_v<T, uint8_t> && cpx::serde::is_serializable_v<::msgpack::packer<OS>, T>>> {
+    std::enable_if_t<!std::is_same_v<T, uint8_t> && cpx::serde::is_serializable_v<::msgpack::packer<OS>, T>>
+> {
     ::msgpack::packer<OS> &doc;
 
     void from(const std::array<T, N> &v) const {
@@ -329,7 +309,8 @@ template <typename T, size_t N>
 struct cpx::serde::Deserialize<
     ::msgpack::object,
     std::array<T, N>,
-    std::enable_if_t<!std::is_same_v<T, uint8_t> && cpx::serde::is_deserializable_v<::msgpack::object, T>>> {
+    std::enable_if_t<!std::is_same_v<T, uint8_t> && cpx::serde::is_deserializable_v<::msgpack::object, T>>
+> {
     const ::msgpack::object &obj;
 
     void into(std::array<T, N> &v) const {
@@ -353,7 +334,8 @@ template <typename OS, typename T, typename A>
 struct cpx::serde::Serialize<
     ::msgpack::packer<OS>,
     std::vector<T, A>,
-    std::enable_if_t<!std::is_same_v<T, uint8_t> && cpx::serde::is_serializable_v<::msgpack::packer<OS>, T>>> {
+    std::enable_if_t<!std::is_same_v<T, uint8_t> && cpx::serde::is_serializable_v<::msgpack::packer<OS>, T>>
+> {
     ::msgpack::packer<OS> &doc;
 
     void from(const std::vector<T, A> &v) const {
@@ -367,7 +349,8 @@ template <typename T, typename A>
 struct cpx::serde::Deserialize<
     ::msgpack::object,
     std::vector<T, A>,
-    std::enable_if_t<!std::is_same_v<T, uint8_t> && cpx::serde::is_deserializable_v<::msgpack::object, T>>> {
+    std::enable_if_t<!std::is_same_v<T, uint8_t> && cpx::serde::is_deserializable_v<::msgpack::object, T>>
+> {
     const ::msgpack::object &obj;
 
     void into(std::vector<T, A> &v) const {
@@ -391,7 +374,9 @@ struct cpx::serde::Serialize<
     ::msgpack::packer<OS>,
     std::unordered_map<K, T, H, P, A>,
     std::enable_if_t<
-        cpx::serde::is_serializable_v<::msgpack::packer<OS>, K> && cpx::serde::is_serializable_v<::msgpack::packer<OS>, T>>> {
+        cpx::serde::is_serializable_v<::msgpack::packer<OS>, K> && cpx::serde::is_serializable_v<::msgpack::packer<OS>, T>
+    >
+> {
     ::msgpack::packer<OS> &doc;
 
     void from(const std::unordered_map<K, T, H, P, A> &v) const {
@@ -409,7 +394,9 @@ struct cpx::serde::Deserialize<
     std::unordered_map<K, T, H, P, A>,
     std::enable_if_t<
         cpx::serde::is_deserializable_v<::msgpack::object, K> && cpx::serde::is_deserializable_v<::msgpack::object, T> &&
-        std::is_default_constructible_v<K> && std::is_default_constructible_v<T>>> {
+        std::is_default_constructible_v<K> && std::is_default_constructible_v<T>
+    >
+> {
     const ::msgpack::object &obj;
 
     void into(std::unordered_map<K, T, H, P, A> &v) const {
@@ -547,7 +534,9 @@ struct cpx::serde::Serialize<::msgpack::packer<OS>, T, std::enable_if_t<cpx::msg
     ::msgpack::packer<OS> &doc;
 
     void from(const T &v) const {
-        Serialize<::msgpack::packer<OS>, cpx::msgpack::const_reflect_t<T>>{doc}.from(cpx::msgpack::reflect_of(v));
+        Serialize<::msgpack::packer<OS>, typename cpx::msgpack::reflect_traits<T>::const_type>{doc}.from(
+            cpx::msgpack::reflect_traits<T>::of(v)
+        );
     }
 };
 
@@ -556,8 +545,8 @@ struct cpx::serde::Deserialize<::msgpack::object, T, std::enable_if_t<cpx::msgpa
     const ::msgpack::object &obj;
 
     void into(T &v) const {
-        decltype(auto) r = cpx::msgpack::reflect_of(v);
-        Deserialize<::msgpack::object, cpx::msgpack::reflect_t<T>>{obj}.into(r);
+        decltype(auto) r = cpx::msgpack::reflect_traits<T>::of(v);
+        Deserialize<::msgpack::object, typename cpx::msgpack::reflect_traits<T>::type>{obj}.into(r);
     }
 };
 
@@ -602,7 +591,6 @@ struct cpx::serde::Deserialize<::msgpack::object, std::timespec> {
         Deserialize<::msgpack::object, decltype(r)>{obj}.into(r);
     }
 };
-
 
 template <>
 struct cpx::serde::Parse<::msgpack::unpacker, std::string_view> {
@@ -707,6 +695,7 @@ namespace cpx::msgpack {
         friend cpx::msgpack::Dump<OS> operator<<(OS &os, const IO &) {
             return {os};
         }
+
         friend cpx::msgpack::Parse<std::istream> operator>>(std::istream &is, const IO &) {
             return {is};
         }

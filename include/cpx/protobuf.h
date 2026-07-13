@@ -3,6 +3,7 @@
 #ifndef CPX_PROTO_PROTOBUF_H
 #define CPX_PROTO_PROTOBUF_H
 
+#include <cpx/protobuf_reflect.h>
 #include <cpx/serde/serialize.h>
 #include <cpx/serde/deserialize.h>
 #include <cpx/reflect_builtin.h>
@@ -37,32 +38,6 @@ namespace cpx::protobuf {
             return field.ti;
         else
             return cpx::get_tag_info(field, "protobuf");
-    }
-
-    CPX_EXPORT template <typename T>
-    struct Reflect : std::false_type {
-        using const_type = type;
-    };
-
-    CPX_EXPORT template <typename T>
-    struct has_reflect
-        : std::bool_constant<(Reflect<T>::value || cpx::has_reflect_v<T>) && !cpx::is_time_v<T> && !std::is_enum_v<T>> {};
-
-    CPX_EXPORT template <typename T>
-    inline constexpr bool has_reflect_v = has_reflect<T>::value;
-
-    CPX_EXPORT template <typename T>
-    using reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::type, cpx::reflect_t<T>>;
-
-    CPX_EXPORT template <typename T>
-    using const_reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::const_type, cpx::const_reflect_t<T>>;
-
-    CPX_EXPORT template <typename T>
-    constexpr decltype(auto) reflect_of(T &&v) {
-        if constexpr (Reflect<std::decay_t<T>>::value)
-            return Reflect<std::decay_t<T>>::of(std::forward<T>(v));
-        else
-            return cpx::reflect_of(std::forward<T>(v));
     }
 } // namespace cpx::protobuf
 
@@ -162,12 +137,14 @@ namespace cpx::protobuf::detail {
     template <typename T, size_t N>
     struct is_repeated_serializable<std::array<T, N>>
         : std::bool_constant<
-              SERIALIZABLE(T) && !is_repeated_numeric<std::array<T, N>>::value && !is_bytes<std::array<T, N>>::value> {};
+              SERIALIZABLE(T) && !is_repeated_numeric<std::array<T, N>>::value && !is_bytes<std::array<T, N>>::value
+          > {};
 
     template <typename T, typename A>
     struct is_repeated_serializable<std::vector<T, A>>
         : std::bool_constant<
-              SERIALIZABLE(T) && !is_repeated_numeric<std::vector<T, A>>::value && !is_bytes<std::vector<T, A>>::value> {};
+              SERIALIZABLE(T) && !is_repeated_numeric<std::vector<T, A>>::value && !is_bytes<std::vector<T, A>>::value
+          > {};
 
     // repeated deserializable
     template <typename T>
@@ -176,14 +153,15 @@ namespace cpx::protobuf::detail {
     template <typename T, size_t N>
     struct is_repeated_deserializable<std::array<T, N>>
         : std::bool_constant<
-              DESERIALIZABLE(T) && !is_repeated_numeric<std::array<T, N>>::value && !is_bytes<std::array<T, N>>::value> {};
+              DESERIALIZABLE(T) && !is_repeated_numeric<std::array<T, N>>::value && !is_bytes<std::array<T, N>>::value
+          > {};
 
     template <typename T, typename A>
     struct is_repeated_deserializable<std::vector<T, A>>
         : std::bool_constant<
-              DESERIALIZABLE(T) && !is_repeated_numeric<std::vector<T, A>>::value && !is_bytes<std::vector<T, A>>::value> {};
+              DESERIALIZABLE(T) && !is_repeated_numeric<std::vector<T, A>>::value && !is_bytes<std::vector<T, A>>::value
+          > {};
 } // namespace cpx::protobuf::detail
-
 
 #define SERIALIZER_FIELDS                                                                                                        \
     google::protobuf::io::CodedOutputStream &doc;                                                                                \
@@ -631,7 +609,8 @@ template <typename K, typename T, typename H, typename P, typename A>
 struct DESERIALIZE(
     std::unordered_map<K, T, H, P, A>,
     std::enable_if_t<
-        DESERIALIZABLE(K) && DESERIALIZABLE(T) && std::is_default_constructible_v<K> && std::is_default_constructible_v<T>>
+        DESERIALIZABLE(K) && DESERIALIZABLE(T) && std::is_default_constructible_v<K> && std::is_default_constructible_v<T>
+    >
 ) {
     DESERIALIZER_FIELDS
 
@@ -776,7 +755,9 @@ struct SERIALIZE(T, std::enable_if_t<cpx::protobuf::has_reflect_v<T>>) {
     SERIALIZER_FIELDS
 
     bool from(const T &v) const {
-        return SERIALIZE(cpx::protobuf::const_reflect_t<T>){doc, ti}.from(cpx::protobuf::reflect_of(v));
+        return SERIALIZE(typename cpx::protobuf::reflect_traits<T>::const_type){doc, ti}.from(
+            cpx::protobuf::reflect_traits<T>::of(v)
+        );
     }
 };
 
@@ -785,8 +766,8 @@ struct DESERIALIZE(T, std::enable_if_t<cpx::protobuf::has_reflect_v<T>>) {
     DESERIALIZER_FIELDS
 
     void into(T &v) const {
-        decltype(auto) r = cpx::protobuf::reflect_of(v);
-        DESERIALIZE(cpx::protobuf::reflect_t<T>){doc, ti, wire_type, len}.into(r);
+        decltype(auto) r = cpx::protobuf::reflect_traits<T>::of(v);
+        DESERIALIZE(typename cpx::protobuf::reflect_traits<T>::type){doc, ti, wire_type, len}.into(r);
     }
 };
 

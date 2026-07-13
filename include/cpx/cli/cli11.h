@@ -54,13 +54,40 @@ namespace cpx::cli::cli11::detail {
     struct is_primitive_type
         : std::bool_constant<(std::is_arithmetic_v<T> || std::is_same_v<T, std::string>) && !std::is_same_v<T, bool>> {};
 
-    template <typename T>
-    struct is_string_reflect : std::bool_constant<
-                                   cpx::cli::has_reflect_v<T> && std::is_same_v<cpx::cli::reflect_t<T>, std::string> &&
-                                   (std::is_same_v<cpx::cli::const_reflect_t<T>, std::string> ||
-                                    std::is_same_v<cpx::cli::const_reflect_t<T>, std::string_view>)> {};
-} // namespace cpx::cli::cli11::detail
+    template <typename T, typename Enable = void>
+    struct is_string_reflect : std::false_type {};
 
+    template <typename T>
+    struct is_string_reflect<T, std::enable_if_t<cpx::cli::has_reflect_v<T>>>
+        : std::bool_constant<
+              std::is_same_v<typename cpx::cli::reflect_traits<T>::type, std::string> &&
+              ( //
+                  std::is_same_v<typename cpx::cli::reflect_traits<T>::const_type, std::string> ||
+                  std::is_same_v<typename cpx::cli::reflect_traits<T>::const_type, std::string_view>
+              )
+          > {};
+
+    template <typename T, typename Enable = void>
+    struct is_tuple_reflect : std::false_type {};
+
+    template <typename T>
+    struct is_tuple_reflect<T, std::enable_if_t<cpx::cli::has_reflect_v<T>>>
+        : std::bool_constant<cpx::is_tuple_v<typename cpx::cli::reflect_traits<T>::type>> {};
+
+
+    template <typename T, typename Enable = void>
+    struct inspect;
+
+    template <typename T>
+    struct inspect<T, std::enable_if_t<(std::is_arithmetic_v<T> || std::is_same_v<T, std::string>) && !std::is_same_v<T, bool>>> {
+        static void set_default(CLI::Option *opt, const T &val) {
+            opt->default_val(val);
+        }
+
+        static constexpr bool has_check = false;
+    };
+
+} // namespace cpx::cli::cli11::detail
 
 template <>
 struct cpx::serde::Parse<CLI::App, std::pair<int, char **>> {
@@ -263,23 +290,19 @@ struct cpx::serde::Deserialize<CLI::App, std::tuple<Ts...>> {
 
 // reflect to tuple
 template <typename T>
-struct cpx::serde::
-    Deserialize<CLI::App, T, std::enable_if_t<cpx::cli::has_reflect_v<T> && cpx::is_tuple_v<cpx::cli::reflect_t<T>>>> {
+struct cpx::serde::Deserialize<CLI::App, T, std::enable_if_t<cpx::cli11::detail::is_tuple_reflect<T>::value>> {
     CLI::App      &app;
     const TagInfo &ti;
 
     CLI::Option *into(T &v) const {
-        decltype(auto) r = cpx::cli::reflect_of(v);
-        return Deserialize<CLI::App, cpx::cli::reflect_t<T>>{app, ti}.into(r);
+        decltype(auto) r = cpx::cli::reflect_traits<T>::of(v);
+        return Deserialize<CLI::App, typename cpx::cli::reflect_traits<T>::type>{app, ti}.into(r);
     }
 };
 
 // optional reflect to tuple
 template <typename T>
-struct cpx::serde::Deserialize<
-    CLI::App,
-    std::optional<T>,
-    std::enable_if_t<cpx::cli::has_reflect_v<T> && cpx::is_tuple_v<cpx::cli::reflect_t<T>>>> {
+struct cpx::serde::Deserialize<CLI::App, std::optional<T>, std::enable_if_t<cpx::cli11::detail::is_tuple_reflect<T>::value>> {
     CLI::App      &app;
     const TagInfo &ti;
 
@@ -289,14 +312,14 @@ struct cpx::serde::Deserialize<
 
         auto val = std::make_shared<T>();
 
-        decltype(auto) r = cpx::cli::reflect_of(*val);
-        return Deserialize<CLI::App, cpx::cli::reflect_t<T>>{app, ti}.into(r, [val, &v]() { v = *val; });
+        decltype(auto) r = cpx::cli::reflect_traits<T>::of(*val);
+        return Deserialize<CLI::App, typename cpx::cli::reflect_traits<T>::type>{app, ti}.into(r, [val, &v]() { v = *val; });
     }
 };
 
 // reflect to string
 template <typename T>
-struct cpx::serde::Deserialize<CLI::App, T, std::enable_if_t<cpx::cli::cli11::detail::is_string_reflect<T>::value>> {
+struct cpx::serde::Deserialize<CLI::App, T, std::enable_if_t<cpx::cli11::detail::is_string_reflect<T>::value>> {
     CLI::App      &app;
     const TagInfo &ti;
 
@@ -305,7 +328,7 @@ struct cpx::serde::Deserialize<CLI::App, T, std::enable_if_t<cpx::cli::cli11::de
             cpx::cli::cli11::detail::generate_option_name(ti),
             [&v](const std::string &str) {
                 try {
-                    decltype(auto) proxy = cpx::cli::reflect_of(v);
+                    decltype(auto) proxy = cpx::cli::reflect_traits<T>::of(v);
                     decltype(auto) p     = (std::string &)proxy;
                     p                    = str;
                 } catch (std::exception &e) {
@@ -322,7 +345,7 @@ struct cpx::serde::Deserialize<CLI::App, T, std::enable_if_t<cpx::cli::cli11::de
             opt->required();
         else {
             const auto    &cv  = v;
-            decltype(auto) str = cpx::cli::reflect_of(cv);
+            decltype(auto) str = cpx::cli::reflect_traits<T>::of(cv);
             opt->default_str(std::string(str));
         }
         return opt;
@@ -331,8 +354,7 @@ struct cpx::serde::Deserialize<CLI::App, T, std::enable_if_t<cpx::cli::cli11::de
 
 // optional reflect to string
 template <typename T>
-struct cpx::serde::
-    Deserialize<CLI::App, std::optional<T>, std::enable_if_t<cpx::cli::cli11::detail::is_string_reflect<T>::value>> {
+struct cpx::serde::Deserialize<CLI::App, std::optional<T>, std::enable_if_t<cpx::cli11::detail::is_string_reflect<T>::value>> {
     CLI::App      &app;
     const TagInfo &ti;
 
@@ -342,7 +364,7 @@ struct cpx::serde::
             [&v](const std::string &str) {
                 v = T{};
                 try {
-                    decltype(auto) proxy = cpx::cli::reflect_of(v);
+                    decltype(auto) proxy = cpx::cli::reflect_traits<T>::of(v);
                     decltype(auto) p     = (std::string &)proxy;
                     p                    = str;
                 } catch (std::exception &e) {
@@ -357,7 +379,7 @@ struct cpx::serde::
             opt->envname(std::string(ti.env));
         if (v.has_value()) {
             const auto    &cv  = *v;
-            decltype(auto) str = cpx::cli::reflect_of(cv);
+            decltype(auto) str = cpx::cli::reflect_traits<T>::of(cv);
             opt->default_str(std::string(str));
         }
         return opt;
@@ -379,7 +401,7 @@ struct cpx::serde::Deserialize<CLI::App, std::vector<T>, std::enable_if_t<cpx::c
                     auto &dest = v[i];
                     auto &src  = strs[i];
                     try {
-                        decltype(auto) proxy = cpx::cli::reflect_of(dest);
+                        decltype(auto) proxy = cpx::cli::reflect_traits<T>::of(v);
                         decltype(auto) p     = (std::string &)proxy;
                         p                    = src;
                     } catch (std::exception &e) {
@@ -396,7 +418,7 @@ struct cpx::serde::Deserialize<CLI::App, std::vector<T>, std::enable_if_t<cpx::c
         if (!v.empty()) {
             std::vector<std::string> enum_names;
             for (const auto &cv : v) {
-                decltype(auto) str = cpx::cli::reflect_of(cv);
+                decltype(auto) str = cpx::cli::reflect_traits<T>::of(cv);
                 enum_names.push_back(std::string(str));
             }
             opt->default_val(enum_names);

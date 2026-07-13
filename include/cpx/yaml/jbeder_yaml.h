@@ -81,16 +81,11 @@ namespace cpx {
 namespace cpx::yaml::jbeder_yaml::detail {
     inline std::string type(const __yaml_cpp::Node &val) {
         switch (val.Type()) {
-        case __yaml_cpp::NodeType::Null:
-            return "null";
-        case __yaml_cpp::NodeType::Scalar:
-            return "scalar";
-        case __yaml_cpp::NodeType::Sequence:
-            return "sequence";
-        case __yaml_cpp::NodeType::Map:
-            return "map";
-        case __yaml_cpp::NodeType::Undefined:
-            return "undefined";
+        case __yaml_cpp::NodeType::Null: return "null";
+        case __yaml_cpp::NodeType::Scalar: return "scalar";
+        case __yaml_cpp::NodeType::Sequence: return "sequence";
+        case __yaml_cpp::NodeType::Map: return "map";
+        case __yaml_cpp::NodeType::Undefined: return "undefined";
         }
         return "unknown";
     }
@@ -491,7 +486,7 @@ struct DESERIALIZE(
 template <typename T>
 struct SERIALIZE(T, std::enable_if_t<cpx::yaml::has_reflect_v<T>>) {
     __yaml_cpp::Node from(const T &v) const {
-        return SERIALIZE(cpx::yaml::const_reflect_t<T>){}.from(cpx::yaml::reflect_of(v));
+        return SERIALIZE(typename cpx::yaml::reflect_traits<T>::const_type){}.from(cpx::yaml::reflect_traits<T>::of(v));
     }
 };
 
@@ -500,8 +495,8 @@ struct DESERIALIZE(T, std::enable_if_t<cpx::yaml::has_reflect_v<T>>) {
     const __yaml_cpp::Node &node;
 
     void into(T &v) const {
-        decltype(auto) r = cpx::yaml::reflect_of(v);
-        DESERIALIZE(cpx::yaml::reflect_t<T>){node}.into(r);
+        decltype(auto) r = cpx::yaml::reflect_traits<T>::of(v);
+        DESERIALIZE(typename cpx::yaml::reflect_traits<T>::type){node}.into(r);
     }
 };
 

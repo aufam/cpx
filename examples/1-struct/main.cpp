@@ -5,6 +5,11 @@
 struct Address {
     std::string        city;
     std::optional<int> zip;
+
+    static constexpr auto __field_tags__ = std::make_tuple(
+        cpx::field<&Address::city> = "city", //
+        cpx::field<&Address::zip>  = "zip"
+    );
 };
 
 struct User {
@@ -15,31 +20,25 @@ struct User {
 };
 
 template <>
-struct cpx::Reflect<User> : Fields<Reflect<User>, &User::name, &User::age, &User::created_at, &User::address> {
-    static constexpr TagInfo name = "name", age = "age", created_at = "created-at", address = "address";
-
-    static constexpr tags_type tags() {
-        return std::tie(name, age, created_at, address);
-    }
+struct cpx::Reflect<User> {
+    [[maybe_unused]]
+    static constexpr auto field_tags = std::make_tuple(
+        cpx::field<&User::name>       = "name",
+        cpx::field<&User::age>        = "age",
+        cpx::field<&User::created_at> = "created-at",
+        cpx::field<&User::address>    = "address"
+    );
 };
 
 template <>
-struct cpx::json::Reflect<User> : Fields<Reflect<User>, &User::name, &User::age, &User::created_at, &User::address> {
-    static constexpr TagInfo created_at = "createdAt";
-
-    static constexpr tags_type tags() {
-        using Base = cpx::Reflect<User>;
-        return std::tie(Base::name, Base::age, created_at, Base::address);
-    }
-};
-
-template <>
-struct cpx::Reflect<Address> : Fields<Reflect<Address>, &Address::city, &Address::zip> {
-    static constexpr std::tuple<TagInfo, TagInfo> _tags = {"city", "zip"};
-
-    static constexpr tags_type tags() {
-        return _tags;
-    }
+struct cpx::json::Reflect<User> {
+    [[maybe_unused]]
+    static constexpr auto field_tags = std::make_tuple(
+        cpx::field<&User::name>       = "name",
+        cpx::field<&User::age>        = "age",
+        cpx::field<&User::created_at> = "createdAt",
+        cpx::field<&User::address>    = "address"
+    );
 };
 
 int main() {

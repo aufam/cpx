@@ -27,29 +27,18 @@ namespace {
     };
 } // namespace
 
-
 template <>
-struct cpx::Reflect<Person3> //
-    : Fields<
-          Reflect<Person3>,
-          &Person3::name,
-          &Person3::id,
-          &Person3::email,
-          &Person3::num1,
-          &Person3::num2,
-          &Person3::num3,
-          &Person3::nums> {
-    static constexpr cpx::TagInfo name  = "name,field_number=1";
-    static constexpr cpx::TagInfo id    = "id,field_number=2";
-    static constexpr cpx::TagInfo email = "email,field_number=3";
-    static constexpr cpx::TagInfo num1  = "num1,field_number=4,fixed";
-    static constexpr cpx::TagInfo num2  = "num2,field_number=5,zigzag";
-    static constexpr cpx::TagInfo num3  = "num3,field_number=6";
-    static constexpr cpx::TagInfo nums  = "7";
-
-    static constexpr tags_type tags() {
-        return std::tie(name, id, email, num1, num2, num3, nums);
-    }
+struct cpx::Reflect<Person3> {
+    [[maybe_unused]]
+    static constexpr auto field_tags = std::make_tuple(
+        field<&Person3::name>  = "name,field_number=1",
+        field<&Person3::id>    = "id,field_number=2",
+        field<&Person3::email> = "email,field_number=3",
+        field<&Person3::num1>  = "num1,field_number=4,fixed",
+        field<&Person3::num2>  = "num2,field_number=5,zigzag",
+        field<&Person3::num3>  = "num3,field_number=6",
+        field<&Person3::nums>  = "7"
+    );
 };
 
 using Person1 = Person;         // tag
@@ -82,6 +71,7 @@ static void cpx_tag_protobuf_serialization(benchmark::State &state) {
         benchmark::DoNotOptimize(s);
     }
 }
+
 BENCHMARK(cpx_tag_protobuf_serialization);
 
 static void cpx_reflect_protobuf_serialization(benchmark::State &state) {
@@ -93,6 +83,7 @@ static void cpx_reflect_protobuf_serialization(benchmark::State &state) {
         benchmark::DoNotOptimize(s);
     }
 }
+
 BENCHMARK(cpx_reflect_protobuf_serialization);
 
 static void cpx_tag_msgpack_serialization(benchmark::State &state) {
@@ -104,6 +95,7 @@ static void cpx_tag_msgpack_serialization(benchmark::State &state) {
         benchmark::DoNotOptimize(s);
     }
 }
+
 BENCHMARK(cpx_tag_msgpack_serialization);
 
 static void cpx_reflect_msgpack_serialization(benchmark::State &state) {
@@ -115,6 +107,7 @@ static void cpx_reflect_msgpack_serialization(benchmark::State &state) {
         benchmark::DoNotOptimize(s);
     }
 }
+
 BENCHMARK(cpx_reflect_msgpack_serialization);
 
 static void compiled_protobuf_serialization(benchmark::State &state) {
@@ -127,6 +120,7 @@ static void compiled_protobuf_serialization(benchmark::State &state) {
         benchmark::DoNotOptimize(s);
     }
 }
+
 BENCHMARK(compiled_protobuf_serialization);
 
 static void cpx_tag_protobuf_deserialization(benchmark::State &state) {
@@ -137,6 +131,7 @@ static void cpx_tag_protobuf_deserialization(benchmark::State &state) {
         benchmark::DoNotOptimize(p);
     }
 }
+
 BENCHMARK(cpx_tag_protobuf_deserialization);
 
 static void cpx_reflect_protobuf_deserialization(benchmark::State &state) {
@@ -147,6 +142,7 @@ static void cpx_reflect_protobuf_deserialization(benchmark::State &state) {
         benchmark::DoNotOptimize(p);
     }
 }
+
 BENCHMARK(cpx_reflect_protobuf_deserialization);
 
 static void cpx_tag_msgpack_deserialization(benchmark::State &state) {
@@ -157,6 +153,7 @@ static void cpx_tag_msgpack_deserialization(benchmark::State &state) {
         benchmark::DoNotOptimize(p);
     }
 }
+
 BENCHMARK(cpx_tag_msgpack_deserialization);
 
 static void cpx_reflect_msgpack_deserialization(benchmark::State &state) {
@@ -167,6 +164,7 @@ static void cpx_reflect_msgpack_deserialization(benchmark::State &state) {
         benchmark::DoNotOptimize(p);
     }
 }
+
 BENCHMARK(cpx_reflect_msgpack_deserialization);
 
 static void compiled_protobuf_deserialization(benchmark::State &state) {
@@ -177,4 +175,5 @@ static void compiled_protobuf_deserialization(benchmark::State &state) {
             throw std::runtime_error("protobuf failed to parse");
     }
 }
+
 BENCHMARK(compiled_protobuf_deserialization);

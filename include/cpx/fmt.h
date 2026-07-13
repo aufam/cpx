@@ -1,6 +1,7 @@
 #ifndef CPX_FMT_H
 #define CPX_FMT_H
 
+#include <cpx/fmt_reflect.h>
 #include <cpx/reflect_builtin.h>
 #include <cpx/extend.h>
 #include <optional>
@@ -14,32 +15,27 @@
 #    include <fmt/chrono.h>
 #endif
 
-namespace cpx::fmt {
-    CPX_EXPORT template <typename T, typename Enable = void>
-    struct Reflect : std::false_type {
-        using const_type = type;
-    };
+namespace cpx::fmt::detail {
+    template <typename T, typename Enable = void>
+    struct is_tuple_reflect : std::false_type {};
 
-    CPX_EXPORT template <typename T>
-    struct has_reflect : std::bool_constant<(Reflect<T>::value || cpx::has_reflect_v<T>) && !cpx::is_time_v<T>> {};
+    template <typename T>
+    struct is_tuple_reflect<T, std::enable_if_t<cpx::fmt::has_reflect_v<T>>>
+        : std::bool_constant<                                                      //
+              cpx::is_tuple_v<typename cpx::fmt::reflect_traits<T>::const_type> && //
+              ::fmt::is_formattable<typename cpx::fmt::reflect_traits<T>::const_type>::value
+          > {};
 
-    CPX_EXPORT template <typename T>
-    inline constexpr bool has_reflect_v = has_reflect<T>::value;
+    template <typename T, typename Enable = void>
+    struct is_non_tuple_reflect : std::false_type {};
 
-    CPX_EXPORT template <typename T>
-    using reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::type, cpx::reflect_t<T>>;
-
-    CPX_EXPORT template <typename T>
-    using const_reflect_t = std::conditional_t<Reflect<T>::value, typename Reflect<T>::const_type, cpx::const_reflect_t<T>>;
-
-    CPX_EXPORT template <typename T>
-    constexpr decltype(auto) reflect_of(T &v) {
-        if constexpr (Reflect<std::remove_const_t<T>>::value)
-            return Reflect<std::remove_const_t<T>>::of(v);
-        else
-            return cpx::reflect_of(v);
-    }
-} // namespace cpx::fmt
+    template <typename T>
+    struct is_non_tuple_reflect<T, std::enable_if_t<cpx::fmt::has_reflect_v<T>>>
+        : std::bool_constant<
+              !cpx::is_tuple_v<typename cpx::fmt::reflect_traits<T>::const_type> &&
+              ::fmt::is_formattable<typename cpx::fmt::reflect_traits<T>::const_type>::value
+          > {};
+} // namespace cpx::fmt::detail
 
 template <typename T, typename TI>
 struct fmt::formatter<cpx::TagInfoFor<T, TI>, char, std::enable_if_t<fmt::is_formattable<std::decay_t<T>, char>::value>>
@@ -128,14 +124,10 @@ struct fmt::formatter<std::timespec>
 };
 
 template <typename T>
-struct fmt::formatter<
-    T,
-    char,
-    std::enable_if_t<
-        cpx::fmt::has_reflect_v<T> && !cpx::is_tuple_v<cpx::fmt::const_reflect_t<T>> &&
-        fmt::is_formattable<cpx::fmt::const_reflect_t<T>>::value>> : fmt::formatter<cpx::fmt::const_reflect_t<T>> {
+struct fmt::formatter<T, char, std::enable_if_t<cpx::fmt::detail::is_non_tuple_reflect<T>::value>>
+    : fmt::formatter<typename cpx::fmt::reflect_traits<T>::const_type> {
     fmt::context::iterator format(const T &v, fmt::context &c) const {
-        return fmt::formatter<cpx::fmt::const_reflect_t<T>>::format(cpx::fmt::reflect_of(v), c);
+        return fmt::formatter<typename cpx::fmt::reflect_traits<T>::const_type>::format(cpx::fmt::reflect_traits<T>::of(v), c);
     }
 };
 
@@ -144,16 +136,17 @@ struct fmt::formatter<
     T,
     char,
     std::enable_if_t<
-        cpx::fmt::has_reflect_v<T> && cpx::is_tuple_v<cpx::fmt::const_reflect_t<T>> &&
+        cpx::fmt::detail::is_tuple_reflect<T>::value &&         //
         !std::is_same_v<std::integral_constant<bool, false>, T> // TODO: why is this required
-        >> {
+    >
+> {
 
     constexpr auto parse(fmt::format_parse_context &ctx) {
         return ctx.begin();
     }
 
     fmt::context::iterator format(const T &v, fmt::context &c) const {
-        decltype(auto) tpl       = cpx::fmt::reflect_of(v);
+        decltype(auto) tpl       = cpx::fmt::reflect_traits<T>::of(v);
         const auto     flattened = cpx::flatten(tpl);
 
         const auto formattable_tpl = std::apply([](auto &...tpl) { return cpx::tie_if<fmt::is_formattable>(tpl...); }, flattened);

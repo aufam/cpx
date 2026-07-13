@@ -90,7 +90,24 @@ For more detailed usage, check [`tests/`](tests/).
 
 ### Static Reflection
 
-You can specialize `Reflect<T>` for your custom types without littering your public API:
+You can define `__field_tags__` for your custom types intrusively:
+```cpp
+#include <cpx/reflect.h>
+
+struct User {
+    std::string name;
+    int         age;
+    std::tm     created_at;
+
+    static constexpr auto __field_tags__ = std::make_tuple(
+        cpx::field<&User::name>       = "name",
+        cpx::field<&User::age>        = "age",
+        cpx::field<&User::created_at> = "created-at"
+    );
+};
+```
+
+Or, you can specialize `Reflect<T>` for your custom types without littering your public API:
 ```cpp
 // public API
 struct User {
@@ -103,23 +120,22 @@ struct User {
 #include <cpx/reflect.h>
 
 template <>
-struct cpx::Reflect<User> : cpx::Fields<
-    cpx::Reflect<User>, // CRTP
-    &User::name,
-    &User::age,
-    &User::created_at
-> {
-    static constexpr TagInfo name       = "name";
-    static constexpr TagInfo age        = "age";
-    static constexpr TagInfo created_at = "created-at";
-
-    static constexpr tags_type tags() {
-        return std::tie(name, age, created_at);
-    }
+struct cpx::Reflect<User> {
+    static constexpr auto field_tags = std::make_tuple(
+        cpx::field<&User::name>       = "name",
+        cpx::field<&User::age>        = "age",
+        cpx::field<&User::created_at> = "created-at"
+    );
 };
+
 ```
 
 That’s it. No macros, no codegen, no black magic, no public API pollution — just pure C++17.
+
+> **Tip:**
+>
+> Enable `AlignConsecutiveAssignments` and `AlignConsecutiveDeclarations` in your `.clang-format`
+> configuration to automatically align the field definitions for improved readability.
 
 You can then use your favorite serializer library:
 
@@ -143,18 +159,12 @@ For example, JSON may prefer camelCase while others use kebab-case:
 #include <cpx/json/json.h>
 
 template <>
-struct cpx::json::Reflect<User> : cpx::Fields<
-    cpx::json::Reflect<User>,
-    &User::name,
-    &User::age,
-    &User::created_at
-> {
-    static constexpr TagInfo created_at = "createdAt";
-
-    static constexpr tags_type tags() {
-        using Base = cpx::Reflect<User>;
-        return std::tie(Base::name, Base::age, created_at);
-    }
+struct cpx::json::Reflect<User> {
+    static constexpr auto field_tags = std::make_tuple(
+        cpx::field<&User::name>       = "name",
+        cpx::field<&User::age>        = "age",
+        cpx::field<&User::created_at> = "createdAt"
+    );
 };
 ```
 
@@ -174,7 +184,7 @@ In this context, **reflection** may not mean what you expect.
 It is closer to a literal reflection (or mirroring) of custom types into already known representations
 such as **numbers**, **strings**, **tuples**, and **tagged references**.
 
-`Reflect<T> : Fields<...> {...}` is simply a convenient way to reflect a struct
+`Reflect<T> {...}` is simply a convenient way to reflect a struct
 (or a class with public fields) into a tuple of tagged references.
 
 You can construct one manually:
@@ -203,8 +213,6 @@ For example:
 ```cpp
 template <>
 struct cpx::Reflect<MyString> {
-    static constexpr bool value = true;
-
     using const_type = std::string_view; // for serialization
     using type = std::string; // for deserialization
 

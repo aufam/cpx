@@ -115,25 +115,20 @@ namespace cpx {
 namespace cpx::json::rapid_json::detail {
     inline std::string type(const rapidjson::Value &val) {
         switch (val.GetType()) {
-        case rapidjson::Type::kNullType:
-            return "null";
+        case rapidjson::Type::kNullType: return "null";
         case rapidjson::Type::kFalseType:
-        case rapidjson::Type::kTrueType:
-            return "bool";
-        case rapidjson::Type::kObjectType:
-            return "object";
-        case rapidjson::Type::kArrayType:
-            return "array";
-        case rapidjson::Type::kStringType:
-            return "string";
-        case rapidjson::Type::kNumberType:
-            return "number";
+        case rapidjson::Type::kTrueType: return "bool";
+        case rapidjson::Type::kObjectType: return "object";
+        case rapidjson::Type::kArrayType: return "array";
+        case rapidjson::Type::kStringType: return "string";
+        case rapidjson::Type::kNumberType: return "number";
         }
         return "unknown";
     }
 
     struct Stack {
         enum Type { Null, Bool, Int, Uint, Int64, Uint64, Double, String, Object, Array };
+
         Type   type;
         Stack *parent   = nullptr;
         bool   nullable = false;
@@ -148,42 +143,55 @@ namespace cpx::json::rapid_json::detail {
         virtual bool Null() {
             return false;
         }
+
         virtual bool Bool(bool) {
             return false;
         }
+
         virtual bool Int(int) {
             return false;
         }
+
         virtual bool Uint(unsigned) {
             return false;
         }
+
         virtual bool Int64(int64_t) {
             return false;
         }
+
         virtual bool Uint64(uint64_t) {
             return false;
         }
+
         virtual bool Double(double) {
             return false;
         }
+
         virtual bool String(const char *, rapidjson::SizeType, bool) {
             return false;
         }
+
         virtual bool RawNumber(const char *, rapidjson::SizeType, bool) {
             return false;
         }
+
         virtual bool StartObject() {
             return false;
         }
+
         virtual bool Key(const char *, rapidjson::SizeType, bool) {
             return false;
         }
+
         virtual bool EndObject(rapidjson::SizeType) {
             return false;
         }
+
         virtual bool StartArray() {
             return false;
         }
+
         virtual bool EndArray(rapidjson::SizeType) {
             return false;
         }
@@ -195,6 +203,7 @@ namespace cpx::json::rapid_json::detail {
     public:
         rapidjson::Reader &reader;
         T                 &v;
+
         HandlerFor(rapidjson::Reader &reader, T &v)
             : reader(reader)
             , v(v) {}
@@ -632,7 +641,7 @@ struct SERIALIZE(T, std::enable_if_t<cpx::json::has_reflect_v<T>>) {
     rapidjson::Document &doc;
 
     rapidjson::Value from(const T &v) const {
-        return SERIALIZE(cpx::json::const_reflect_t<T>){doc}.from(cpx::json::reflect_of(v));
+        return SERIALIZE(typename cpx::json::reflect_traits<T>::const_type){doc}.from(cpx::json::reflect_traits<T>::of(v));
     }
 };
 
@@ -641,8 +650,8 @@ struct DESERIALIZE(T, std::enable_if_t<cpx::json::has_reflect_v<T>>) {
     const rapidjson::Value &val;
 
     void into(T &v) const {
-        decltype(auto) r = cpx::json::reflect_of(v);
-        DESERIALIZE(cpx::json::reflect_t<T>){val}.into(r);
+        decltype(auto) r = cpx::json::reflect_traits<T>::of(v);
+        DESERIALIZE(typename cpx::json::reflect_traits<T>::type){val}.into(r);
     }
 };
 
@@ -898,7 +907,9 @@ struct SERIALIZE_SAX(OS, T, std::enable_if_t<cpx::json::has_reflect_v<T>>) {
     rapidjson::Writer<OS> &writer;
 
     void from(const T &v) const {
-        return SERIALIZE_SAX(OS, cpx::json::const_reflect_t<T>){writer}.from(cpx::json::reflect_of(v));
+        return SERIALIZE_SAX(OS, typename cpx::json::reflect_traits<T>::const_type){writer}.from(
+            cpx::json::reflect_traits<T>::of(v)
+        );
     }
 };
 
