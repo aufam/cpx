@@ -14,7 +14,8 @@ namespace cpx::msgpack {
               ( // from reflect traits
                   cpx::detail::has_reflect_traits<cpx::msgpack::Reflect, T>::value ||
                   cpx::detail::has_reflect_traits<cpx::Reflect, T>::value ||
-                  cpx::detail::has_reflect_traits<cpx::weak::Reflect, T>::value
+                  cpx::detail::has_reflect_traits<cpx::SelfReflect, T>::value ||
+                  cpx::detail::has_reflect_traits<cpx::WeakReflect, T>::value
               ) &&
               !( // primitive types
                   cpx::is_time_v<T> || std::is_enum_v<T>
@@ -25,7 +26,8 @@ namespace cpx::msgpack {
     inline constexpr bool has_reflect_v = has_reflect<T>::value;
 
     CPX_EXPORT template <typename T>
-    struct reflect_traits : cpx::detail::reflect_traits_selector<T, cpx::msgpack::Reflect, cpx::Reflect, cpx::weak::Reflect> {};
+    struct reflect_traits
+        : cpx::detail::reflect_traits_selector<T, cpx::msgpack::Reflect, cpx::Reflect, cpx::SelfReflect, cpx::WeakReflect> {};
 } // namespace cpx::msgpack
 
 #endif

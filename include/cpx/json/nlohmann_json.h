@@ -23,7 +23,8 @@ namespace cpx::json::nlohmann_json {
                   cpx::detail::has_reflect_traits<cpx::json::nlohmann_json::Reflect, T>::value ||
                   cpx::detail::has_reflect_traits<cpx::json::Reflect, T>::value ||
                   cpx::detail::has_reflect_traits<cpx::Reflect, T>::value ||
-                  cpx::detail::has_reflect_traits<cpx::weak::Reflect, T>::value
+                  cpx::detail::has_reflect_traits<cpx::SelfReflect, T>::value ||
+                  cpx::detail::has_reflect_traits<cpx::WeakReflect, T>::value
               ) &&
               !std::is_same_v<T, nlohmann::json::value_t>
           > {};
@@ -32,7 +33,15 @@ namespace cpx::json::nlohmann_json {
     inline constexpr bool has_reflect_v = has_reflect<T>::value;
 
     CPX_EXPORT template <typename T>
-    struct reflect_traits : cpx::detail::reflect_traits_selector<T, cpx::json::Reflect, cpx::Reflect, cpx::weak::Reflect> {};
+    struct reflect_traits
+        : cpx::detail::reflect_traits_selector<
+              T,
+              cpx::json::nlohmann_json::Reflect,
+              cpx::json::Reflect,
+              cpx::Reflect,
+              cpx::SelfReflect,
+              cpx::WeakReflect
+          > {};
 } // namespace cpx::json::nlohmann_json
 
 namespace cpx {
@@ -237,6 +246,8 @@ struct nlohmann::adl_serializer<std::tuple<Ts...>> {
                     else
                         throw cpx::serde::error(e.what());
                 }
+                if (ptr->is_null() && (t.skipmissing || !t.oneof.empty()))
+                    return;
                 if (t.noserde)
                     if constexpr (std::is_same_v<T, std::string>)
                         v = ptr->dump();
@@ -265,14 +276,36 @@ struct nlohmann::adl_serializer<std::tuple<Ts...>> {
 template <typename T>
 struct nlohmann::adl_serializer<T, std::enable_if_t<cpx::json::nlohmann_json::has_reflect_v<T>>> {
     static void to_json(nlohmann::json &j, const T &v) {
-        j = SERIALIZE(typename cpx::json::nlohmann_json::reflect_traits<T>::const_type){}.from(
-            cpx::json::nlohmann_json::reflect_traits<T>::of(v)
-        );
+        using traits = cpx::json::reflect_traits<T>;
+        if constexpr (traits::has_to_str) {
+            std::string str;
+            traits::to_str(v, str);
+            try {
+                j = std::move(str);
+            } catch (nlohmann::json::exception &e) {
+                throw cpx::serde::error(e.what());
+            }
+        } else {
+            j = SERIALIZE(typename cpx::json::nlohmann_json::reflect_traits<T>::const_type){}.from(
+                cpx::json::nlohmann_json::reflect_traits<T>::of(v)
+            );
+        }
     }
 
     static void from_json(const nlohmann::json &j, T &v) {
-        decltype(auto) proxy = cpx::json::nlohmann_json::reflect_traits<T>::of(v);
-        DESERIALIZE(typename cpx::json::nlohmann_json::reflect_traits<T>::type){j}.into(proxy);
+        using traits = cpx::json::reflect_traits<T>;
+        if constexpr (traits::has_from_str) {
+            std::string r;
+            try {
+                j.get_to(r);
+            } catch (nlohmann::json::exception &e) {
+                throw cpx::serde::error(e.what());
+            }
+            traits::from_str(v, r);
+        } else {
+            decltype(auto) proxy = cpx::json::nlohmann_json::reflect_traits<T>::of(v);
+            DESERIALIZE(typename cpx::json::nlohmann_json::reflect_traits<T>::type){j}.into(proxy);
+        }
     }
 };
 

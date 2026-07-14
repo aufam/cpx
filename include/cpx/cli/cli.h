@@ -20,14 +20,16 @@ namespace cpx::cli {
         : std::bool_constant<
               cpx::detail::has_reflect_traits<cpx::cli::Reflect, T>::value ||
               cpx::detail::has_reflect_traits<cpx::Reflect, T>::value ||
-              cpx::detail::has_reflect_traits<cpx::weak::Reflect, T>::value
+              cpx::detail::has_reflect_traits<cpx::SelfReflect, T>::value ||
+              cpx::detail::has_reflect_traits<cpx::WeakReflect, T>::value
           > {};
 
     CPX_EXPORT template <typename T>
     inline constexpr bool has_reflect_v = has_reflect<T>::value;
 
     CPX_EXPORT template <typename T>
-    struct reflect_traits : cpx::detail::reflect_traits_selector<T, cpx::cli::Reflect, cpx::Reflect, cpx::weak::Reflect> {};
+    struct reflect_traits
+        : cpx::detail::reflect_traits_selector<T, cpx::cli::Reflect, cpx::Reflect, cpx::SelfReflect, cpx::WeakReflect> {};
 } // namespace cpx::cli
 
 #endif

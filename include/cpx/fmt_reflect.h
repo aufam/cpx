@@ -14,7 +14,8 @@ namespace cpx::fmt {
               ( // from reflect traits
                   cpx::detail::has_reflect_traits<cpx::fmt::Reflect, T>::value ||
                   cpx::detail::has_reflect_traits<cpx::Reflect, T>::value ||
-                  cpx::detail::has_reflect_traits<cpx::weak::Reflect, T>::value
+                  cpx::detail::has_reflect_traits<cpx::SelfReflect, T>::value ||
+                  cpx::detail::has_reflect_traits<cpx::WeakReflect, T>::value
               ) &&
               !( // primitive types
                   cpx::is_time_v<T>
@@ -25,7 +26,8 @@ namespace cpx::fmt {
     inline constexpr bool has_reflect_v = has_reflect<T>::value;
 
     CPX_EXPORT template <typename T>
-    struct reflect_traits : cpx::detail::reflect_traits_selector<T, cpx::fmt::Reflect, cpx::Reflect, cpx::weak::Reflect> {};
+    struct reflect_traits
+        : cpx::detail::reflect_traits_selector<T, cpx::fmt::Reflect, cpx::Reflect, cpx::SelfReflect, cpx::WeakReflect> {};
 } // namespace cpx::fmt
 
 #endif

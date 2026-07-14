@@ -19,7 +19,7 @@
 #endif
 
 template <>
-struct cpx::weak::Reflect<std::tm> {
+struct cpx::WeakReflect<std::tm> {
     using type       = std::string;
     using const_type = std::string;
 
@@ -49,7 +49,7 @@ struct cpx::weak::Reflect<std::tm> {
 };
 
 template <>
-struct cpx::weak::Reflect<std::timespec> {
+struct cpx::WeakReflect<std::timespec> {
     using type       = std::string;
     using const_type = std::string;
 
@@ -89,9 +89,10 @@ namespace cpx::detail {
 
 #ifdef BOOST_PFR_HPP
 template <typename T>
-struct cpx::weak::
-    Reflect<T, std::enable_if_t<std::is_aggregate_v<T> && !cpx::is_time_v<T> && !cpx::detail::is_std_array<T>::value>> {
-    static constexpr bool value = true;
+struct cpx::WeakReflect<
+    T, //
+    std::enable_if_t<std::is_aggregate_v<T> && !cpx::is_time_v<T> && !cpx::detail::is_std_array<T>::value>
+> {
 
     using const_type = decltype(boost::pfr::structure_tie(std::declval<const T &>()));
     using type       = decltype(boost::pfr::structure_tie(std::declval<T &>()));
@@ -111,8 +112,16 @@ namespace cpx::test::reflect_builtin {
         float f;
     };
 
-    static_assert(std::is_same_v<std::tuple<int &, float &>, typename cpx::weak::reflect_traits<Foo>::type>);
-    static_assert(std::is_same_v<std::tuple<const int &, const float &>, typename cpx::weak::reflect_traits<Foo>::const_type>);
+    static_assert( //
+        std::is_same_v<std::tuple<int &, float &>, typename cpx::detail::reflect_traits<cpx::WeakReflect, Foo>::type>
+    );
+
+    static_assert( //
+        std::is_same_v<
+            std::tuple<const int &, const float &>,
+            typename cpx::detail::reflect_traits<cpx::WeakReflect, Foo>::const_type
+        >
+    );
 }; // namespace cpx::test::reflect_builtin
 
 
@@ -120,9 +129,7 @@ namespace cpx::test::reflect_builtin {
 
 #ifdef NEARGYE_MAGIC_ENUM_HPP
 template <typename T>
-struct cpx::weak::Reflect<T, std::enable_if_t<std::is_enum_v<T>>> {
-    static constexpr bool value = true;
-
+struct cpx::WeakReflect<T, std::enable_if_t<std::is_enum_v<T>>> {
     using const_type = std::string_view;
     using type       = std::string;
 

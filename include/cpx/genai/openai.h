@@ -58,6 +58,8 @@ namespace cpx::genai::openai {
     CPX_EXPORT struct Usage {
         int prompt_tokens     = 0;
         int completion_tokens = 0;
+        int input_tokens      = 0;
+        int output_tokens     = 0;
         int total_tokens      = 0;
 
         bool empty() const {
@@ -67,6 +69,8 @@ namespace cpx::genai::openai {
         static constexpr auto __field_tags__ = std::make_tuple(
             cpx::field<&Usage::prompt_tokens>     = "prompt_tokens     , skipmissing , omitempty",
             cpx::field<&Usage::completion_tokens> = "completion_tokens , skipmissing , omitempty",
+            cpx::field<&Usage::input_tokens>      = "input_tokens      , skipmissing , omitempty",
+            cpx::field<&Usage::output_tokens>     = "output_tokens     , skipmissing , omitempty",
             cpx::field<&Usage::total_tokens>      = "total_tokens"
         );
     };
@@ -128,6 +132,12 @@ namespace cpx::genai::openai {
         );
     };
 
+    CPX_EXPORT struct ChatCompletionsError {
+        Error error;
+
+        static constexpr auto __field_tags__ = std::make_tuple(cpx::field<&ChatCompletionsError::error> = "error");
+    };
+
     CPX_EXPORT struct ResponsesRequest {
         std::string                                     model;
         std::variant<std::string, std::vector<Message>> input;
@@ -159,6 +169,8 @@ namespace cpx::genai::openai {
             cpx::field<&ResponsesResponse::usage>        = "usage,skipmissing,omitempty"
         );
     };
+
+    CPX_EXPORT using ResponsesError = ChatCompletionsError;
 } // namespace cpx::genai::openai
 
 namespace cpx {

@@ -7,6 +7,7 @@
 #include <cpx/reflect_builtin.h>
 #include <cpx/extend.h>
 #include <cpx/defer.h>
+#include <cpx/result.h>
 #include <array>
 #include <variant>
 #include <vector>
@@ -46,16 +47,34 @@ namespace cpx::json::yy_json {
     CPX_EXPORT template <typename T>
     void parse(std::string_view str, T &val, yyjson_read_flag = YYJSON_READ_NOFLAG);
 
+    CPX_EXPORT template <typename T, typename E>
+    std::enable_if_t<!std::is_same_v<std::remove_cv_t<E>, yyjson_read_flag>>
+    parse(std::string_view str, T &val, E &err, yyjson_read_flag = YYJSON_READ_NOFLAG);
+
     CPX_EXPORT template <typename T>
     void parse_from_file(const std::string &path, T &val, yyjson_read_flag = YYJSON_READ_NOFLAG);
+
+    CPX_EXPORT template <typename T, typename E>
+    std::enable_if_t<!std::is_same_v<std::remove_cv_t<E>, yyjson_read_flag>>
+    parse_from_file(const std::string &path, T &val, E &err, yyjson_read_flag = YYJSON_READ_NOFLAG);
 
     CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::enable_if_t<std::is_default_constructible_v<T>, T> parse(std::string_view str, yyjson_read_flag = YYJSON_READ_NOFLAG);
 
+    CPX_EXPORT template <typename T, typename E>
+    [[nodiscard]]
+    std::enable_if_t<std::is_default_constructible_v<T> && std::is_default_constructible_v<E>, cpx::Result<T, E>>
+    parse(std::string_view str, yyjson_read_flag = YYJSON_READ_NOFLAG);
+
     CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::enable_if_t<std::is_default_constructible_v<T>, T>
+    parse_from_file(const std::string &path, yyjson_read_flag = YYJSON_READ_NOFLAG);
+
+    CPX_EXPORT template <typename T, typename E>
+    [[nodiscard]]
+    std::enable_if_t<std::is_default_constructible_v<T> && std::is_default_constructible_v<E>, cpx::Result<T, E>>
     parse_from_file(const std::string &path, yyjson_read_flag = YYJSON_READ_NOFLAG);
 
     CPX_EXPORT template <typename T>
@@ -64,6 +83,8 @@ namespace cpx::json::yy_json {
 
     CPX_EXPORT template <typename T>
     void dump(const T &&val, yyjson_write_flag = YYJSON_WRITE_NOFLAG, const yyjson_alc *alc = nullptr) = delete;
+
+    CPX_EXPORT using allocator = yyjson_alc;
 
     CPX_EXPORT struct read_flag {
         static constexpr auto noflag                  = YYJSON_READ_NOFLAG;
@@ -448,7 +469,7 @@ struct DESERIALIZE(std::tuple<Ts...>) {
 
             const size_t i   = idx++;
             yyjson_val  *val = is_obj ? yyjson_obj_getn(obj, t.key.data(), t.key.size()) : yyjson_arr_get(arr, i);
-            if (!val && (t.skipmissing || !t.oneof.empty()))
+            if ((!val || yyjson_is_null(val)) && (t.skipmissing || !t.oneof.empty()))
                 return;
 
             if (!t.oneof.empty()) {
@@ -573,7 +594,14 @@ struct SERIALIZE(T, std::enable_if_t<cpx::json::has_reflect_v<T>>) {
     yyjson_mut_doc *doc;
 
     yyjson_mut_val *from(const T &v) const {
-        return SERIALIZE(typename cpx::json::reflect_traits<T>::const_type){doc}.from(cpx::json::reflect_traits<T>::of(v));
+        using traits = cpx::json::reflect_traits<T>;
+        if constexpr (traits::has_to_str) {
+            std::string str;
+            traits::to_str(v, str);
+            return SERIALIZE(std::string){doc}.from(std::move(str));
+        } else {
+            return SERIALIZE(typename traits::const_type){doc}.from(traits::of(v));
+        }
     }
 };
 
@@ -582,8 +610,15 @@ struct DESERIALIZE(T, std::enable_if_t<cpx::json::has_reflect_v<T>>) {
     yyjson_val *val;
 
     void into(T &v) {
-        decltype(auto) r = cpx::json::reflect_traits<T>::of(v);
-        DESERIALIZE(typename cpx::json::reflect_traits<T>::type){val}.into(r);
+        using traits = cpx::json::reflect_traits<T>;
+        if constexpr (traits::has_from_str) {
+            std::string r;
+            DESERIALIZE(std::string){val}.into(r);
+            traits::from_str(v, r);
+        } else {
+            decltype(auto) r = traits::of(v);
+            DESERIALIZE(typename traits::type){val}.into(r);
+        }
     }
 };
 
@@ -668,9 +703,39 @@ void cpx::json::yy_json::parse(std::string_view str, T &val, yyjson_read_flag fl
     Parse<std::string_view>{str, flag}.into(val);
 }
 
+template <typename T, typename E>
+std::enable_if_t<!std::is_same_v<std::remove_cv_t<E>, yyjson_read_flag>>
+cpx::json::yy_json::parse(std::string_view str, T &val, E &err, yyjson_read_flag flag) {
+    try {
+        Parse<std::string_view>{str, flag}.into(val);
+    } catch (cpx::serde::error &e) {
+        try {
+            Parse<std::string_view>{str, flag}.into(err);
+        } catch (cpx::serde::error &e) {
+            std::ignore = e;
+        }
+        throw;
+    }
+}
+
 template <typename T>
 void cpx::json::yy_json::parse_from_file(const std::string &path, T &val, yyjson_read_flag flag) {
     Parse<std::string>{path, flag}.into(val, true);
+}
+
+CPX_EXPORT template <typename T, typename E>
+std::enable_if_t<!std::is_same_v<std::remove_cv_t<E>, yyjson_read_flag>>
+cpx::json::yy_json::parse_from_file(const std::string &path, T &val, E &err, yyjson_read_flag flag) {
+    try {
+        Parse<std::string>{path, flag}.into(val, true);
+    } catch (cpx::serde::error &e) {
+        try {
+            Parse<std::string>{path, flag}.into(err, true);
+        } catch (cpx::serde::error &e) {
+            std::ignore = e;
+        }
+        throw;
+    }
 }
 
 template <typename T>
@@ -681,6 +746,26 @@ std::enable_if_t<std::is_default_constructible_v<T>, T> cpx::json::yy_json::pars
     return val;
 }
 
+CPX_EXPORT template <typename T, typename E>
+[[nodiscard]]
+std::enable_if_t<std::is_default_constructible_v<T> && std::is_default_constructible_v<E>, cpx::Result<T, E>>
+cpx::json::yy_json::parse(std::string_view str, yyjson_read_flag flag) {
+    try {
+        T val = {};
+        Parse<std::string_view>{str, flag}.into(val);
+        return val;
+    } catch (cpx::serde::error &e) {
+        try {
+            E err = {};
+            Parse<std::string_view>{str, flag}.into(err);
+            return err;
+        } catch (cpx::serde::error &e) {
+            std::ignore = e;
+        }
+        throw;
+    }
+}
+
 template <typename T>
 [[nodiscard]]
 std::enable_if_t<std::is_default_constructible_v<T>, T>
@@ -688,6 +773,26 @@ cpx::json::yy_json::parse_from_file(const std::string &path, yyjson_read_flag fl
     T val = {};
     Parse<std::string>{path, flag}.into(val, true);
     return val;
+}
+
+CPX_EXPORT template <typename T, typename E>
+[[nodiscard]]
+std::enable_if_t<std::is_default_constructible_v<T> && std::is_default_constructible_v<E>, cpx::Result<T, E>>
+cpx::json::yy_json::parse_from_file(const std::string &path, yyjson_read_flag flag) {
+    try {
+        T val = {};
+        Parse<std::string>{path, flag}.into(val, true);
+        return val;
+    } catch (cpx::serde::error &e) {
+        try {
+            E err = {};
+            Parse<std::string>{path, flag}.into(err, true);
+            return err;
+        } catch (cpx::serde::error &e) {
+            std::ignore = e;
+        }
+        throw;
+    }
 }
 
 template <typename T>

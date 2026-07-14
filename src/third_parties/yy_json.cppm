@@ -4,6 +4,7 @@ module;
 #include <cpx/serde/serialize.h>
 #include <cpx/serde/deserialize.h>
 #include <cpx/reflect_builtin.h>
+#include <cpx/result.h>
 #include <cpx/extend.h>
 #include <cpx/defer.h>
 #include <cpx/module.h>

@@ -616,7 +616,14 @@ struct DESERIALIZE(std::timespec) {
 template <typename T>
 struct SERIALIZE(T, std::enable_if_t<cpx::toml::has_reflect_v<T>>) {
     std::unique_ptr<__tomlpp::node> from(const T &v) const {
-        return SERIALIZE(typename cpx::toml::reflect_traits<T>::const_type){}.from(cpx::toml::reflect_traits<T>::of(v));
+        using traits = cpx::toml::reflect_traits<T>;
+        if constexpr (traits::has_to_str) {
+            std::string str;
+            traits::to_str(v, str);
+            return SERIALIZE(std::string){}.from(str);
+        } else {
+            return SERIALIZE(typename traits::const_type){}.from(traits::of(v));
+        }
     }
 };
 
@@ -625,8 +632,15 @@ struct DESERIALIZE(T, std::enable_if_t<cpx::toml::has_reflect_v<T>>) {
     const __tomlpp::node *node;
 
     void into(T &v) const {
-        decltype(auto) r = cpx::toml::reflect_traits<T>::of(v);
-        DESERIALIZE(typename cpx::toml::reflect_traits<T>::type){node}.into(r);
+        using traits = cpx::toml::reflect_traits<T>;
+        if constexpr (traits::has_from_str) {
+            std::string r;
+            DESERIALIZE(std::string){node}.into(r);
+            traits::from_str(v, r);
+        } else {
+            decltype(auto) r = traits::of(v);
+            DESERIALIZE(typename traits::type){node}.into(r);
+        }
     }
 };
 

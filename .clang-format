@@ -3,7 +3,7 @@ Standard: c++20
 ColumnLimit: 130
 SortIncludes: Never
 IncludeBlocks: Regroup
-SeparateDefinitionBlocks: Always
+# SeparateDefinitionBlocks: Always
 
 # indentation
 MaxEmptyLinesToKeep: 2
