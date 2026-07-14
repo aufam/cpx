@@ -534,9 +534,18 @@ struct cpx::serde::Serialize<::msgpack::packer<OS>, T, std::enable_if_t<cpx::msg
     ::msgpack::packer<OS> &doc;
 
     void from(const T &v) const {
-        Serialize<::msgpack::packer<OS>, typename cpx::msgpack::reflect_traits<T>::const_type>{doc}.from(
-            cpx::msgpack::reflect_traits<T>::of(v)
-        );
+        using traits = cpx::msgpack::reflect_traits<T>;
+        if constexpr (traits::has_to_bytes) {
+            std::string str;
+            traits::to_bytes(v, str);
+            Serialize<::msgpack::packer<OS>, std::string>{doc}.from(str);
+        } else if constexpr (traits::has_to_str) {
+            std::string str;
+            traits::to_str(v, str);
+            Serialize<::msgpack::packer<OS>, std::string>{doc}.from(str);
+        } else {
+            Serialize<::msgpack::packer<OS>, typename traits::const_type>{doc}.from(traits::of(v));
+        }
     }
 };
 
@@ -547,6 +556,20 @@ struct cpx::serde::Deserialize<::msgpack::object, T, std::enable_if_t<cpx::msgpa
     void into(T &v) const {
         decltype(auto) r = cpx::msgpack::reflect_traits<T>::of(v);
         Deserialize<::msgpack::object, typename cpx::msgpack::reflect_traits<T>::type>{obj}.into(r);
+
+        using traits = cpx::msgpack::reflect_traits<T>;
+        if constexpr (traits::has_from_bytes) {
+            std::string r;
+            Deserialize<::msgpack::object, std::string>{obj}.into(r);
+            traits::from_bytes(v, r);
+        } else if constexpr (traits::has_from_str) {
+            std::string r;
+            Deserialize<::msgpack::object, std::string>{obj}.into(r);
+            traits::from_str(v, r);
+        } else {
+            decltype(auto) r = traits::of(v);
+            Deserialize<::msgpack::object, typename traits::type>{obj}.into(r);
+        }
     }
 };
 

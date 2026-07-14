@@ -755,9 +755,18 @@ struct SERIALIZE(T, std::enable_if_t<cpx::protobuf::has_reflect_v<T>>) {
     SERIALIZER_FIELDS
 
     bool from(const T &v) const {
-        return SERIALIZE(typename cpx::protobuf::reflect_traits<T>::const_type){doc, ti}.from(
-            cpx::protobuf::reflect_traits<T>::of(v)
-        );
+        using traits = cpx::protobuf::reflect_traits<T>;
+        if constexpr (traits::has_to_bytes) {
+            std::string str;
+            traits::to_bytes(v, str);
+            return SERIALIZE(std::string){doc, ti}.from(str);
+        } else if constexpr (traits::has_to_str) {
+            std::string str;
+            traits::to_str(v, str);
+            return SERIALIZE(std::string){doc, ti}.from(str);
+        } else {
+            return SERIALIZE(typename traits::const_type){doc, ti}.from(traits::of(v));
+        }
     }
 };
 
@@ -766,8 +775,19 @@ struct DESERIALIZE(T, std::enable_if_t<cpx::protobuf::has_reflect_v<T>>) {
     DESERIALIZER_FIELDS
 
     void into(T &v) const {
-        decltype(auto) r = cpx::protobuf::reflect_traits<T>::of(v);
-        DESERIALIZE(typename cpx::protobuf::reflect_traits<T>::type){doc, ti, wire_type, len}.into(r);
+        using traits = cpx::protobuf::reflect_traits<T>;
+        if constexpr (traits::has_from_bytes) {
+            std::string r;
+            DESERIALIZE(std::string){doc, ti, wire_type, len}.into(r);
+            traits::from_bytes(v, r);
+        } else if constexpr (traits::has_from_str) {
+            std::string r;
+            DESERIALIZE(std::string){doc, ti, wire_type, len}.into(r);
+            traits::from_str(v, r);
+        } else {
+            decltype(auto) r = traits::of(v);
+            DESERIALIZE(typename traits::type){doc, ti, wire_type, len}.into(r);
+        }
     }
 };
 
