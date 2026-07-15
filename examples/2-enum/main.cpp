@@ -7,7 +7,6 @@ using Tag = cpx::Tag<T>;
 int main() {
     enum class Level { High = 10, Medium, Low };
 
-    static_assert(cpx::detail::has_reflect_traits<cpx::SelfReflect, void>::value == false);
     static_assert(cpx::detail::has_reflect_traits<cpx::WeakReflect, Level>::value == true);
     static_assert(cpx::has_reflect_v<Level> == true);
     static_assert(cpx::fmt::has_reflect_v<Level> == true);

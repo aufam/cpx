@@ -321,9 +321,6 @@ namespace cpx {
         }
     };
 
-    template <>
-    struct SelfReflect<void> : std::false_type {};
-
     template <typename T>
     struct has_reflect
         : std::bool_constant<
