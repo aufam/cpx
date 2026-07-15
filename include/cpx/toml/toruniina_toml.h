@@ -613,13 +613,18 @@ template <typename T>
 struct SERIALIZE(T, std::enable_if_t<cpx::toml::has_reflect_v<T>>) {
     __toml11::value from(const T &v) const {
         using traits = cpx::toml::reflect_traits<T>;
+
         if constexpr (traits::has_to_str) {
             std::string str;
             traits::to_str(v, str);
             return SERIALIZE(std::string){}.from(str);
-        } else {
+        }
+
+        if constexpr (traits::has_default_traits) {
             return SERIALIZE(typename traits::const_type){}.from(traits::of(v));
         }
+
+        return {};
     }
 };
 
@@ -629,14 +634,29 @@ struct DESERIALIZE(T, std::enable_if_t<cpx::toml::has_reflect_v<T>>) {
 
     void into(T &v) const {
         using traits = cpx::toml::reflect_traits<T>;
-        if constexpr (traits::has_from_str) {
-            std::string r;
-            DESERIALIZE(std::string){node}.into(r);
-            traits::from_str(v, r);
-        } else {
-            decltype(auto) r = traits::of(v);
-            DESERIALIZE(typename traits::type){node}.into(r);
-        }
+
+        std::exception_ptr eptr;
+        if constexpr (traits::has_from_str)
+            try {
+                std::string r;
+                DESERIALIZE(std::string){node}.into(r);
+                traits::from_str(v, r);
+                return;
+            } catch (...) {
+                eptr = std::current_exception();
+            }
+
+        if constexpr (traits::has_default_traits)
+            try {
+                decltype(auto) r = traits::of(v);
+                DESERIALIZE(typename traits::type){node}.into(r);
+                return;
+            } catch (...) {
+                eptr = std::current_exception();
+            }
+
+        if (eptr)
+            std::rethrow_exception(eptr);
     }
 };
 

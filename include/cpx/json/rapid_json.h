@@ -642,13 +642,18 @@ struct SERIALIZE(T, std::enable_if_t<cpx::json::has_reflect_v<T>>) {
 
     rapidjson::Value from(const T &v) const {
         using traits = cpx::json::reflect_traits<T>;
+
         if constexpr (traits::has_to_str) {
             std::string str;
             traits::to_str(v, str);
             return SERIALIZE(std::string){doc}.from(std::move(str));
-        } else {
+        }
+
+        if constexpr (traits::has_default_traits) {
             return SERIALIZE(typename traits::const_type){doc}.from(traits::of(v));
         }
+
+        return rapidjson::Value(rapidjson::kNullType);
     }
 };
 
@@ -658,14 +663,29 @@ struct DESERIALIZE(T, std::enable_if_t<cpx::json::has_reflect_v<T>>) {
 
     void into(T &v) const {
         using traits = cpx::json::reflect_traits<T>;
-        if constexpr (traits::has_from_str) {
-            std::string r;
-            DESERIALIZE(std::string){val}.into(r);
-            traits::from_str(v, r);
-        } else {
-            decltype(auto) r = traits::of(v);
-            DESERIALIZE(typename traits::type){val}.into(r);
-        }
+
+        std::exception_ptr eptr;
+        if constexpr (traits::has_from_str)
+            try {
+                std::string str;
+                DESERIALIZE(std::string){val}.into(str);
+                traits::from_str(v, str);
+                return;
+            } catch (...) {
+                eptr = std::current_exception();
+            }
+
+        if constexpr (traits::has_default_traits)
+            try {
+                decltype(auto) r = traits::of(v);
+                DESERIALIZE(typename traits::type){val}.into(r);
+                return;
+            } catch (...) {
+                eptr = std::current_exception();
+            }
+
+        if (eptr)
+            std::rethrow_exception(eptr);
     }
 };
 
@@ -922,14 +942,15 @@ struct SERIALIZE_SAX(OS, T, std::enable_if_t<cpx::json::has_reflect_v<T>>) {
 
     void from(const T &v) const {
         using traits = cpx::json::reflect_traits<T>;
+
         if constexpr (traits::has_to_str) {
             std::string str;
             traits::to_str(v, str);
             return SERIALIZE_SAX(OS, std::string){writer}.from(std::move(str));
-        } else {
-            return SERIALIZE_SAX(OS, typename cpx::json::reflect_traits<T>::const_type){writer}.from(
-                cpx::json::reflect_traits<T>::of(v)
-            );
+        }
+
+        if constexpr (traits::has_default_traits) {
+            return SERIALIZE_SAX(OS, typename traits::const_type){writer}.from(traits::of(v));
         }
     }
 };

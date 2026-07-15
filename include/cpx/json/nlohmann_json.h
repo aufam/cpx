@@ -277,6 +277,7 @@ template <typename T>
 struct nlohmann::adl_serializer<T, std::enable_if_t<cpx::json::nlohmann_json::has_reflect_v<T>>> {
     static void to_json(nlohmann::json &j, const T &v) {
         using traits = cpx::json::reflect_traits<T>;
+
         if constexpr (traits::has_to_str) {
             std::string str;
             traits::to_str(v, str);
@@ -285,27 +286,39 @@ struct nlohmann::adl_serializer<T, std::enable_if_t<cpx::json::nlohmann_json::ha
             } catch (nlohmann::json::exception &e) {
                 throw cpx::serde::error(e.what());
             }
-        } else {
-            j = SERIALIZE(typename cpx::json::nlohmann_json::reflect_traits<T>::const_type){}.from(
-                cpx::json::nlohmann_json::reflect_traits<T>::of(v)
-            );
+            return;
+        }
+
+        if constexpr (traits::has_default_traits) {
+            j = SERIALIZE(typename traits::const_type){}.from(traits::of(v));
         }
     }
 
     static void from_json(const nlohmann::json &j, T &v) {
         using traits = cpx::json::reflect_traits<T>;
-        if constexpr (traits::has_from_str) {
-            std::string r;
+
+        std::exception_ptr eptr;
+        if constexpr (traits::has_from_str)
             try {
+                std::string r;
                 j.get_to(r);
-            } catch (nlohmann::json::exception &e) {
-                throw cpx::serde::error(e.what());
+                traits::from_str(v, r);
+                return;
+            } catch (...) {
+                eptr = std::current_exception();
             }
-            traits::from_str(v, r);
-        } else {
-            decltype(auto) proxy = cpx::json::nlohmann_json::reflect_traits<T>::of(v);
-            DESERIALIZE(typename cpx::json::nlohmann_json::reflect_traits<T>::type){j}.into(proxy);
-        }
+
+        if constexpr (traits::has_default_traits)
+            try {
+                decltype(auto) proxy = traits::of(v);
+                DESERIALIZE(typename traits::type){j}.into(proxy);
+                return;
+            } catch (...) {
+                eptr = std::current_exception();
+            }
+
+        if (eptr)
+            std::rethrow_exception(eptr);
     }
 };
 

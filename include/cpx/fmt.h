@@ -35,6 +35,16 @@ namespace cpx::fmt::detail {
               !cpx::is_tuple_v<typename cpx::fmt::reflect_traits<T>::const_type> &&
               ::fmt::is_formattable<typename cpx::fmt::reflect_traits<T>::const_type>::value
           > {};
+
+    template <typename T, typename Enable = void>
+    struct is_string_reflect : std::false_type {};
+
+    template <typename T>
+    struct is_string_reflect<T, std::enable_if_t<cpx::fmt::has_reflect_v<T>>>
+        : std::bool_constant<
+              !cpx::is_tuple_v<typename cpx::fmt::reflect_traits<T>::const_type> && cpx::fmt::reflect_traits<T>::has_to_str
+          > {};
+
 } // namespace cpx::fmt::detail
 
 template <typename T, typename TI>
@@ -120,6 +130,15 @@ struct fmt::formatter<std::timespec>
         auto tp_ms = std::chrono::floor<std::chrono::milliseconds>(tp);
 
         return fmt::formatter<std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds>>::format(tp_ms, ctx);
+    }
+};
+
+template <typename T>
+struct fmt::formatter<T, char, std::enable_if_t<cpx::fmt::detail::is_string_reflect<T>::value>> : fmt::formatter<std::string> {
+    fmt::context::iterator format(const T &v, fmt::context &c) const {
+        std::string str;
+        cpx::fmt::reflect_traits<T>::to_str(v, str);
+        return fmt::formatter<std::string>::format(str, c);
     }
 };
 

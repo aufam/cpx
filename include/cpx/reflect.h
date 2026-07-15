@@ -179,11 +179,10 @@ namespace cpx::detail {
     template <template <typename> typename R, typename T, typename Enable = void>
     struct reflect_traits;
 
-    // R<T>::type && R<T>::const_type && R<T>::of(T&) && R<T>::of(const T&)
+    // default reflect traits
     template <template <typename> typename R, typename T>
     struct reflect_traits<R, T, std::enable_if_t<has_reflect_default_traits<R, T>::value>> {
         static constexpr bool has_default_traits = true;
-        static constexpr bool has_field_tags     = false;
         static constexpr bool has_to_str         = false;
         static constexpr bool has_from_str       = false;
         static constexpr bool has_to_bytes       = false;
@@ -201,24 +200,23 @@ namespace cpx::detail {
         }
     };
 
-    // R<T>::field_tags
+    // custom reflect traits
     template <template <typename> typename R, typename T>
     struct reflect_traits<R, T, std::enable_if_t<!has_reflect_default_traits<R, T>::value>> {
-        static constexpr bool has_default_traits = false;
-        static constexpr bool has_field_tags     = detail::has_reflect_field_tags<R, T>::value;
+        static constexpr bool has_default_traits = detail::has_reflect_field_tags<R, T>::value;
         static constexpr bool has_to_str         = detail::has_reflect_to_str<R, T>::value;
         static constexpr bool has_from_str       = detail::has_reflect_from_str<R, T>::value;
         static constexpr bool has_to_bytes       = detail::has_reflect_to_bytes<R, T>::value;
         static constexpr bool has_from_bytes     = detail::has_reflect_from_bytes<R, T>::value;
 
         static constexpr decltype(auto) of(T &v) {
-            if constexpr (has_field_tags) {
+            if constexpr (has_default_traits) {
                 return apply_field_tags(v, R<T>::field_tags);
             }
         }
 
         static constexpr decltype(auto) of(const T &v) {
-            if constexpr (has_field_tags) {
+            if constexpr (has_default_traits) {
                 return apply_field_tags(v, R<T>::field_tags);
             }
         }
@@ -323,6 +321,9 @@ namespace cpx {
         }
     };
 
+    template <>
+    struct SelfReflect<void> : std::false_type {};
+
     template <typename T>
     struct has_reflect
         : std::bool_constant<
@@ -350,8 +351,7 @@ namespace cpx::test::self_reflect {
     static_assert(std::get<1>(cpx::SelfReflect<foo>::field_tags).tag.key == "b");
     static_assert(std::get<1>(cpx::SelfReflect<foo>::field_tags).tag.skipmissing);
 
-    static_assert(cpx::detail::reflect_traits<cpx::SelfReflect, foo>::has_field_tags == true);
-    static_assert(cpx::detail::reflect_traits<cpx::SelfReflect, foo>::has_default_traits == false);
+    static_assert(cpx::detail::reflect_traits<cpx::SelfReflect, foo>::has_default_traits == true);
 } // namespace cpx::test::self_reflect
 
 #endif

@@ -756,17 +756,20 @@ struct SERIALIZE(T, std::enable_if_t<cpx::protobuf::has_reflect_v<T>>) {
 
     bool from(const T &v) const {
         using traits = cpx::protobuf::reflect_traits<T>;
-        if constexpr (traits::has_to_bytes) {
+        if constexpr (traits::has_to_bytes || traits::has_to_str) {
             std::string str;
-            traits::to_bytes(v, str);
+            if constexpr (traits::has_to_bytes)
+                traits::to_bytes(v, str);
+            else
+                traits::to_str(v, str);
             return SERIALIZE(std::string){doc, ti}.from(str);
-        } else if constexpr (traits::has_to_str) {
-            std::string str;
-            traits::to_str(v, str);
-            return SERIALIZE(std::string){doc, ti}.from(str);
-        } else {
+        }
+
+        if constexpr (traits::has_default_traits) {
             return SERIALIZE(typename traits::const_type){doc, ti}.from(traits::of(v));
         }
+
+        return false;
     }
 };
 
@@ -776,18 +779,39 @@ struct DESERIALIZE(T, std::enable_if_t<cpx::protobuf::has_reflect_v<T>>) {
 
     void into(T &v) const {
         using traits = cpx::protobuf::reflect_traits<T>;
-        if constexpr (traits::has_from_bytes) {
-            std::string r;
-            DESERIALIZE(std::string){doc, ti, wire_type, len}.into(r);
-            traits::from_bytes(v, r);
-        } else if constexpr (traits::has_from_str) {
-            std::string r;
-            DESERIALIZE(std::string){doc, ti, wire_type, len}.into(r);
-            traits::from_str(v, r);
-        } else {
-            decltype(auto) r = traits::of(v);
-            DESERIALIZE(typename traits::type){doc, ti, wire_type, len}.into(r);
-        }
+
+        std::exception_ptr eptr;
+        if constexpr (traits::has_from_bytes)
+            try {
+                std::string_view r;
+                DESERIALIZE(std::string_view){doc, ti, wire_type, len}.into(r);
+                traits::from_bytes(v, r);
+                return;
+            } catch (...) {
+                eptr = std::current_exception();
+            }
+
+        if constexpr (traits::has_from_str)
+            try {
+                std::string_view r;
+                DESERIALIZE(std::string_view){doc, ti, wire_type, len}.into(r);
+                traits::from_str(v, r);
+                return;
+            } catch (...) {
+                eptr = std::current_exception();
+            }
+
+        if constexpr (traits::has_default_traits)
+            try {
+                decltype(auto) r = traits::of(v);
+                DESERIALIZE(typename traits::type){doc, ti, wire_type, len}.into(r);
+                return;
+            } catch (...) {
+                eptr = std::current_exception();
+            }
+
+        if (eptr)
+            std::rethrow_exception(eptr);
     }
 };
 

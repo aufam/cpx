@@ -535,15 +535,18 @@ struct cpx::serde::Serialize<::msgpack::packer<OS>, T, std::enable_if_t<cpx::msg
 
     void from(const T &v) const {
         using traits = cpx::msgpack::reflect_traits<T>;
-        if constexpr (traits::has_to_bytes) {
+
+        if constexpr (traits::has_to_bytes || traits::has_to_str) {
             std::string str;
-            traits::to_bytes(v, str);
+            if constexpr (traits::has_to_bytes)
+                traits::to_bytes(v, str);
+            else
+                traits::to_str(v, str);
             Serialize<::msgpack::packer<OS>, std::string>{doc}.from(str);
-        } else if constexpr (traits::has_to_str) {
-            std::string str;
-            traits::to_str(v, str);
-            Serialize<::msgpack::packer<OS>, std::string>{doc}.from(str);
-        } else {
+            return;
+        }
+
+        if constexpr (traits::has_default_traits) {
             Serialize<::msgpack::packer<OS>, typename traits::const_type>{doc}.from(traits::of(v));
         }
     }
@@ -554,22 +557,40 @@ struct cpx::serde::Deserialize<::msgpack::object, T, std::enable_if_t<cpx::msgpa
     const ::msgpack::object &obj;
 
     void into(T &v) const {
-        decltype(auto) r = cpx::msgpack::reflect_traits<T>::of(v);
-        Deserialize<::msgpack::object, typename cpx::msgpack::reflect_traits<T>::type>{obj}.into(r);
-
         using traits = cpx::msgpack::reflect_traits<T>;
-        if constexpr (traits::has_from_bytes) {
-            std::string r;
-            Deserialize<::msgpack::object, std::string>{obj}.into(r);
-            traits::from_bytes(v, r);
-        } else if constexpr (traits::has_from_str) {
-            std::string r;
-            Deserialize<::msgpack::object, std::string>{obj}.into(r);
-            traits::from_str(v, r);
-        } else {
-            decltype(auto) r = traits::of(v);
-            Deserialize<::msgpack::object, typename traits::type>{obj}.into(r);
-        }
+
+        std::exception_ptr eptr;
+        if constexpr (traits::has_from_bytes)
+            try {
+                std::string_view r;
+                Deserialize<::msgpack::object, std::string_view>{obj}.into(r);
+                traits::from_bytes(v, r);
+                return;
+            } catch (...) {
+                eptr = std::current_exception();
+            }
+
+        if constexpr (traits::has_from_str)
+            try {
+                std::string_view r;
+                Deserialize<::msgpack::object, std::string_view>{obj}.into(r);
+                traits::from_str(v, r);
+                return;
+            } catch (...) {
+                eptr = std::current_exception();
+            }
+
+        if constexpr (traits::has_default_traits)
+            try {
+                decltype(auto) r = traits::of(v);
+                Deserialize<::msgpack::object, typename traits::type>{obj}.into(r);
+                return;
+            } catch (...) {
+                eptr = std::current_exception();
+            }
+
+        if (eptr)
+            std::rethrow_exception(eptr);
     }
 };
 

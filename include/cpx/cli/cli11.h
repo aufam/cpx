@@ -60,10 +60,15 @@ namespace cpx::cli::cli11::detail {
     template <typename T>
     struct is_string_reflect<T, std::enable_if_t<cpx::cli::has_reflect_v<T>>>
         : std::bool_constant<
-              std::is_same_v<typename cpx::cli::reflect_traits<T>::type, std::string> &&
               ( //
-                  std::is_same_v<typename cpx::cli::reflect_traits<T>::const_type, std::string> ||
-                  std::is_same_v<typename cpx::cli::reflect_traits<T>::const_type, std::string_view>
+                  std::is_same_v<typename cpx::cli::reflect_traits<T>::type, std::string> &&
+                  ( //
+                      std::is_same_v<typename cpx::cli::reflect_traits<T>::const_type, std::string> ||
+                      std::is_same_v<typename cpx::cli::reflect_traits<T>::const_type, std::string_view>
+                  )
+              ) ||
+              ( //
+                  cpx::cli::reflect_traits<T>::has_from_str && cpx::cli::reflect_traits<T>::has_to_str
               )
           > {};
 
@@ -74,19 +79,60 @@ namespace cpx::cli::cli11::detail {
     struct is_tuple_reflect<T, std::enable_if_t<cpx::cli::has_reflect_v<T>>>
         : std::bool_constant<cpx::is_tuple_v<typename cpx::cli::reflect_traits<T>::type>> {};
 
-
-    template <typename T, typename Enable = void>
-    struct inspect;
+    template <typename T>
+    T from_string(std::string_view str) {
+        T val = {};
+        if constexpr (cpx::cli::cli11::detail::is_primitive_type<T>::value) {
+            bool ok = CLI::detail::lexical_cast(str, val);
+            if (!ok)
+                throw std::runtime_error("lexical_cast failed");
+        } else {
+            if constexpr (cpx::cli::reflect_traits<T>::has_from_str) {
+                cpx::cli::reflect_traits<T>::from_str(val, str);
+            } else {
+                decltype(auto) proxy = cpx::cli::reflect_traits<T>::of(val);
+                (std::string &)proxy = std::string(str);
+            }
+        }
+        return val;
+    }
 
     template <typename T>
-    struct inspect<T, std::enable_if_t<(std::is_arithmetic_v<T> || std::is_same_v<T, std::string>) && !std::is_same_v<T, bool>>> {
-        static void set_default(CLI::Option *opt, const T &val) {
+    void set_default(const T &val, CLI::Option *opt) {
+        if constexpr (cpx::cli::cli11::detail::is_primitive_type<T>::value) {
             opt->default_val(val);
+        } else {
+            if constexpr (cpx::cli::reflect_traits<T>::has_to_str) {
+                std::string str;
+                cpx::cli::reflect_traits<T>::to_str(val, str);
+                opt->default_str(str);
+            } else {
+                decltype(auto) str = cpx::cli::reflect_traits<T>::of(val);
+                opt->default_str(std::string(str));
+            }
         }
+    }
 
-        static constexpr bool has_check = false;
-    };
-
+    template <typename T>
+    void set_default_vec(const std::vector<T> &val, CLI::Option *opt) {
+        if constexpr (cpx::cli::cli11::detail::is_primitive_type<T>::value) {
+            opt->default_val(val);
+        } else {
+            std::vector<std::string> vec(val.size());
+            if constexpr (cpx::cli::reflect_traits<T>::has_to_str) {
+                for (size_t i = 0; i < val.size(); ++i) {
+                    cpx::cli::reflect_traits<T>::to_str(val[i], vec[i]);
+                }
+                opt->default_val(vec);
+            } else {
+                for (size_t i = 0; i < val.size(); ++i) {
+                    decltype(auto) str = cpx::cli::reflect_traits<T>::of(val[i]);
+                    vec[i]             = (std::string)str;
+                }
+                opt->default_val(vec);
+            }
+        }
+    }
 } // namespace cpx::cli::cli11::detail
 
 template <>
@@ -196,8 +242,13 @@ struct cpx::serde::
 
 // variant primitive
 template <typename... T>
-struct cpx::serde::
-    Deserialize<CLI::App, std::variant<T...>, std::enable_if_t<(cpx::cli::cli11::detail::is_primitive_type<T>::value && ...)>> {
+struct cpx::serde::Deserialize<
+    CLI::App,
+    std::variant<T...>,
+    std::enable_if_t<(
+        (cpx::cli::cli11::detail::is_primitive_type<T>::value || cpx::cli::cli11::detail::is_string_reflect<T>::value) && ...
+    )>
+> {
     CLI::App      &app;
     const TagInfo &ti;
 
@@ -209,10 +260,12 @@ struct cpx::serde::
                 (
                     [&]() {
                         if (!done) {
-                            auto element = T{};
-                            done         = CLI::detail::lexical_cast(str, element);
-                            if (done)
-                                v = std::move(element);
+                            try {
+                                v    = cpx::cli::cli11::detail::from_string<T>(str);
+                                done = true;
+                            } catch (std::exception &e) {
+                                std::ignore = e;
+                            }
                         }
                     }(),
                     ...);
@@ -227,7 +280,7 @@ struct cpx::serde::
         if (!ti.skipmissing)
             opt->required();
         else
-            std::visit([opt](auto &val) { opt->default_val(val); }, v);
+            std::visit([opt](const auto &val) { cpx::cli::cli11::detail::set_default(val, opt); }, v);
         return opt;
     }
 };
@@ -328,9 +381,7 @@ struct cpx::serde::Deserialize<CLI::App, T, std::enable_if_t<cpx::cli11::detail:
             cpx::cli::cli11::detail::generate_option_name(ti),
             [&v](const std::string &str) {
                 try {
-                    decltype(auto) proxy = cpx::cli::reflect_traits<T>::of(v);
-                    decltype(auto) p     = (std::string &)proxy;
-                    p                    = str;
+                    v = cpx::cli::cli11::detail::from_string<T>(str);
                 } catch (std::exception &e) {
                     throw CLI::ParseError("Failed to parse " + str + ": " + e.what(), 1);
                 }
@@ -343,11 +394,8 @@ struct cpx::serde::Deserialize<CLI::App, T, std::enable_if_t<cpx::cli11::detail:
             opt->envname(std::string(ti.env));
         if (!ti.skipmissing)
             opt->required();
-        else {
-            const auto    &cv  = v;
-            decltype(auto) str = cpx::cli::reflect_traits<T>::of(cv);
-            opt->default_str(std::string(str));
-        }
+        else
+            cpx::cli::cli11::detail::set_default(v, opt);
         return opt;
     }
 };
@@ -364,9 +412,7 @@ struct cpx::serde::Deserialize<CLI::App, std::optional<T>, std::enable_if_t<cpx:
             [&v](const std::string &str) {
                 v = T{};
                 try {
-                    decltype(auto) proxy = cpx::cli::reflect_traits<T>::of(v);
-                    decltype(auto) p     = (std::string &)proxy;
-                    p                    = str;
+                    v = cpx::cli::cli11::detail::from_string<T>(str);
                 } catch (std::exception &e) {
                     throw CLI::ParseError("Failed to parse " + str + ": " + e.what(), 1);
                 }
@@ -377,11 +423,8 @@ struct cpx::serde::Deserialize<CLI::App, std::optional<T>, std::enable_if_t<cpx:
 
         if (!ti.env.empty())
             opt->envname(std::string(ti.env));
-        if (v.has_value()) {
-            const auto    &cv  = *v;
-            decltype(auto) str = cpx::cli::reflect_traits<T>::of(cv);
-            opt->default_str(std::string(str));
-        }
+        if (v.has_value())
+            cpx::cli::cli11::detail::set_default(*v, opt);
         return opt;
     }
 };
@@ -401,9 +444,7 @@ struct cpx::serde::Deserialize<CLI::App, std::vector<T>, std::enable_if_t<cpx::c
                     auto &dest = v[i];
                     auto &src  = strs[i];
                     try {
-                        decltype(auto) proxy = cpx::cli::reflect_traits<T>::of(v);
-                        decltype(auto) p     = (std::string &)proxy;
-                        p                    = src;
+                        dest = cpx::cli::cli11::detail::from_string<T>(src);
                     } catch (std::exception &e) {
                         throw CLI::ParseError("Failed to parse " + src + ": " + e.what(), 1);
                     }
@@ -415,14 +456,8 @@ struct cpx::serde::Deserialize<CLI::App, std::vector<T>, std::enable_if_t<cpx::c
 
         if (!ti.env.empty())
             opt->envname(std::string(ti.env));
-        if (!v.empty()) {
-            std::vector<std::string> enum_names;
-            for (const auto &cv : v) {
-                decltype(auto) str = cpx::cli::reflect_traits<T>::of(cv);
-                enum_names.push_back(std::string(str));
-            }
-            opt->default_val(enum_names);
-        }
+        if (!v.empty())
+            cpx::cli::cli11::detail::set_default_vec(v, opt);
         return opt;
     }
 };

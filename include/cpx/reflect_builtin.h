@@ -130,40 +130,21 @@ namespace cpx::test::reflect_builtin {
 #ifdef NEARGYE_MAGIC_ENUM_HPP
 template <typename T>
 struct cpx::WeakReflect<T, std::enable_if_t<std::is_enum_v<T>>> {
-    using const_type = std::string_view;
-    using type       = std::string;
-
-    static const_type of(const T &v) {
-        return magic_enum::enum_name(v);
+    static void from_str(T &v, std::string_view str) {
+        auto e = magic_enum::enum_cast<T>(str);
+        if (!e.has_value()) {
+            std::string what = "invalid value `" + std::string(str) + "`, expected one of {";
+            for (auto &name : magic_enum::enum_names<T>()) {
+                what += std::string(name) + ",";
+            }
+            what += "}";
+            throw cpx::serde::error(std::move(what));
+        }
+        v = *e;
     }
 
-    struct Hook {
-        T   &v;
-        type str = {};
-
-        operator type &() {
-            return str;
-        }
-
-        ~Hook() noexcept(false) {
-            if (std::uncaught_exceptions() > 0)
-                return;
-
-            auto e = magic_enum::enum_cast<T>(str);
-            if (!e.has_value()) {
-                std::string what = "invalid value `" + str + "`, expected one of {";
-                for (auto &name : magic_enum::enum_names<T>()) {
-                    what += std::string(name) + ",";
-                }
-                what += "}";
-                throw cpx::serde::error(std::move(what));
-            }
-            v = *e;
-        }
-    };
-
-    static Hook of(T &v) {
-        return {v};
+    static void to_str(const T &v, std::string &str) {
+        str = (std::string)magic_enum::enum_name(v);
     }
 };
 #endif
