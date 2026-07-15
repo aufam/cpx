@@ -274,7 +274,7 @@ namespace cpx {
     struct SelfReflect {
         static constexpr bool has_field_tags = cpx::detail::has_field_tags<T>::value;
         static constexpr bool has_to_str     = cpx::detail::has_to_str<T>::value;
-        static constexpr bool has_from_str   = cpx::detail::has_to_str<T>::value;
+        static constexpr bool has_from_str   = cpx::detail::has_from_str<T>::value;
         static constexpr bool has_to_bytes   = cpx::detail::has_to_bytes<T>::value;
         static constexpr bool has_from_bytes = cpx::detail::has_from_bytes<T>::value;
 
@@ -344,6 +344,8 @@ namespace cpx::test::self_reflect {
             cpx::field<&foo::a> = "a",
             cpx::field<&foo::b> = "b,skipmissing",
         };
+
+        static void __from_str__(foo &, std::string_view) {}
     };
 
     static_assert(cpx::SelfReflect<int>::field_tags == false);
@@ -352,6 +354,11 @@ namespace cpx::test::self_reflect {
     static_assert(std::get<1>(cpx::SelfReflect<foo>::field_tags).tag.skipmissing);
 
     static_assert(cpx::detail::reflect_traits<cpx::SelfReflect, foo>::has_default_traits == true);
+    static_assert(cpx::detail::reflect_traits<cpx::SelfReflect, foo>::has_from_str == true);
+    static_assert(cpx::detail::reflect_traits<cpx::SelfReflect, foo>::has_to_str == false);
+
+    static_assert(cpx::reflect_traits<foo>::has_from_str == true);
+    static_assert(cpx::reflect_traits<foo>::has_to_str == false);
 } // namespace cpx::test::self_reflect
 
 #endif

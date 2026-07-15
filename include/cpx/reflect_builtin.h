@@ -20,61 +20,23 @@
 
 template <>
 struct cpx::WeakReflect<std::tm> {
-    using type       = std::string;
-    using const_type = std::string;
-
-    static const_type of(const std::tm &tm) {
-        return cpx::tm_to_string(tm);
+    static void to_str(const std::tm &v, std::string &str) {
+        str = cpx::tm_to_string(v);
     }
 
-    static auto of(std::tm &tm) {
-        struct Hook {
-            std::tm    &tm;
-            std::string str = {};
-
-            operator type &() {
-                return str;
-            }
-
-            ~Hook() noexcept(false) {
-                if (std::uncaught_exceptions() > 0)
-                    return;
-                tm = cpx::tm_from_string(str);
-            }
-        };
-
-        Hook h{tm};
-        return h;
+    static void from_str(std::tm &v, std::string_view str) {
+        v = cpx::tm_from_string(std::string(str));
     }
 };
 
 template <>
 struct cpx::WeakReflect<std::timespec> {
-    using type       = std::string;
-    using const_type = std::string;
-
-    static const_type of(const std::timespec &ts) {
-        return cpx::ts_to_string(ts);
+    static void to_str(const std::timespec &v, std::string &str) {
+        str = cpx::ts_to_string(v);
     }
 
-    static auto of(std::timespec &ts) {
-        struct Hook {
-            std::timespec &ts;
-            std::string    str = {};
-
-            operator type &() {
-                return str;
-            }
-
-            ~Hook() noexcept(false) {
-                if (std::uncaught_exceptions() > 0)
-                    return;
-                ts = cpx::ts_from_string(str);
-            }
-        };
-
-        Hook h{ts};
-        return h;
+    static void from_str(std::timespec &v, std::string_view str) {
+        v = cpx::ts_from_string(std::string(str));
     }
 };
 
