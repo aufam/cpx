@@ -488,4 +488,52 @@ if (CPX_BUILD_EXAMPLES)
         protobuf::libprotobuf-lite
         msgpack-cxx
     )
+
+    if (PostgreSQL_FOUND)
+        file(GLOB_RECURSE SRCS examples/6-postgres/*)
+        add_executable(example_postgres ${SRCS})
+        target_compile_features(example_postgres PRIVATE cxx_std_17)
+
+        target_link_libraries(example_postgres PRIVATE
+            cpx
+            fmt
+            PostgreSQL::PostgreSQL
+        )
+    endif()
+
+    file(GLOB_RECURSE SRCS examples/7-openai/*)
+    add_executable(example_openai ${SRCS})
+    target_compile_features(example_openai PRIVATE cxx_std_17)
+
+    target_link_libraries(example_openai PRIVATE
+        cpx
+        fmt
+        yyjson
+        httplib
+        CLI11
+    )
+
+    file(GLOB_RECURSE SRCS examples/8-ollama/*)
+    add_executable(example_ollama ${SRCS})
+    target_compile_features(example_ollama PRIVATE cxx_std_17)
+
+    target_link_libraries(example_ollama PRIVATE
+        cpx
+        fmt
+        yyjson
+        httplib
+        CLI11
+    )
+
+    file(GLOB_RECURSE SRCS examples/9-anthropic/*)
+    add_executable(example_anthropic ${SRCS})
+    target_compile_features(example_anthropic PRIVATE cxx_std_17)
+
+    target_link_libraries(example_anthropic PRIVATE
+        cpx
+        fmt
+        yyjson
+        httplib
+        CLI11
+    )
 endif()

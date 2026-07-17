@@ -1,57 +1,142 @@
 #ifndef CPX_GENAI_ANTHROPIC_H
 #define CPX_GENAI_ANTHROPIC_H
 
-#ifndef CPPHTTPLIB_HTTPLIB_H
-#    include <httplib.h>
-#endif
-
-#include <cpx/genai/anthropic_messages.h>
-#include <cpx/json/yy_json.h>
-#include <httplib.h>
+#include <cpx/genai/openai_common.h>
 
 namespace cpx::genai::anthropic {
-    class Client {
-    protected:
-        httplib::Client cli;
-
-    public:
-        Client(const std::string &base_url, const std::string &api_key)
-            : cli(base_url) {
-            if (!api_key.empty())
-                cli.set_default_headers({
-                    {"Authorization", "Bearer " + api_key}
-                });
-        }
-
-        template <typename Request>
-        MessagesResponse generate_messages(const Request &req, const std::string &version = "v1") {
-            std::string path = "/" + version + "/messages";
-
-            auto res = cli.Post(path, json::yy_json::dump(req), "application/json");
-            if (!res)
-                throw std::runtime_error("httplib request failed: code=" + httplib::to_string(res.error()));
-
-            return json::yy_json::parse<MessagesResponse>(res->body);
-        }
-
-        template <typename Request>
-        httplib::stream::Result generate_messages_stream(const Request &req, const std::string &version = "v1") {
-            std::string path = "/" + version + "/chat/completions";
-
-            auto ret = httplib::stream::Post(cli, path, json::yy_json::dump(req), "application/json");
-            if (!ret)
-                throw std::runtime_error("httplib request failed: code=" + httplib::to_string(ret.error()));
-            if (ret.get_header_value("Content-Type") == "application/json") {
-                auto body = ret.read_all();
-                auto res  = json::yy_json::parse<MessagesResponse>(body);
-                if (res.error().has_value())
-                    throw std::runtime_error("Gemini stream request failed: " + res.error().value().message());
-            }
-            return ret;
-        }
-
-        // TODO: other anthropic features?
-    };
+    CPX_EXPORT using ::cpx::genai::openai::TextBlock;
+    CPX_EXPORT using ::cpx::genai::openai::ImageBlock;
+    CPX_EXPORT using ::cpx::genai::openai::ImageURLBlock;
+    CPX_EXPORT using ::cpx::genai::openai::Content;
+    CPX_EXPORT using ::cpx::genai::openai::Error;
+    CPX_EXPORT using ::cpx::genai::openai::Message;
+    CPX_EXPORT using ::cpx::genai::openai::Usage;
 } // namespace cpx::genai::anthropic
+
+namespace cpx::genai::anthropic::messages {
+    CPX_EXPORT struct Request {
+        int                  max_tokens = 1024;
+        std::string          model;
+        std::vector<Message> messages;
+        bool                 stream = false;
+
+        std::variant<std::string, std::vector<Content>> system;
+
+        static constexpr std::tuple __field_tags__ = {
+            cpx::field<&Request::max_tokens> = "max_tokens",
+            cpx::field<&Request::model>      = "model",
+            cpx::field<&Request::messages>   = "messages",
+            cpx::field<&Request::stream>     = "stream,skipmissing,omitempty",
+            cpx::field<&Request::system>     = "system,skipmissing,omitempty",
+        };
+    };
+    static_assert(std::is_default_constructible_v<Request>);
+
+    CPX_EXPORT struct MessageResponse {
+        std::string          id, model, role, stop_reason, type = "message";
+        std::vector<Content> content;
+        Usage                usage;
+
+        static constexpr std::tuple __field_tags__ = {
+            cpx::field<&MessageResponse::type>        = "type",
+            cpx::field<&MessageResponse::id>          = "id",
+            cpx::field<&MessageResponse::model>       = "model",
+            cpx::field<&MessageResponse::role>        = "role",
+            cpx::field<&MessageResponse::stop_reason> = "stop_reason",
+            cpx::field<&MessageResponse::content>     = "content",
+            cpx::field<&MessageResponse::usage>       = "usage,skipmissing,omitempty",
+        };
+
+        const std::string &get_text() const {
+            return std::get<TextBlock>(content.at(0)).text;
+        }
+    };
+    static_assert(std::is_default_constructible_v<MessageResponse>);
+
+    CPX_EXPORT using Response = MessageResponse;
+
+    CPX_EXPORT struct StartEvent {
+        MessageResponse message;
+        std::string     type = "message_start";
+
+        static constexpr std::tuple __field_tags__ = {
+            cpx::field<&StartEvent::type>    = "type",
+            cpx::field<&StartEvent::message> = "message",
+        };
+    };
+    static_assert(std::is_default_constructible_v<StartEvent>);
+
+    CPX_EXPORT struct BlockStartEvent {
+        Content     content_block;
+        int         index = 0;
+        std::string type  = "content_block_start";
+
+        static constexpr std::tuple __field_tags__ = {
+            cpx::field<&BlockStartEvent::type>          = "type",
+            cpx::field<&BlockStartEvent::index>         = "index",
+            cpx::field<&BlockStartEvent::content_block> = "content_block",
+        };
+    };
+    static_assert(std::is_default_constructible_v<BlockStartEvent>);
+
+    CPX_EXPORT struct DeltaEvent {
+        struct Delta {
+            std::string stop_reason;
+
+            static constexpr std::tuple __field_tags__ = {
+                cpx::field<&Delta::stop_reason> = "stop_reason",
+            };
+        } delta;
+
+        Usage       usage;
+        std::string type = "message_delta";
+
+        static constexpr std::tuple __field_tags__ = {
+            cpx::field<&DeltaEvent::type>  = "type",
+            cpx::field<&DeltaEvent::delta> = "delta",
+            cpx::field<&DeltaEvent::usage> = "usage",
+        };
+    };
+    static_assert(std::is_default_constructible_v<DeltaEvent>);
+
+    CPX_EXPORT struct BlockDeltaEvent {
+        Content     delta;
+        int         index = 0;
+        std::string type  = "content_block_delta";
+
+        static constexpr std::tuple __field_tags__ = {
+            cpx::field<&BlockDeltaEvent::type>  = "type",
+            cpx::field<&BlockDeltaEvent::index> = "index",
+            cpx::field<&BlockDeltaEvent::delta> = "delta",
+        };
+    };
+    static_assert(std::is_default_constructible_v<BlockDeltaEvent>);
+
+    CPX_EXPORT struct OtherEvent {
+        std::string type;
+
+        static constexpr std::tuple __field_tags__ = {
+            cpx::field<&BlockDeltaEvent::type> = "type",
+        };
+    };
+    static_assert(std::is_default_constructible_v<OtherEvent>);
+
+    CPX_EXPORT using StreamResponse = std::variant<StartEvent, DeltaEvent, BlockStartEvent, BlockDeltaEvent, OtherEvent>;
+    static_assert(std::is_default_constructible_v<StreamResponse>);
+
+    CPX_EXPORT struct ErrorResponse {
+        Error error;
+
+        static constexpr std::tuple __field_tags__ = {
+            cpx::field<&ErrorResponse::error> = "error",
+        };
+    };
+    static_assert(std::is_default_constructible_v<ErrorResponse>);
+} // namespace cpx::genai::anthropic::messages
+
+
+namespace cpx {
+    CPX_EXPORT namespace anthropic = cpx::genai::anthropic;
+}
 
 #endif

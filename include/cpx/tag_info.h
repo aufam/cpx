@@ -4,6 +4,7 @@
 #include <cpx/tag.h>
 #include <cpx/optional.h>
 #include <cpx/tuple.h>
+#include <variant>
 
 namespace cpx {
     CPX_EXPORT struct TagInfo {
@@ -298,26 +299,58 @@ namespace cpx::detail {
             return value;
     }
 
-    template <typename, typename = void>
-    struct has_empty : std::false_type {};
-
-    template <typename T>
-    struct has_empty<T, std::void_t<decltype(std::declval<const T &>().empty())>> : std::true_type {};
-
-    template <typename T>
-    std::enable_if_t<!has_empty<T>::value, bool> is_empty_value(const T &value) {
-        if constexpr (is_optional<T>::value)
-            return !value.has_value();
-        else if constexpr (std::is_arithmetic_v<T>)
-            return !bool(value);
-        else
+    template <typename T, typename = void>
+    struct empty_trait {
+        static constexpr bool is_empty(const T &) {
             return false;
-    }
+        }
+    };
 
     template <typename T>
-    std::enable_if_t<has_empty<T>::value, bool> is_empty_value(const T &value) {
-        return value.empty();
+    struct empty_trait<T, std::enable_if_t<std::is_arithmetic_v<T>>> {
+        static constexpr bool is_empty(const T &v) {
+            return v == T(0);
+        }
+    };
+
+    template <typename T>
+    struct empty_trait<T, std::void_t<decltype(std::declval<const T &>().empty())>> {
+        static constexpr bool is_empty(const T &v) {
+            return v.empty();
+        }
+    };
+
+    template <typename T>
+    struct empty_trait<std::optional<T>> {
+        static constexpr bool is_empty(const std::optional<T> &v) {
+            return !v.has_value();
+        }
+    };
+
+    template <typename... T>
+    struct empty_trait<std::variant<T...>> {
+        static constexpr bool is_empty(const std::variant<T...> &v) {
+            return std::visit([](const auto &v) { return empty_trait<std::decay_t<decltype(v)>>::is_empty(v); }, v);
+        }
+    };
+
+    template <typename T>
+    constexpr bool is_empty_value(const T &value) {
+        return empty_trait<T>::is_empty(value);
     }
+
+    namespace test::test_is_empty_value {
+        inline constexpr std::variant<int, std::string_view> v = "";
+
+        struct foo {
+            constexpr bool empty() const {
+                return true;
+            }
+        };
+
+        static_assert(is_empty_value(v));
+        static_assert(is_empty_value(foo{}));
+    } // namespace test::test_is_empty_value
 } // namespace cpx::detail
 
 #endif
