@@ -77,14 +77,19 @@ Contributions are very much welcomed :)
 
 See [`examples/`](examples/) for runnable demos:
 
-| Example                                      | Description                             |
-| -------------------------------------------- | --------------------------------------- |
-| [`0-basic`](examples/0-basic/main.cpp)       | Tag-based serialization/deserialization |
-| [`1-struct`](examples/1-struct/main.cpp)     | Struct reflection (Boost.PFR)           |
-| [`2-enum`](examples/2-enum/main.cpp)         | Enum reflection (magic_enum)            |
-| [`3-cli`](examples/3-cli/main.cpp)           | CLI argument parsing                    |
-| [`4-sql`](examples/4-sql/main.cpp)           | SQLite query builder                    |
-| [`5-protobuf`](examples/5-protobuf/main.cpp) | Protobuf serialization                  |
+| Example                                        | Description                             |
+| ---------------------------------------------- | --------------------------------------- |
+| [`00-basic`](examples/00-basic/main.cpp)       | Tag-based serialization/deserialization |
+| [`01-struct`](examples/01-struct/main.cpp)     | Struct reflection                       |
+| [`02-enum`](examples/02-enum/main.cpp)         | Enum reflection (magic_enum)            |
+| [`03-cli`](examples/03-cli/main.cpp)           | CLI argument parsing                    |
+| [`04-sql`](examples/04-sql/main.cpp)           | SQLite query builder                    |
+| [`05-protobuf`](examples/05-protobuf/main.cpp) | Protobuf serialization                  |
+| [`06-postgres`](examples/06-postgres/main.cpp) | Postgres                                |
+| [`07-openai`](examples/06-openai/main.cpp)     | OpenAI                                  |
+| [`08-ollama`](examples/08-ollama/main.cpp)     | Ollama                                  |
+| [`09-anthropic`](examples/09-anthropic/main.cpp)  | Anthropic                            |
+| [`10-gemini`](examples/10-gemini/main.cpp)     | Gemini                                  |
 
 For more detailed usage, check [`tests/`](tests/).
 
@@ -195,12 +200,9 @@ You can construct one manually:
 std::string name = "Sucipto";
 int         age  = 24;
 
-TagInfo tag_name = "name";
-TagInfo tag_age  = "age";
-
 auto u = std::make_tuple(
-    cpx::tag_tie(name, tag_name),
-    cpx::tag_tie(age, tag_age)
+    cpx::field_ref(name) = "tag_name",
+    cpx::field_ref(age)  = "tag_age"
 ); // std::tuple<cpx::TagInfoFor<std::string&, cpx::TagInfo&>, cpx::TagInfoFor<int&, cpx::TagInfo&>>
 
 fmt::println("{}", u); // (name="Sucipto", age=24)

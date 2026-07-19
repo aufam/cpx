@@ -112,38 +112,55 @@ function(cpx_configure_modules)
             )
         endif()
 
-        if (Protobuf_FOUND)
+        if (TARGET protobuf::libprotobuf)
             target_link_libraries(cpx_mod PUBLIC protobuf::libprotobuf)
             target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
                 src/third_parties/protobuf.cppm
             )
         endif()
 
-        if (SQLite3_FOUND)
+        if (TARGET SQLite3::SQLite3)
+            target_link_libraries(cpx_mod PUBLIC SQLite3::SQLite3)
+            target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
+                src/third_parties/sqlite.cppm
+            )
+        elseif (TARGET SQLite::SQLite3)
             target_link_libraries(cpx_mod PUBLIC SQLite::SQLite3)
             target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
                 src/third_parties/sqlite.cppm
             )
         endif()
 
-        if (PostgreSQL_FOUND)
+        if (TARGET PostgreSQL::PostgreSQL)
             target_link_libraries(cpx_mod PUBLIC PostgreSQL::PostgreSQL)
             target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
                 src/third_parties/postgres.cppm
             )
         endif()
 
-        if (MySQL_FOUND AND NOT MariaDB_FOUND)
+        if (TARGET MariaDB::mariadb)
+            target_link_libraries(cpx_mod PUBLIC MariaDB::mariadb)
+            target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
+                src/third_parties/mysql.cppm
+            )
+        elseif(TARGET MySQL::mysql)
             target_link_libraries(cpx_mod PUBLIC MySQL::mysql)
             target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
                 src/third_parties/mysql.cppm
             )
         endif()
 
-        if (MariaDB_FOUND)
-            target_link_libraries(cpx_mod PUBLIC MariaDB::mariadb)
+        if (TARGET onnxruntime)
+            target_link_libraries(cpx_mod PUBLIC onnxruntime)
             target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
-                src/third_parties/mysql.cppm
+                src/third_parties/onnxruntime.cppm
+            )
+        endif()
+
+        if (TARGET openvino::runtime)
+            target_link_libraries(cpx_mod PUBLIC openvino::runtime)
+            target_sources(cpx_mod PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
+                src/third_parties/openvino.cppm
             )
         endif()
     endif()
@@ -166,12 +183,12 @@ if (PostgreSQL_FOUND)
     message(STATUS "PostgreSQL found.")
 endif()
 
-find_package(MySQL)
+find_package(MySQL QUIET)
 if (MySQL_FOUND)
     message(STATUS "MySQL found.")
 endif()
 
-find_package(MariaDB)
+find_package(MariaDB QUIET)
 if (MariaDB_FOUND)
     message(STATUS "MariaDB found.")
 endif()
@@ -181,9 +198,19 @@ if (Protobuf_FOUND)
     message(STATUS "Protobuf found.")
 endif()
 
-find_package(absl)
+find_package(absl QUIET)
 if (absl_FOUND)
     message(STATUS "absl found.")
+endif()
+
+find_package(OpenVINO QUIET)
+if(OpenVINO_FOUND)
+    message(STATUS "OpenVINO found.")
+endif()
+
+find_package(OpenCV QUIET)
+if(OpenVINO_FOUND)
+    message(STATUS "OpenCV found.")
 endif()
 
 
@@ -386,8 +413,12 @@ if (CPX_BUILD_TESTS)
         cpx_private
         gtest_main
         httplib
-        SQLite::SQLite3
     )
+    if (TARGET SQLite3::SQLite3)
+        target_link_libraries(test_all PUBLIC SQLite3::SQLite3)
+    elseif (TARGET SQLite::SQLite3)
+        target_link_libraries(test_all PUBLIC SQLite::SQLite3)
+    endif()
 
     enable_testing()
     add_test(NAME test_all COMMAND test_all)
@@ -418,7 +449,7 @@ endif()
 
 # examples
 if (CPX_BUILD_EXAMPLES)
-    file(GLOB_RECURSE SRCS examples/0-basic/*)
+    file(GLOB_RECURSE SRCS examples/00-basic/*)
     add_executable(example_basic ${SRCS})
     target_compile_features(example_basic PRIVATE cxx_std_17)
 
@@ -433,7 +464,7 @@ if (CPX_BUILD_EXAMPLES)
         CLI11
     )
 
-    file(GLOB_RECURSE SRCS examples/1-struct/*)
+    file(GLOB_RECURSE SRCS examples/01-struct/*)
     add_executable(example_struct ${SRCS})
     target_compile_features(example_struct PRIVATE cxx_std_17)
 
@@ -444,7 +475,7 @@ if (CPX_BUILD_EXAMPLES)
         tomlplusplus::tomlplusplus
     )
 
-    file(GLOB_RECURSE SRCS examples/2-enum/*)
+    file(GLOB_RECURSE SRCS examples/02-enum/*)
     add_executable(example_enum ${SRCS})
     target_compile_features(example_enum PRIVATE cxx_std_17)
 
@@ -455,7 +486,7 @@ if (CPX_BUILD_EXAMPLES)
         magic_enum
     )
 
-    file(GLOB_RECURSE SRCS examples/3-cli/*)
+    file(GLOB_RECURSE SRCS examples/03-cli/*)
     add_executable(example_cli ${SRCS})
     target_compile_features(example_cli PRIVATE cxx_std_17)
 
@@ -467,7 +498,7 @@ if (CPX_BUILD_EXAMPLES)
         magic_enum
     )
 
-    file(GLOB_RECURSE SRCS examples/4-sql/*)
+    file(GLOB_RECURSE SRCS examples/04-sql/*)
     add_executable(example_sql ${SRCS})
     target_compile_features(example_sql PRIVATE cxx_std_17)
 
@@ -477,7 +508,7 @@ if (CPX_BUILD_EXAMPLES)
         Boost::pfr
     )
 
-    file(GLOB_RECURSE SRCS examples/5-protobuf/*)
+    file(GLOB_RECURSE SRCS examples/05-protobuf/*)
     add_executable(example_protobuf ${SRCS})
     target_compile_features(example_protobuf PRIVATE cxx_std_17)
 
@@ -490,7 +521,7 @@ if (CPX_BUILD_EXAMPLES)
     )
 
     if (PostgreSQL_FOUND)
-        file(GLOB_RECURSE SRCS examples/6-postgres/*)
+        file(GLOB_RECURSE SRCS examples/06-postgres/*)
         add_executable(example_postgres ${SRCS})
         target_compile_features(example_postgres PRIVATE cxx_std_17)
 
@@ -501,7 +532,7 @@ if (CPX_BUILD_EXAMPLES)
         )
     endif()
 
-    file(GLOB_RECURSE SRCS examples/7-openai/*)
+    file(GLOB_RECURSE SRCS examples/07-openai/*)
     add_executable(example_openai ${SRCS})
     target_compile_features(example_openai PRIVATE cxx_std_17)
 
@@ -513,7 +544,7 @@ if (CPX_BUILD_EXAMPLES)
         CLI11
     )
 
-    file(GLOB_RECURSE SRCS examples/8-ollama/*)
+    file(GLOB_RECURSE SRCS examples/08-ollama/*)
     add_executable(example_ollama ${SRCS})
     target_compile_features(example_ollama PRIVATE cxx_std_17)
 
@@ -525,7 +556,7 @@ if (CPX_BUILD_EXAMPLES)
         CLI11
     )
 
-    file(GLOB_RECURSE SRCS examples/9-anthropic/*)
+    file(GLOB_RECURSE SRCS examples/09-anthropic/*)
     add_executable(example_anthropic ${SRCS})
     target_compile_features(example_anthropic PRIVATE cxx_std_17)
 
@@ -536,4 +567,32 @@ if (CPX_BUILD_EXAMPLES)
         httplib
         CLI11
     )
+
+    file(GLOB_RECURSE SRCS examples/10-gemini/*)
+    add_executable(example_gemini ${SRCS})
+    target_compile_features(example_gemini PRIVATE cxx_std_17)
+
+    target_link_libraries(example_gemini PRIVATE
+        cpx
+        fmt
+        yyjson
+        httplib
+        CLI11
+    )
+
+    if (TARGET openvino::runtime AND OpenCV_FOUND)
+        file(GLOB_RECURSE SRCS examples/11-openvino/*)
+        add_executable(example_openvino ${SRCS})
+        target_compile_features(example_openvino PRIVATE cxx_std_17)
+
+        target_link_libraries(example_openvino PRIVATE
+            cpx
+            fmt
+            CLI11
+            openvino::runtime
+            ${OpenCV_LIBS}
+        )
+
+        target_include_directories(example_openvino PRIVATE ${OpenCV_INCLUDE_DIRS})
+    endif()
 endif()

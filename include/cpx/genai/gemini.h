@@ -17,12 +17,12 @@ namespace cpx::genai::gemini {
             };
         };
 
-        std::vector<Part> parts;
         std::string       role;
+        std::vector<Part> parts;
 
         static constexpr std::tuple __field_tags__ = {
-            cpx::field<&Content::parts> = "parts",
             cpx::field<&Content::role>  = "role,skipmissing,omitempty",
+            cpx::field<&Content::parts> = "parts",
         };
     };
     static_assert(std::is_default_constructible_v<Content>);
@@ -41,7 +41,7 @@ namespace cpx::genai::gemini {
     };
     static_assert(std::is_default_constructible_v<Candidate>);
 
-    struct UsageMetaData {
+    struct UsageMetadata {
         struct PromptTokensDetail {
             std::string modality;
             int         token_count = 0;
@@ -57,17 +57,19 @@ namespace cpx::genai::gemini {
         int                             total_token_count      = 0;
         int                             thoughts_token_count   = 0;
         std::vector<PromptTokensDetail> prompt_tokens_details;
+        std::string                     service_tier;
 
         static constexpr std::tuple __field_tags__ = {
-            cpx::field<&UsageMetaData::prompt_token_count>     = "promtTokenCount",
-            cpx::field<&UsageMetaData::candidates_token_count> = "candidatesTokenCount",
-            cpx::field<&UsageMetaData::total_token_count>      = "totalTokenCount",
-            cpx::field<&UsageMetaData::thoughts_token_count>   = "thoughtsTokenCount",
-            cpx::field<&UsageMetaData::prompt_tokens_details>  = "promptTokensDetails",
+            cpx::field<&UsageMetadata::prompt_token_count>     = "promptTokenCount,skipmissing,omitempty",
+            cpx::field<&UsageMetadata::candidates_token_count> = "candidatesTokenCount,skipmissing,omitempty",
+            cpx::field<&UsageMetadata::total_token_count>      = "totalTokenCount,skipmissing,omitempty",
+            cpx::field<&UsageMetadata::thoughts_token_count>   = "thoughtsTokenCount,skipmissing,omitempty",
+            cpx::field<&UsageMetadata::prompt_tokens_details>  = "promptTokensDetails",
+            cpx::field<&UsageMetadata::service_tier>           = "serviceTier,skipmissing,omitempty",
         };
     };
-    static_assert(std::is_default_constructible_v<UsageMetaData>);
-    static_assert(std::is_default_constructible_v<UsageMetaData::PromptTokensDetail>);
+    static_assert(std::is_default_constructible_v<UsageMetadata>);
+    static_assert(std::is_default_constructible_v<UsageMetadata::PromptTokensDetail>);
 
     struct Error {
         struct Detail {
@@ -151,15 +153,15 @@ namespace cpx::genai::gemini::generate_content {
 
     CPX_EXPORT struct Response {
         std::vector<Candidate> candidates;
-        UsageMetaData          usage_meta_data;
+        UsageMetadata          usage_metadata;
         std::string            model_version;
         std::string            response_id;
 
         static constexpr std::tuple __field_tags__ = {
-            cpx::field<&Response::candidates>      = "candidates",
-            cpx::field<&Response::model_version>   = "modelVersion",
-            cpx::field<&Response::response_id>     = "responseId",
-            cpx::field<&Response::usage_meta_data> = "usageMetaData",
+            cpx::field<&Response::candidates>     = "candidates",
+            cpx::field<&Response::model_version>  = "modelVersion",
+            cpx::field<&Response::response_id>    = "responseId",
+            cpx::field<&Response::usage_metadata> = "usageMetadata",
         };
 
         const std::string &get_text() const & {

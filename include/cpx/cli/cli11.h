@@ -187,6 +187,19 @@ struct cpx::serde::Deserialize<CLI::App, bool> {
     }
 };
 
+// optional bool
+template <>
+struct cpx::serde::Deserialize<CLI::App, std::optional<bool>> {
+    CLI::App      &app;
+    const TagInfo &ti;
+
+    CLI::Option *into(std::optional<bool> &v) const {
+        auto name = cpx::cli::cli11::detail::generate_option_name(ti);
+        name += ",!--no-" + std::string(ti.key.empty() ? ti.short_ : ti.key);
+        return this->app.add_flag(name, v, std::string(ti.help));
+    }
+};
+
 // primitive types
 template <typename T>
 struct cpx::serde::Deserialize<CLI::App, T, std::enable_if_t<cpx::cli::cli11::detail::is_primitive_type<T>::value>> {
