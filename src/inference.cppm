@@ -9,6 +9,7 @@ module;
 #include <stdexcept>
 #include <vector>
 #include <variant>
+#include <memory>
 
 export module cpx.inference;
 import cpx;
