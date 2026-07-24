@@ -27,14 +27,14 @@ struct App {
 
     Add add;
 
-    static constexpr auto __field_tags__ = std::make_tuple(
+    static constexpr std::tuple __field_tags__ = {
         cpx::field<&App::my_name>   = "name,      short=n,     help=Name to greet,        env=USER   ",
         cpx::field<&App::verbose>   = "verbose,   short=v,     help=Enable verbose output            ",
         cpx::field<&App::log_level> = "log-level,              help=Log level,            skipmissing",
         cpx::field<&App::delay>     = "delay,                  help=specify delay,        skipmissing",
         cpx::field<&App::greet>     = "greet,                  help=Greet the name                   ",
-        cpx::field<&App::add>       = "add,                    help=Add two numbers                  "
-    );
+        cpx::field<&App::add>       = "add,                    help=Add two numbers                  ",
+    };
 };
 
 int main(int argc, char **argv) {

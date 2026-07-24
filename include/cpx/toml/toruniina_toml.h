@@ -354,6 +354,8 @@ struct SERIALIZE(std::tuple<Ts...>) {
                     e.add_context(i);
                 throw;
             }
+
+            val.comments() = std::vector{std::string(t.help)};
             if (is_tbl)
                 node.as_table(std::nothrow)[std::string(t.key)] = std::move(val);
             else
