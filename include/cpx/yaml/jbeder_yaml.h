@@ -46,17 +46,17 @@ namespace cpx::yaml::jbeder_yaml {
     using Dump = DUMP(To);
 
     CPX_EXPORT template <typename T>
-    void parse(const std::string &str, T &val);
+    void parse(std::string_view str, T &val);
 
     CPX_EXPORT template <typename T>
     void parse(std::istream &stream, T &val, const std::string &filename = "");
 
     CPX_EXPORT template <typename T>
-    void parse_from_file(const std::string &path, T &val);
+    void parse_from_file(std::string_view path, T &val);
 
     CPX_EXPORT template <typename T>
     [[nodiscard]]
-    std::enable_if_t<std::is_default_constructible_v<T>, T> parse(const std::string &str);
+    std::enable_if_t<std::is_default_constructible_v<T>, T> parse(std::string_view str);
 
     CPX_EXPORT template <typename T>
     [[nodiscard]]
@@ -64,7 +64,7 @@ namespace cpx::yaml::jbeder_yaml {
 
     CPX_EXPORT template <typename T>
     [[nodiscard]]
-    std::enable_if_t<std::is_default_constructible_v<T>, T> parse_from_file(const std::string &path);
+    std::enable_if_t<std::is_default_constructible_v<T>, T> parse_from_file(std::string_view path);
 
     CPX_EXPORT template <typename T>
     [[nodiscard]]
@@ -562,15 +562,60 @@ struct DUMP(std::string) {
 };
 
 template <>
-struct PARSE(std::string) {
-    const std::string &src;
+struct PARSE(std::string_view) {
+    std::string_view src;
+
+    class string_view_buf final : public std::streambuf {
+        std::string_view view_;
+
+    public:
+        explicit string_view_buf(std::string_view sv)
+            : view_(sv) {
+            auto *p = const_cast<char *>(view_.data());
+            setg(p, p, p + view_.size());
+        }
+
+    protected:
+        pos_type seekoff(off_type off, std::ios_base::seekdir dir, std::ios_base::openmode which) override {
+            if (!(which & std::ios_base::in))
+                return {off_type(-1)};
+
+            char *base = eback();
+            char *end  = egptr();
+            char *cur  = gptr();
+
+            char *next = nullptr;
+            switch (dir) {
+            case std::ios_base::beg: next = base + off; break;
+            case std::ios_base::cur: next = cur + off; break;
+            case std::ios_base::end: next = end + off; break;
+            default: return {off_type(-1)};
+            }
+
+            if (next < base || next > end)
+                return {off_type(-1)};
+
+            setg(base, next, end);
+            return {next - base};
+        }
+
+        pos_type seekpos(pos_type pos, std::ios_base::openmode which) override {
+            return seekoff(off_type(pos), std::ios_base::beg, which);
+        }
+    };
 
     template <typename T>
     void into(T &v, bool src_is_path = false) const {
         try {
             __yaml_cpp::Node val;
             try {
-                val = src_is_path ? __yaml_cpp::LoadFile(src) : __yaml_cpp::Load(src);
+                if (src_is_path) {
+                    val = __yaml_cpp::LoadFile(std::string(src));
+                } else {
+                    string_view_buf buf(src);
+                    std::istream    iss(&buf);
+                    val = __yaml_cpp::Load(iss);
+                }
             } catch (std::exception &e) {
                 throw error(e.what());
             }
@@ -613,8 +658,8 @@ struct PARSE(std::istream) {
 };
 
 template <typename T>
-void cpx::yaml::jbeder_yaml::parse(const std::string &str, T &val) {
-    Parse<std::string>{str}.into(val, false);
+void cpx::yaml::jbeder_yaml::parse(std::string_view str, T &val) {
+    Parse<std::string_view>{str}.into(val, false);
 }
 
 template <typename T>
@@ -623,15 +668,15 @@ void cpx::yaml::jbeder_yaml::parse(std::istream &stream, T &val, const std::stri
 }
 
 template <typename T>
-void cpx::yaml::jbeder_yaml::parse_from_file(const std::string &path, T &val) {
-    Parse<std::string>{path}.into(val, true);
+void cpx::yaml::jbeder_yaml::parse_from_file(std::string_view path, T &val) {
+    Parse<std::string_view>{path}.into(val, true);
 }
 
 template <typename T>
 [[nodiscard]]
-std::enable_if_t<std::is_default_constructible_v<T>, T> cpx::yaml::jbeder_yaml::parse(const std::string &str) {
+std::enable_if_t<std::is_default_constructible_v<T>, T> cpx::yaml::jbeder_yaml::parse(std::string_view str) {
     T val = {};
-    Parse<std::string>{str}.into(val, false);
+    Parse<std::string_view>{str}.into(val, false);
     return val;
 }
 
@@ -646,9 +691,9 @@ cpx::yaml::jbeder_yaml::parse(std::istream &stream, const std::string &filename)
 
 template <typename T>
 [[nodiscard]]
-std::enable_if_t<std::is_default_constructible_v<T>, T> cpx::yaml::jbeder_yaml::parse_from_file(const std::string &path) {
+std::enable_if_t<std::is_default_constructible_v<T>, T> cpx::yaml::jbeder_yaml::parse_from_file(std::string_view path) {
     T val = {};
-    Parse<std::string>{path}.into(val, true);
+    Parse<std::string_view>{path}.into(val, true);
     return val;
 }
 

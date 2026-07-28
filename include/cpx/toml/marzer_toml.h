@@ -45,17 +45,17 @@ namespace cpx::toml::marzer_toml {
     using Dump = DUMP(To);
 
     CPX_EXPORT template <typename T>
-    void parse(const std::string &str, T &val);
+    void parse(std::string_view str, T &val);
 
     CPX_EXPORT template <typename T>
     void parse(std::istream &stream, T &val);
 
     CPX_EXPORT template <typename T>
-    void parse_from_file(const std::string &path, T &val);
+    void parse_from_file(std::string_view path, T &val);
 
     CPX_EXPORT template <typename T>
     [[nodiscard]]
-    std::enable_if_t<std::is_default_constructible_v<T>, T> parse(const std::string &str);
+    std::enable_if_t<std::is_default_constructible_v<T>, T> parse(std::string_view str);
 
     CPX_EXPORT template <typename T>
     [[nodiscard]]
@@ -63,11 +63,11 @@ namespace cpx::toml::marzer_toml {
 
     CPX_EXPORT template <typename T>
     [[nodiscard]]
-    std::enable_if_t<std::is_default_constructible_v<T>, T> parse_from_file(const std::string &path);
+    std::enable_if_t<std::is_default_constructible_v<T>, T> parse_from_file(std::string_view path);
 
-    CPX_EXPORT template <typename T>
+    CPX_EXPORT template <typename A = std::allocator<char>, typename T>
     [[nodiscard]]
-    std::string dump(const T &val);
+    std::basic_string<char, std::char_traits<char>, A> dump(const T &val);
 
     CPX_EXPORT template <typename T>
     void dump(std::ostream &, const T &val);
@@ -684,13 +684,13 @@ struct DUMP(std::ostream) {
     }
 };
 
-template <>
-struct DUMP(std::string) {
+template <typename CT, typename A>
+struct DUMP(std::basic_string<char, CT, A>) {
     template <typename T>
-    std::string from(const T &v) const {
+    std::basic_string<char, CT, A> from(const T &v) const {
         std::unique_ptr<__tomlpp::node> val = SERIALIZE(T){}.from(v);
         if (__tomlpp::table *tbl = val->as_table()) {
-            std::ostringstream oss;
+            std::basic_ostringstream<char, CT, A> oss;
             oss << *tbl;
             return oss.str();
         } else
@@ -730,8 +730,8 @@ struct PARSE(std::istream) {
 };
 
 template <>
-struct PARSE(std::string) {
-    const std::string &src;
+struct PARSE(std::string_view) {
+    std::string_view src;
 
     template <typename T>
     void into(T &val, bool src_is_path = false) const {
@@ -754,8 +754,8 @@ struct PARSE(std::string) {
 };
 
 template <typename T>
-void cpx::toml::marzer_toml::parse(const std::string &str, T &val) {
-    Parse<std::string>{str}.into(val);
+void cpx::toml::marzer_toml::parse(std::string_view str, T &val) {
+    Parse<std::string_view>{str}.into(val);
 }
 
 template <typename T>
@@ -764,15 +764,15 @@ void cpx::toml::marzer_toml::parse(std::istream &stream, T &val) {
 }
 
 template <typename T>
-void cpx::toml::marzer_toml::parse_from_file(const std::string &path, T &val) {
-    Parse<std::string>{path}.into(val, true);
+void cpx::toml::marzer_toml::parse_from_file(std::string_view path, T &val) {
+    Parse<std::string_view>{path}.into(val, true);
 }
 
 template <typename T>
 [[nodiscard]]
-std::enable_if_t<std::is_default_constructible_v<T>, T> cpx::toml::marzer_toml::parse(const std::string &str) {
+std::enable_if_t<std::is_default_constructible_v<T>, T> cpx::toml::marzer_toml::parse(std::string_view str) {
     T val = {};
-    Parse<std::string>{str}.into(val);
+    Parse<std::string_view>{str}.into(val);
     return val;
 }
 
@@ -786,16 +786,16 @@ std::enable_if_t<std::is_default_constructible_v<T>, T> cpx::toml::marzer_toml::
 
 template <typename T>
 [[nodiscard]]
-std::enable_if_t<std::is_default_constructible_v<T>, T> cpx::toml::marzer_toml::parse_from_file(const std::string &path) {
+std::enable_if_t<std::is_default_constructible_v<T>, T> cpx::toml::marzer_toml::parse_from_file(std::string_view path) {
     T val = {};
-    Parse<std::string>{path}.into(val, true);
+    Parse<std::string_view>{path}.into(val, true);
     return val;
 }
 
-template <typename T>
+template <typename A, typename T>
 [[nodiscard]]
-std::string cpx::toml::marzer_toml::dump(const T &val) {
-    return Dump<std::string>{}.from(val);
+std::basic_string<char, std::char_traits<char>, A> cpx::toml::marzer_toml::dump(const T &val) {
+    return Dump<std::basic_string<char, std::char_traits<char>, A>>{}.from(val);
 }
 
 template <typename T>

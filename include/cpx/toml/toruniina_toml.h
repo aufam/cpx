@@ -47,18 +47,17 @@ namespace cpx::toml::toruniina_toml {
     using Dump = DUMP(To);
 
     CPX_EXPORT template <typename T>
-    void parse(const std::string &str, T &val, const spec &s = spec::default_version());
+    void parse(std::string_view str, T &val, const spec &s = spec::default_version());
 
     CPX_EXPORT template <typename T>
     void parse(std::istream &stream, T &val, const spec &s = spec::default_version(), const std::string &filename = "");
 
     CPX_EXPORT template <typename T>
-    void parse_from_file(const std::string &path, T &val, const spec &s = spec::default_version());
+    void parse_from_file(std::string_view path, T &val, const spec &s = spec::default_version());
 
     CPX_EXPORT template <typename T>
     [[nodiscard]]
-    std::enable_if_t<std::is_default_constructible_v<T>, T>
-    parse(const std::string &str, const spec &s = spec::default_version());
+    std::enable_if_t<std::is_default_constructible_v<T>, T> parse(std::string_view str, const spec &s = spec::default_version());
 
     CPX_EXPORT template <typename T>
     [[nodiscard]]
@@ -68,7 +67,7 @@ namespace cpx::toml::toruniina_toml {
     CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::enable_if_t<std::is_default_constructible_v<T>, T>
-    parse_from_file(const std::string &path, const spec &s = spec::default_version());
+    parse_from_file(std::string_view path, const spec &s = spec::default_version());
 
     CPX_EXPORT template <typename T>
     [[nodiscard]]
@@ -723,9 +722,48 @@ struct PARSE(std::istream) {
 };
 
 template <>
-struct PARSE(std::string) {
-    const std::string                &src;
+struct PARSE(std::string_view) {
+    std::string_view                  src;
     ::cpx::toml::toruniina_toml::spec spec = ::cpx::toml::toruniina_toml::spec::default_version();
+
+    class string_view_buf final : public std::streambuf {
+        std::string_view view_;
+
+    public:
+        explicit string_view_buf(std::string_view sv)
+            : view_(sv) {
+            auto *p = const_cast<char *>(view_.data());
+            setg(p, p, p + view_.size());
+        }
+
+    protected:
+        pos_type seekoff(off_type off, std::ios_base::seekdir dir, std::ios_base::openmode which) override {
+            if (!(which & std::ios_base::in))
+                return {off_type(-1)};
+
+            char *base = eback();
+            char *end  = egptr();
+            char *cur  = gptr();
+
+            char *next = nullptr;
+            switch (dir) {
+            case std::ios_base::beg: next = base + off; break;
+            case std::ios_base::cur: next = cur + off; break;
+            case std::ios_base::end: next = end + off; break;
+            default: return {off_type(-1)};
+            }
+
+            if (next < base || next > end)
+                return {off_type(-1)};
+
+            setg(base, next, end);
+            return {next - base};
+        }
+
+        pos_type seekpos(pos_type pos, std::ios_base::openmode which) override {
+            return seekoff(off_type(pos), std::ios_base::beg, which);
+        }
+    };
 
     template <typename T>
     void into(T &val, bool src_is_path = false) const {
@@ -734,9 +772,10 @@ struct PARSE(std::string) {
         try {
             try {
                 if (src_is_path) {
-                    tbl = __toml11::parse(src, spec);
+                    tbl = __toml11::parse(std::string(src), spec);
                 } else {
-                    std::istringstream iss(src);
+                    string_view_buf buf(src);
+                    std::istream    iss(&buf);
                     tbl = __toml11::parse(iss, "<unknown>", spec);
                 }
             } catch (std::exception &e) {
@@ -745,15 +784,15 @@ struct PARSE(std::string) {
             DESERIALIZE(T){tbl}.into(val);
         } catch (error &err) {
             if (src_is_path)
-                err.path = src;
+                err.path = std::string(src);
             throw;
         }
     }
 };
 
 template <typename T>
-void cpx::toml::toruniina_toml::parse(const std::string &str, T &val, const spec &spec) {
-    Parse<std::string>{str, spec}.into(val, false);
+void cpx::toml::toruniina_toml::parse(std::string_view str, T &val, const spec &spec) {
+    Parse<std::string_view>{str, spec}.into(val, false);
 }
 
 template <typename T>
@@ -762,16 +801,15 @@ void cpx::toml::toruniina_toml::parse(std::istream &stream, T &val, const spec &
 }
 
 template <typename T>
-void cpx::toml::toruniina_toml::parse_from_file(const std::string &path, T &val, const spec &spec) {
-    Parse<std::string>{path, spec}.into(val, true);
+void cpx::toml::toruniina_toml::parse_from_file(std::string_view path, T &val, const spec &spec) {
+    Parse<std::string_view>{path, spec}.into(val, true);
 }
 
 template <typename T>
 [[nodiscard]]
-std::enable_if_t<std::is_default_constructible_v<T>, T>
-cpx::toml::toruniina_toml::parse(const std::string &str, const spec &spec) {
+std::enable_if_t<std::is_default_constructible_v<T>, T> cpx::toml::toruniina_toml::parse(std::string_view str, const spec &spec) {
     T val = {};
-    Parse<std::string>{str, spec}.into(val, false);
+    Parse<std::string_view>{str, spec}.into(val, false);
     return val;
 }
 
@@ -787,9 +825,9 @@ cpx::toml::toruniina_toml::parse(std::istream &stream, const spec &spec, const s
 template <typename T>
 [[nodiscard]]
 std::enable_if_t<std::is_default_constructible_v<T>, T>
-cpx::toml::toruniina_toml::parse_from_file(const std::string &path, const spec &spec) {
+cpx::toml::toruniina_toml::parse_from_file(std::string_view path, const spec &spec) {
     T val = {};
-    Parse<std::string>{path, spec}.into(val, true);
+    Parse<std::string_view>{path, spec}.into(val, true);
     return val;
 }
 

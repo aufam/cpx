@@ -1,4 +1,5 @@
 #include <cpx/toml/toruniina_toml.h>
+#include <cpx/yaml/jbeder_yaml.h>
 #include <gtest/gtest.h>
 
 struct Package {
@@ -44,6 +45,24 @@ TEST(toml, toml11) {
             description = "String formatter"
             homepage = "https://fmt.dev"
         )toml",
+        c
+    );
+
+    EXPECT_EQ(c.package.name, "fmt");
+    EXPECT_EQ(c.package.edition, 11);
+    EXPECT_EQ(c.package.description, "String formatter");
+}
+
+TEST(yaml, yaml_cpp) {
+    Carton c;
+    cpx::jbeder_yaml::parse(
+        R"yaml(
+            package:
+                name: fmt
+                edition: 11
+                description: String formatter
+                homepage: "https://fmt.dev"
+        )yaml",
         c
     );
 

@@ -81,22 +81,26 @@ namespace cpx::json::rapid_json {
     using Dump = DUMP(To);
 
     CPX_EXPORT template <typename T>
-    void parse(const std::string &str, T &val);
+    void parse(std::string_view str, T &val);
 
     CPX_EXPORT template <typename T>
     void parse(std::istream &, T &val);
 
     CPX_EXPORT template <typename T>
     [[nodiscard]]
-    std::enable_if_t<std::is_default_constructible_v<T>, T> parse(const std::string &str);
+    std::enable_if_t<std::is_default_constructible_v<T>, T> parse(std::string_view str);
 
     CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::enable_if_t<std::is_default_constructible_v<T>, T> parse(std::istream &);
 
+    CPX_EXPORT template <typename A = std::allocator<char>, typename T>
+    [[nodiscard]]
+    std::basic_string<char, std::char_traits<char>, A> dump(const T &val);
+
     CPX_EXPORT template <typename T>
     [[nodiscard]]
-    std::string dump(const T &val);
+    std::pair<std::string_view, rapidjson::StringBuffer> dump_view(const T &val);
 
     CPX_EXPORT template <typename T>
     void dump(std::ostream &, const T &val);
@@ -105,7 +109,11 @@ namespace cpx::json::rapid_json {
     void dump(const T &&val) = delete;
 
     CPX_EXPORT template <typename T>
+    void dump_view(const T &&val) = delete;
+
+    CPX_EXPORT template <typename T>
     void dump(std::ostream &, const T &&val) = delete;
+
 } // namespace cpx::json::rapid_json
 
 namespace cpx {
@@ -956,16 +964,16 @@ struct SERIALIZE_SAX(OS, T, std::enable_if_t<cpx::json::has_reflect_v<T>>) {
 };
 
 // --- parse and dump ---
-template <typename CT, typename A>
-struct PARSE(std::basic_string<char, CT, A>) {
-    const std::basic_string<char, CT, A> &src;
+template <>
+struct PARSE(std::string_view) {
+    std::string_view src;
 
     template <typename T>
     void into(T &v) const {
         rapidjson::Document doc;
 
         constexpr auto flag = rapidjson::kParseDefaultFlags;
-        doc.Parse<flag>(src.c_str(), src.size());
+        doc.Parse<flag>(src.data(), src.size());
         if (doc.HasParseError())
             throw error(rapidjson::GetParseError_En(doc.GetParseError()));
 
@@ -1014,6 +1022,22 @@ struct DUMP(std::basic_string<char, CT, A>) {
     }
 };
 
+template <>
+struct DUMP(std::string_view) {
+
+    template <typename T>
+    std::pair<std::string_view, rapidjson::StringBuffer> from(const T &val) const {
+        rapidjson::Document doc;
+        rapidjson::Value    v = Serialize<rapidjson::Value, T>{doc}.from(val);
+
+        rapidjson::StringBuffer                    buf;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(buf);
+
+        v.Accept(writer);
+        return {std::string_view(buf.GetString(), buf.GetSize()), std::move(buf)};
+    }
+};
+
 #ifdef RAPIDJSON_OSTREAMWRAPPER_H_
 template <>
 struct DUMP_SAX(rapidjson::OStreamWrapper, std::ostream) {
@@ -1035,15 +1059,15 @@ struct DUMP_SAX(rapidjson::OStreamWrapper, std::ostream) {
 #endif
 
 template <typename T>
-void cpx::json::rapid_json::parse(const std::string &str, T &val) {
-    Parse<std::string>{str}.into(val);
+void cpx::json::rapid_json::parse(std::string_view str, T &val) {
+    Parse<std::string_view>{str}.into(val);
 }
 
 template <typename T>
 [[nodiscard]]
-std::enable_if_t<std::is_default_constructible_v<T>, T> cpx::json::rapid_json::parse(const std::string &str) {
+std::enable_if_t<std::is_default_constructible_v<T>, T> cpx::json::rapid_json::parse(std::string_view str) {
     T val = {};
-    Parse<std::string>{str}.into(val);
+    Parse<std::string_view>{str}.into(val);
     return val;
 }
 
@@ -1054,10 +1078,16 @@ void cpx::json::rapid_json::parse(std::istream &is, T &val) {
 }
 #endif
 
+template <typename A, typename T>
+[[nodiscard]]
+std::basic_string<char, std::char_traits<char>, A> cpx::json::rapid_json::dump(const T &val) {
+    return Dump<std::basic_string<char, std::char_traits<char>, A>>{}.from(val);
+}
+
 template <typename T>
 [[nodiscard]]
-std::string cpx::json::rapid_json::dump(const T &val) {
-    return Dump<std::string>{}.from(val);
+std::pair<std::string_view, rapidjson::StringBuffer> cpx::json::rapid_json::dump_view(const T &val) {
+    return Dump<std::string_view>{}.from(val);
 }
 
 #ifdef RAPIDJSON_OSTREAMWRAPPER_H_
