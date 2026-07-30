@@ -330,7 +330,7 @@ struct cpx::serde::Deserialize<CLI::App, std::tuple<Ts...>> {
             if constexpr (deserializable) {
                 CLI::Option *opt = Deserialize<CLI::App, T>{app, t}.into(v);
                 if (opt && !t.oneof.empty()) {
-                    CLI::Option_group *group = get_or_create_group(app, oneof_groups, t.oneof);
+                    CLI::Option_group *group = get_or_create_group(app, oneof_groups, t.oneof, t.skipmissing);
                     group->add_option(opt);
                 }
             }
@@ -340,14 +340,14 @@ struct cpx::serde::Deserialize<CLI::App, std::tuple<Ts...>> {
     }
 
     static CLI::Option_group *get_or_create_group(
-        CLI::App &app, std::unordered_map<std::string, CLI::Option_group *> &oneof_groups, std::string_view name
+        CLI::App &app, std::unordered_map<std::string, CLI::Option_group *> &oneof_groups, std::string_view name, bool skipmissing
     ) {
         auto it = oneof_groups.find(std::string(name));
         if (it != oneof_groups.end())
             return it->second;
 
         auto *g = app.add_option_group(std::string(name));
-        g->require_option(1, 1);
+        g->require_option(!skipmissing, 1);
 
         oneof_groups.emplace(name, g);
         return g;
