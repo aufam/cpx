@@ -38,6 +38,9 @@ msgpack-mod = { mod = ["src/third_parties/msgpack.cppm"], optional = true }
 protobuf = { version = "3.21.12", optional = true  }
 protobuf-mod = { mod = ["src/third_parties/protobuf.cppm"], optional = true }
 
+sqlite = { version = "3.53.3", optional = true  }
+sqlite-mod = { mod = ["./src/third_parties/sqlite.cppm"], optional = true }
+
 
 [features]
 fmt = ["dep:fmt", "dep:fmt-mod"]
@@ -53,6 +56,8 @@ yaml-cpp = ["dep:yaml-cpp", "dep:yaml-cpp-mod"]
 msgpack = ["dep:msgpack", "dep:msgpack-mod"]
 protobuf = ["dep:protobuf", "dep:protobuf-mod"]
 
+sqlite = ["dep:sqlite", "dep:sqlite-mod"]
+
 json = ["yyjson"]
 toml = ["toml11"]
-yaml = ["yaml"]
+yaml = ["yaml-cpp"]
