@@ -169,9 +169,12 @@ struct DESERIALIZE(T, std::enable_if_t<std::is_signed_v<T> && !std::is_same_v<T,
     yyjson_val *val;
 
     void into(T &v) const {
-        if (!yyjson_is_sint(val) && !yyjson_is_uint(val))
+        if (yyjson_is_sint(val))
+            v = (T)yyjson_get_sint(val);
+        else if (yyjson_is_uint(val))
+            v = (T)yyjson_get_uint(val);
+        else
             throw type_mismatch_error("sint", yyjson_get_type_desc(val));
-        v = (T)yyjson_get_sint(val);
     }
 };
 
@@ -211,9 +214,14 @@ struct DESERIALIZE(T, std::enable_if_t<std::is_floating_point_v<T>>) {
     yyjson_val *val;
 
     void into(T &v) const {
-        if (!yyjson_is_real(val) && !yyjson_is_sint(val) && !yyjson_is_uint(val))
+        if (yyjson_is_real(val))
+            v = (T)yyjson_get_real(val);
+        if (yyjson_is_sint(val))
+            v = (T)yyjson_get_sint(val);
+        else if (yyjson_is_uint(val))
+            v = (T)yyjson_get_uint(val);
+        else
             throw type_mismatch_error("real", yyjson_get_type_desc(val));
-        v = (T)yyjson_get_real(val);
     }
 };
 
