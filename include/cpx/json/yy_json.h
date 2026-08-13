@@ -216,7 +216,7 @@ struct DESERIALIZE(T, std::enable_if_t<std::is_floating_point_v<T>>) {
     void into(T &v) const {
         if (yyjson_is_real(val))
             v = (T)yyjson_get_real(val);
-        if (yyjson_is_sint(val))
+        else if (yyjson_is_sint(val))
             v = (T)yyjson_get_sint(val);
         else if (yyjson_is_uint(val))
             v = (T)yyjson_get_uint(val);
