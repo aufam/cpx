@@ -2,6 +2,7 @@
 #define CPX_MULTITHREADING_CHANNEL
 
 #include <cpx/multithreading/semaphore.h>
+#include <atomic>
 #include <queue>
 #include <future>
 
