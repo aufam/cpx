@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <variant>
 #include <vector>
+#include <sstream>
 
 #ifndef TOMLPLUSPLUS_HPP
 #    include <toml++/toml.h>

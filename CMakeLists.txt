@@ -250,7 +250,7 @@ CPMAddPackage(
 CPMAddPackage(
     NAME            rapidjson
     GIT_REPOSITORY  "https://github.com/Tencent/rapidjson"
-    GIT_TAG         master
+    GIT_TAG         24b5e7a
     DOWNLOAD_ONLY   YES
 )
 add_library(rapidjson INTERFACE)

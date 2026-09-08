@@ -1,63 +1,40 @@
+#:schema https://raw.githubusercontent.com/aufam/carton/main/carton-schema.json
+
 [package]
+edition = 17
 name = "cpx"
 version = "0.1.0"
-edition = 17
+
+
+[[bin]]
+name = "tests"
+path = "tests/"
+required-features = ["gtest", "fmt", "pfr", "yyjson", "nlohmann-json", "rapidjson", "toml11", "toml++", "yaml-cpp", "msgpack", "protobuf", "sqlite"]
 
 
 [dependencies]
-pfr = { version = "1.88.0", optional = true }
-magic_enum = { version = "0.9.7", optional = true  }
+magic_enum = "0.9.7"
+pfr = { version = "1.92.0", optional = true }
 
-fmt = { version = "12.1.0", optional = true  }
-fmt-mod = { mod = ["src/third_parties/fmt.cppm"], optional = true }
+fmt = { version = "12.1.0", mod = ["src/third_parties/fmt.cppm"], optional = true  }
+cli = { version = "2.6.2", mod = ["src/third_parties/cli11.cppm"], optional = true  }
 
-cli = { version = "2.6.2", optional = true  }
-cli-mod = { mod = ["src/third_parties/cli11.cppm"], optional = true }
+yyjson = { version = "0.12.0", mod = ["src/third_parties/yy_json.cppm"], optional = true  }
+nlohmann-json = { version = "3.12.0", mod = ["src/third_parties/nlohmann_json.cppm"], optional = true  }
+rapidjson = { version = "1.0", mod = ["src/third_parties/rapid_json.cppm"], optional = true  }
 
-yyjson = { version = "0.12.0", optional = true  }
-yyjson-mod = { mod = ["src/third_parties/yy_json.cppm"], optional = true }
+toml11 = { version = "4.4.0", mod = ["src/third_parties/toruniina_toml.cppm"], optional = true  }
+'toml++' = { version = "3.4.0", mod = ["src/third_parties/marzer_toml.cppm"], optional = true  }
+yaml-cpp = { version = "0.9.0", mod = ["src/third_parties/jbeder_yaml.cppm"], optional = true  }
 
-nlohmann-json = { version = "3.12.0", optional = true  }
-nlohmann-json-mod = { mod = ["src/third_parties/nlohmann_json.cppm"], optional = true }
+msgpack = { version = "7.0.0", mod = ["src/third_parties/msgpack.cppm"], optional = true  }
+protobuf = { version = "3.21.12", mod = ["src/third_parties/protobuf.cppm"], optional = true  }
 
-rapidjson = { version = "1", optional = true  }
-rapidjson-mod = { mod = ["src/third_parties/rapid_json.cppm"], optional = true }
-
-toml11 = { version = "4.4.0", optional = true  }
-toml11-mod = { mod = ["src/third_parties/toruniina_toml.cppm"], optional = true }
-
-'toml++' = { version = "3.4.0", optional = true  }
-'toml++-mod' = { mod = ["src/third_parties/marzer_toml.cppm"], optional = true }
-
-yaml-cpp = { version = "0.9.0", optional = true  }
-yaml-cpp-mod = { mod = ["src/third_parties/jbeder_yaml.cppm"], optional = true }
-
-msgpack = { version = "7.0.0", optional = true  }
-msgpack-mod = { mod = ["src/third_parties/msgpack.cppm"], optional = true }
-
-protobuf = { version = "3.21.12", optional = true  }
-protobuf-mod = { mod = ["src/third_parties/protobuf.cppm"], optional = true }
-
-sqlite = { version = "3.53.3", optional = true  }
-sqlite-mod = { mod = ["./src/third_parties/sqlite.cppm"], optional = true }
+sqlite = { version = "3.53.3", mod = ["./src/third_parties/sqlite.cppm"], optional = true  }
+gtest = { version = "1.17.0", optional = true }
 
 
 [features]
-fmt = ["dep:fmt", "dep:fmt-mod"]
-cli = ["dep:cli", "dep:cli-mod"]
-
-yyjson = ["dep:yyjson", "dep:yyjson-mod"]
-nlohmann-json = ["dep:nlohmann-json", "dep:nlohmann-json-mod"]
-rapidjson = ["dep:rapidjson", "dep:rapidjson-mod"]
-toml11 = ["dep:toml11", "dep:toml11-mod"]
-'toml++' = ["dep:toml++", "dep:toml++-mod"]
-yaml-cpp = ["dep:yaml-cpp", "dep:yaml-cpp-mod"]
-
-msgpack = ["dep:msgpack", "dep:msgpack-mod"]
-protobuf = ["dep:protobuf", "dep:protobuf-mod"]
-
-sqlite = ["dep:sqlite", "dep:sqlite-mod"]
-
 json = ["yyjson"]
 toml = ["toml11"]
 yaml = ["yaml-cpp"]

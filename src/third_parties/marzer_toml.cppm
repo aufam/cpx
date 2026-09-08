@@ -12,6 +12,7 @@ module;
 #include <unordered_map>
 #include <variant>
 #include <vector>
+#include <sstream>
 
 #include <toml++/toml.h>
 
