@@ -86,6 +86,16 @@ namespace cpx::json::rapid_json {
     CPX_EXPORT template <typename T>
     void parse(std::istream &, T &val);
 
+    CPX_EXPORT template <typename... T, typename... TI>
+    void parse(std::string_view str, std::tuple<TagInfoFor<T &, TI>...> &&val) {
+        parse(str, val);
+    }
+
+    CPX_EXPORT template <typename... T, typename... TI>
+    void parse(std::istream &stream, std::tuple<TagInfoFor<T &, TI>...> &&val) {
+        parse(stream, val);
+    }
+
     CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::enable_if_t<std::is_default_constructible_v<T>, T> parse(std::string_view str);

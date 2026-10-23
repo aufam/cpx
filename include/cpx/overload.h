@@ -29,6 +29,13 @@ namespace cpx {
     constexpr decltype(auto) visit(Variant &&v, Fs &&...fs) {
         return std::visit(overload{std::forward<Fs>(fs)...}, std::forward<Variant>(v));
     }
+
+#if __cplusplus >= 202002L
+    CPX_EXPORT template <typename R, typename Variant, typename... Fs>
+    auto async_visit(Variant v, Fs... fs) -> R {
+        co_return co_await std::visit(overload{std::move(fs)...}, std::move(v));
+    }
+#endif
 } // namespace cpx
 
 #endif

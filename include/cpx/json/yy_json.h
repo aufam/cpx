@@ -59,6 +59,48 @@ namespace cpx::json::yy_json {
         const std::string &path, T &val, E &err, yyjson_read_flag = YYJSON_READ_NOFLAG, const yyjson_alc *alc = nullptr
     );
 
+    CPX_EXPORT template <typename... T, typename... TI>
+    void parse(
+        std::string_view                     str,
+        std::tuple<TagInfoFor<T &, TI>...> &&val,
+        yyjson_read_flag                     flag = YYJSON_READ_NOFLAG,
+        const yyjson_alc                    *alc  = nullptr
+    ) {
+        parse(str, val, flag, alc);
+    }
+
+    CPX_EXPORT template <typename... T, typename... TI, typename E>
+    std::enable_if_t<!std::is_same_v<std::remove_cv_t<E>, yyjson_read_flag>> parse(
+        std::string_view                     str,
+        std::tuple<TagInfoFor<T &, TI>...> &&val,
+        E                                   &err,
+        yyjson_read_flag                     flag = YYJSON_READ_NOFLAG,
+        const yyjson_alc                    *alc  = nullptr
+    ) {
+        parse(str, val, err, flag, alc);
+    }
+
+    CPX_EXPORT template <typename... T, typename... TI>
+    void parse_from_file(
+        const std::string                   &path,
+        std::tuple<TagInfoFor<T &, TI>...> &&val,
+        yyjson_read_flag                     flag = YYJSON_READ_NOFLAG,
+        const yyjson_alc                    *alc  = nullptr
+    ) {
+        parse_from_file(path, val, flag, alc);
+    }
+
+    CPX_EXPORT template <typename... T, typename... TI, typename E>
+    std::enable_if_t<!std::is_same_v<std::remove_cv_t<E>, yyjson_read_flag>> parse_from_file(
+        const std::string                   &path,
+        std::tuple<TagInfoFor<T &, TI>...> &&val,
+        E                                   &err,
+        yyjson_read_flag                     flag = YYJSON_READ_NOFLAG,
+        const yyjson_alc                    *alc  = nullptr
+    ) {
+        parse_from_file(path, val, err, flag, alc);
+    }
+
     CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::enable_if_t<std::is_default_constructible_v<T>, T>

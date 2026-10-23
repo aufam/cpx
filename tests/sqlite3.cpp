@@ -48,7 +48,9 @@ TEST(sqlite3, workflow) {
     sql::sqlite3::Connection db(":memory:");
 
     {
-        auto stmt = sql::create_table<users>( //
+        auto stmt = sql::create_table<
+            users
+        >( //
             users.id,
             users.name,
             users.age
@@ -57,7 +59,9 @@ TEST(sqlite3, workflow) {
     }
 
     {
-        auto stmt = sql::create_table<employees>( //
+        auto stmt = sql::create_table<
+            employees
+        >( //
             employees.id,
             employees.name,
             employees.salary,
@@ -142,7 +146,7 @@ TEST(sqlite3, workflow) {
         std::vector<decltype(stmt)::row_type> result;
         for (; !rows.is_done(); rows.next())
             result.push_back(rows.get());
-        ASSERT_EQ(result.size(), 3);
+        ASSERT_EQ(result.size(), 3ul);
 
         std::multimap<int, Person::User *, std::greater<>> expect = {
             {Wibowo.u.age,  &Wibowo.u },
@@ -178,7 +182,7 @@ TEST(sqlite3, workflow) {
         std::vector<decltype(stmt)::row_type> result;
         for (; !rows.is_done(); rows.next())
             result.push_back(rows.get());
-        ASSERT_EQ(result.size(), 3);
+        ASSERT_EQ(result.size(), 3ul);
 
         std::multimap<int, Person::Employee *, std::less<>> expect = {
             {Wibowo.e.total_income(),  &Wibowo.e },

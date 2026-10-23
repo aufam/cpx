@@ -54,6 +54,21 @@ namespace cpx::yaml::jbeder_yaml {
     CPX_EXPORT template <typename T>
     void parse_from_file(std::string_view path, T &val);
 
+    CPX_EXPORT template <typename... T, typename... TI>
+    void parse(std::string_view str, std::tuple<TagInfoFor<T &, TI>...> &&val) {
+        parse(str, val);
+    }
+
+    CPX_EXPORT template <typename... T, typename... TI>
+    void parse(std::istream &stream, std::tuple<TagInfoFor<T &, TI>...> &&val, const std::string &filename = "") {
+        parse(stream, val, filename);
+    }
+
+    CPX_EXPORT template <typename... T, typename... TI>
+    void parse_from_file(std::string_view path, std::tuple<TagInfoFor<T &, TI>...> &&val) {
+        parse(path, val);
+    }
+
     CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::enable_if_t<std::is_default_constructible_v<T>, T> parse(std::string_view str);

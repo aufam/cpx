@@ -217,3 +217,37 @@ TEST(json, rapid_json_dump_omitempty) {
     // omitted fields
     EXPECT_EQ(dumped.find("salary"), std::string::npos);
 }
+
+TEST(json, field_ref) {
+    auto j = R"json({
+        "id": 42,
+        "name": "Prapto",
+        "status": {
+            "age": 24,
+            "married": false
+        }
+    })json";
+
+    int         id, age;
+    std::string name;
+    bool        married;
+
+    json::yy_json::parse(
+        j,
+        std::tuple{
+            cpx::field_ref(id)   = "id",
+            cpx::field_ref(name) = "name",
+            cpx::field_ref(
+                std::tuple{
+                    cpx::field_ref(age)     = "age",
+                    cpx::field_ref(married) = "married",
+                }
+            ) = "status",
+        }
+    );
+
+    EXPECT_EQ(id, 42);
+    EXPECT_EQ(age, 24);
+    EXPECT_EQ(name, "Prapto");
+    EXPECT_FALSE(married);
+}

@@ -81,7 +81,7 @@ namespace cpx::json::nlohmann_json {
     void dump(std::ostream &, const T &val, int indent = -1, char indent_char = ' ', bool ensure_ascii = false);
 
     CPX_EXPORT template <typename T>
-    T parse(const std::string &str, bool ignore_comments = false);
+    T parse(std::string_view str, bool ignore_comments = false);
 
     CPX_EXPORT template <typename T>
     T parse(std::istream &stream, bool ignore_comments = false);
@@ -90,13 +90,28 @@ namespace cpx::json::nlohmann_json {
     T parse(FILE *pfile, bool ignore_comments = false);
 
     CPX_EXPORT template <typename T>
-    void parse(const std::string &str, T &val, bool ignore_comments = false);
+    void parse(std::string_view str, T &val, bool ignore_comments = false);
 
     CPX_EXPORT template <typename T>
     void parse(std::istream &stream, T &val, bool ignore_comments = false);
 
     CPX_EXPORT template <typename T>
     void parse(FILE *pfile, T &val, bool ignore_comments = false);
+
+    CPX_EXPORT template <typename... T, typename... TI>
+    void parse(std::string_view str, std::tuple<TagInfoFor<T &, TI>...> &&val, bool ignore_comments = false) {
+        parse(str, val, ignore_comments);
+    }
+
+    CPX_EXPORT template <typename... T, typename... TI>
+    void parse(std::istream &stream, std::tuple<TagInfoFor<T &, TI>...> &&val, bool ignore_comments = false) {
+        parse(stream, val, ignore_comments);
+    }
+
+    CPX_EXPORT template <typename... T, typename... TI>
+    void parse(FILE *pfile, std::tuple<TagInfoFor<T &, TI>...> &&val, bool ignore_comments = false) {
+        parse(pfile, val, ignore_comments);
+    }
 } // namespace cpx::json::nlohmann_json
 
 // optional
@@ -369,9 +384,9 @@ struct DESERIALIZE(T, std::void_t<decltype(std::declval<const nlohmann::json &>(
 
 // parse and dump
 template <>
-struct PARSE(std::string) {
-    const std::string &str;
-    bool               ignore_comments = false;
+struct PARSE(std::string_view) {
+    std::string_view str;
+    bool             ignore_comments = false;
 
     template <typename T>
     void into(T &val) const {
@@ -470,9 +485,9 @@ void cpx::json::nlohmann_json::dump(std::ostream &os, const T &val, int indent, 
 }
 
 template <typename T>
-T cpx::json::nlohmann_json::parse(const std::string &str, bool ignore_comments) {
+T cpx::json::nlohmann_json::parse(std::string_view str, bool ignore_comments) {
     T val = {};
-    Parse<std::string>{str, ignore_comments}.into(val);
+    Parse<std::string_view>{str, ignore_comments}.into(val);
     return val;
 }
 
@@ -491,8 +506,8 @@ T cpx::json::nlohmann_json::parse(FILE *pfile, bool ignore_comments) {
 }
 
 template <typename T>
-void cpx::json::nlohmann_json::parse(const std::string &str, T &val, bool ignore_comments) {
-    Parse<std::string>{str, ignore_comments}.into(val);
+void cpx::json::nlohmann_json::parse(std::string_view str, T &val, bool ignore_comments) {
+    Parse<std::string_view>{str, ignore_comments}.into(val);
 }
 
 template <typename T>

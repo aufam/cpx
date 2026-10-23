@@ -55,6 +55,27 @@ namespace cpx::toml::toruniina_toml {
     CPX_EXPORT template <typename T>
     void parse_from_file(std::string_view path, T &val, const spec &s = spec::default_version());
 
+    CPX_EXPORT template <typename... T, typename... TI>
+    void parse(std::string_view str, std::tuple<TagInfoFor<T &, TI>...> &&val, const spec &s = spec::default_version()) {
+        parse(str, val, s);
+    }
+
+    CPX_EXPORT template <typename... T, typename... TI>
+    void parse(
+        std::istream                        &stream,
+        std::tuple<TagInfoFor<T &, TI>...> &&val,
+        const spec                          &s        = spec::default_version(),
+        const std::string                   &filename = ""
+    ) {
+        parse(stream, val, s, filename);
+    }
+
+    CPX_EXPORT template <typename... T, typename... TI>
+    void
+    parse_from_file(std::string_view path, std::tuple<TagInfoFor<T &, TI>...> &&val, const spec &s = spec::default_version()) {
+        parse(path, val, s);
+    }
+
     CPX_EXPORT template <typename T>
     [[nodiscard]]
     std::enable_if_t<std::is_default_constructible_v<T>, T> parse(std::string_view str, const spec &s = spec::default_version());

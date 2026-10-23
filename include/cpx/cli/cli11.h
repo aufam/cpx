@@ -22,6 +22,11 @@ namespace cpx::cli::cli11 {
     CPX_EXPORT template <typename T>
     void parse(const std::string &app_desc, int argc, char **argv, T &v);
 
+    CPX_EXPORT template <typename... T, typename... TI>
+    void parse(const std::string &app_desc, int argc, char **argv, std::tuple<TagInfoFor<T &, TI>...> &&val) {
+        parse(app_desc, argc, argv, val);
+    }
+
     CPX_EXPORT template <typename T>
     std::enable_if_t<std::is_default_constructible_v<T>, T> parse(const std::string &app_desc, int argc, char **argv);
 

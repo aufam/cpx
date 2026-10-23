@@ -238,6 +238,11 @@ namespace cpx {
         return _FieldBindFor<T &>{value};
     }
 
+    CPX_EXPORT template <typename... T, typename... TI>
+    constexpr auto field_ref(std::tuple<TagInfoFor<T &, TI>...> &&value) {
+        return field_ref(value);
+    }
+
     template <typename T, auto... Member, std::size_t... i>
     constexpr auto apply_field_tags(const T &v, const std::tuple<FieldTag<Member>...> &fields, std::index_sequence<i...>) {
         return std::make_tuple((field_ref(v.*Member) = std::get<i>(fields).tag)...);
