@@ -39,7 +39,7 @@ extern "C++" {
 
 #include "cpx/iter.h"
 #include "cpx/extend.h"
-#include "cpx/tag_info.h"
+#include "cpx/tag.h"
 #include "cpx/reflect.h"
 #include "cpx/reflect_builtin.h"
 }

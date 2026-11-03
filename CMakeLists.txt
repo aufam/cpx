@@ -595,4 +595,26 @@ if (CPX_BUILD_EXAMPLES)
 
         target_include_directories(example_openvino PRIVATE ${OpenCV_INCLUDE_DIRS})
     endif()
+
+    file(GLOB_RECURSE SRCS examples/12-module/*)
+    add_executable(example_module ${SRCS})
+    target_compile_features(example_module PRIVATE cxx_std_20)
+
+    target_link_libraries(example_module PRIVATE
+        cpx::mod
+    )
+
+    target_compile_options(example_module PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Wuninitialized
+        -fmacro-prefix-map=${CMAKE_CURRENT_SOURCE_DIR}=cpx
+        $<$<COMPILE_LANGUAGE:CXX>:-Wno-redundant-move>
+        $<$<CONFIG:Debug>:-fsanitize=address,undefined>
+    )
+
+    target_link_options(example_module PRIVATE
+        $<$<CONFIG:Debug>:-fsanitize=address,undefined>
+    )
 endif()

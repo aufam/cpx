@@ -3,20 +3,6 @@
 #include <fstream>
 
 
-template <typename T>
-using Tag = cpx::Tag<T>;
-
-struct Person {
-    Tag<std::string> name  = "fmt:`name`    protobuf:`1`";
-    Tag<int>         id    = "fmt:`id`      protobuf:`2`";
-    Tag<std::string> email = "fmt:`email`   protobuf:`3`";
-    Tag<int>         num1  = "fmt:`num1`    protobuf:`4,fixed`";
-    Tag<int>         num2  = "fmt:`num2`    protobuf:`5,zigzag`";
-    Tag<int>         num3  = "fmt:`num3`    protobuf:`6`";
-
-    Tag<std::vector<int>> nums = "fmt:`nums`    protobuf:`7`";
-};
-
 struct Person3 {
     std::string      name;
     int              id;
@@ -42,14 +28,14 @@ struct cpx::Reflect<Person3> {
 };
 
 int main() {
-    Person p;
-    p.name()  = "Sucipto";
-    p.id()    = 42;
-    p.email() = "sucipto@makmursejahtera.co.id";
-    p.num1()  = 1;
-    p.num2()  = -1;
-    p.num3()  = 0;
-    p.nums()  = {0, 0, 0};
+    Person3 p;
+    p.name  = "Sucipto";
+    p.id    = 42;
+    p.email = "sucipto@makmursejahtera.co.id";
+    p.num1  = 1;
+    p.num2  = -1;
+    p.num3  = 0;
+    p.nums  = {0, 0, 0};
     fmt::println("person = {}", p);
 
     std::string buf;

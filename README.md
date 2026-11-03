@@ -203,7 +203,7 @@ int         age  = 24;
 auto u = std::make_tuple(
     cpx::field_ref(name) = "tag_name",
     cpx::field_ref(age)  = "tag_age"
-); // std::tuple<cpx::TagInfoFor<std::string&, cpx::TagInfo&>, cpx::TagInfoFor<int&, cpx::TagInfo&>>
+); // std::tuple<cpx::TagFor<std::string&, cpx::Tag&>, cpx::TagFor<int&, cpx::Tag&>>
 
 fmt::println("{}", u); // (name="Sucipto", age=24)
 ```
@@ -284,12 +284,12 @@ std::cout << cpx::rapid_json::io << u << std::endl;
 
 ### Tag properties
 
-`TagInfo` stores metadata associated with a reflected field.
+`Tag` stores metadata associated with a reflected field.
 
 By default:
 
 ```cpp
-struct TagInfo {
+struct Tag {
     std::string_view key   = "";
     std::string_view oneof = "";
 
@@ -316,16 +316,16 @@ struct TagInfo {
 
 #### String literal syntax
 
-You can construct `TagInfo` directly from a string literal:
+You can construct `Tag` directly from a string literal:
 
 ```cpp
-TagInfo key = "key,omitempty,skipmissing";
+Tag key = "key,omitempty,skipmissing";
 ```
 
 This is equivalent to:
 
 ```cpp id="w5mec4"
-TagInfo key;
+Tag key;
 key.key         = "key";
 key.omitempty   = true;
 key.skipmissing = true;
@@ -334,7 +334,7 @@ key.skipmissing = true;
 #### Protobuf example
 
 ```cpp
-TagInfo user =
+Tag user =
     "user,"
     "field_number=1,"
     "omitempty,"
@@ -342,7 +342,7 @@ TagInfo user =
     "env=USER,"
     "help=Define a username";
 
-TagInfo age =
+Tag age =
     "age,"
     "field_number=2,"
     "omitempty,"
@@ -360,21 +360,21 @@ The unique identifier must be shared among all members of the group.
 If oneof is specified, it also implies `omitempty` and `skipmissing`
 
 ```cpp
-TagInfo circle    = "circle,    oneof=circle|rectangle"; // space after comma is ignored
-TagInfo rectangle = "rectangle, oneof=circle|rectangle";
+Tag circle    = "circle,    oneof=circle|rectangle"; // space after comma is ignored
+Tag rectangle = "rectangle, oneof=circle|rectangle";
 ```
 
 
-#### TagInfoBuilder
+#### TagBuilder
 
 String literals are concise but may be typo-prone.
 
-You can use `TagInfoBuilder` instead.
+You can use `TagBuilder` instead.
 
 Both constructor throgh string literals and builder are constexpr friendly tho.
 
 ```cpp
-TagInfo user = TagInfoBuilder("user")
+Tag user = TagBuilder("user")
     .field_number(1)
     .omitempty()
     .skipmissing()

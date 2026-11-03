@@ -1,7 +1,7 @@
 #ifndef CPX_INFERENCE_CONFIG_H
 #define CPX_INFERENCE_CONFIG_H
 
-#include <cpx/tag_info.h>
+#include <cpx/tag.h>
 #include <string>
 #include <optional>
 

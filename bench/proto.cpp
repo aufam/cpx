@@ -6,16 +6,6 @@
 using namespace cpx;
 
 namespace {
-    struct Person {
-        Tag<std::string>      name  = "protobuf,msgpack:`1`";
-        Tag<int>              id    = "protobuf,msgpack:`2`";
-        Tag<std::string>      email = "protobuf,msgpack:`3`";
-        Tag<int>              num1  = "protobuf,msgpack:`4,fixed`";
-        Tag<int>              num2  = "protobuf,msgpack:`5,zigzag`";
-        Tag<int>              num3  = "protobuf,msgpack:`6`";
-        Tag<std::vector<int>> nums  = "protobuf,msgpack:`7`";
-    };
-
     struct Person3 {
         std::string      name;
         int              id;
@@ -41,7 +31,6 @@ struct cpx::Reflect<Person3> {
     );
 };
 
-using Person1 = Person;         // tag
 using Person2 = person::Person; // compiled
 using Person3 = Person3;        // reflection
 
@@ -62,18 +51,6 @@ const char msgpack_data[] = "\x87"
                             "\x06\x00"
                             "\x07\x93\x00\x00\x00";
 
-static void cpx_tag_protobuf_serialization(benchmark::State &state) {
-    std::string buf = std::string(data, sizeof(data) - 1);
-    Person1     p;
-    cpx::protobuf::parse(buf, p);
-    for (auto _ : state) {
-        std::string s = cpx::protobuf::dump(p);
-        benchmark::DoNotOptimize(s);
-    }
-}
-
-BENCHMARK(cpx_tag_protobuf_serialization);
-
 static void cpx_reflect_protobuf_serialization(benchmark::State &state) {
     std::string buf = std::string(data, sizeof(data) - 1);
     Person3     p;
@@ -85,18 +62,6 @@ static void cpx_reflect_protobuf_serialization(benchmark::State &state) {
 }
 
 BENCHMARK(cpx_reflect_protobuf_serialization);
-
-static void cpx_tag_msgpack_serialization(benchmark::State &state) {
-    std::string buf = std::string(msgpack_data, sizeof(msgpack_data) - 1);
-    Person1     p;
-    cpx::msgpack::parse(buf, p);
-    for (auto _ : state) {
-        std::string s = cpx::msgpack::dump(p);
-        benchmark::DoNotOptimize(s);
-    }
-}
-
-BENCHMARK(cpx_tag_msgpack_serialization);
 
 static void cpx_reflect_msgpack_serialization(benchmark::State &state) {
     std::string buf = std::string(msgpack_data, sizeof(msgpack_data) - 1);
@@ -123,17 +88,6 @@ static void compiled_protobuf_serialization(benchmark::State &state) {
 
 BENCHMARK(compiled_protobuf_serialization);
 
-static void cpx_tag_protobuf_deserialization(benchmark::State &state) {
-    std::string buf = std::string(data, sizeof(data) - 1);
-    for (auto _ : state) {
-        Person1 p;
-        cpx::protobuf::parse(buf, p);
-        benchmark::DoNotOptimize(p);
-    }
-}
-
-BENCHMARK(cpx_tag_protobuf_deserialization);
-
 static void cpx_reflect_protobuf_deserialization(benchmark::State &state) {
     std::string buf = std::string(data, sizeof(data) - 1);
     for (auto _ : state) {
@@ -144,17 +98,6 @@ static void cpx_reflect_protobuf_deserialization(benchmark::State &state) {
 }
 
 BENCHMARK(cpx_reflect_protobuf_deserialization);
-
-static void cpx_tag_msgpack_deserialization(benchmark::State &state) {
-    std::string buf = std::string(msgpack_data, sizeof(msgpack_data) - 1);
-    for (auto _ : state) {
-        Person1 p;
-        cpx::msgpack::parse(buf, p);
-        benchmark::DoNotOptimize(p);
-    }
-}
-
-BENCHMARK(cpx_tag_msgpack_deserialization);
 
 static void cpx_reflect_msgpack_deserialization(benchmark::State &state) {
     std::string buf = std::string(msgpack_data, sizeof(msgpack_data) - 1);

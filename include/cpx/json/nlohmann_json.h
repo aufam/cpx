@@ -99,17 +99,17 @@ namespace cpx::json::nlohmann_json {
     void parse(FILE *pfile, T &val, bool ignore_comments = false);
 
     CPX_EXPORT template <typename... T, typename... TI>
-    void parse(std::string_view str, std::tuple<TagInfoFor<T &, TI>...> &&val, bool ignore_comments = false) {
+    void parse(std::string_view str, std::tuple<TagFor<T &, TI>...> &&val, bool ignore_comments = false) {
         parse(str, val, ignore_comments);
     }
 
     CPX_EXPORT template <typename... T, typename... TI>
-    void parse(std::istream &stream, std::tuple<TagInfoFor<T &, TI>...> &&val, bool ignore_comments = false) {
+    void parse(std::istream &stream, std::tuple<TagFor<T &, TI>...> &&val, bool ignore_comments = false) {
         parse(stream, val, ignore_comments);
     }
 
     CPX_EXPORT template <typename... T, typename... TI>
-    void parse(FILE *pfile, std::tuple<TagInfoFor<T &, TI>...> &&val, bool ignore_comments = false) {
+    void parse(FILE *pfile, std::tuple<TagFor<T &, TI>...> &&val, bool ignore_comments = false) {
         parse(pfile, val, ignore_comments);
     }
 } // namespace cpx::json::nlohmann_json
@@ -177,9 +177,9 @@ struct nlohmann::adl_serializer<std::tuple<Ts...>> {
         size_t oneof_count = 0;
         size_t idx         = 0;
         cpx::tuple_for_each(flattened, [&](const auto &item, const size_t) {
-            const cpx::TagInfo &t = cpx::json::get_tag_info(item);
-            const auto         &v = cpx::detail::get_underlying_value(item);
-            using T               = std::decay_t<decltype(v)>;
+            const cpx::Tag &t = cpx::detail::get_tag(item);
+            const auto     &v = cpx::detail::get_underlying_value(item);
+            using T           = std::decay_t<decltype(v)>;
 
             if (!SERIALIZABLE(T) || (is_obj && t.key == ""))
                 return;
@@ -235,9 +235,9 @@ struct nlohmann::adl_serializer<std::tuple<Ts...>> {
         size_t oneof_count = 0;
         size_t idx         = 0;
         cpx::tuple_for_each(flattened, [&](auto &item, const size_t) {
-            const cpx::TagInfo &t = cpx::json::get_tag_info(item);
-            auto               &v = cpx::detail::get_underlying_value(item);
-            using T               = std::decay_t<decltype(v)>;
+            const cpx::Tag &t = cpx::detail::get_tag(item);
+            auto           &v = cpx::detail::get_underlying_value(item);
+            using T           = std::decay_t<decltype(v)>;
 
             if (!DESERIALIZABLE(T) || (is_obj && t.key == ""))
                 return;

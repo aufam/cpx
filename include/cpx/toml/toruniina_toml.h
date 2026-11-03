@@ -56,23 +56,22 @@ namespace cpx::toml::toruniina_toml {
     void parse_from_file(std::string_view path, T &val, const spec &s = spec::default_version());
 
     CPX_EXPORT template <typename... T, typename... TI>
-    void parse(std::string_view str, std::tuple<TagInfoFor<T &, TI>...> &&val, const spec &s = spec::default_version()) {
+    void parse(std::string_view str, std::tuple<TagFor<T &, TI>...> &&val, const spec &s = spec::default_version()) {
         parse(str, val, s);
     }
 
     CPX_EXPORT template <typename... T, typename... TI>
     void parse(
-        std::istream                        &stream,
-        std::tuple<TagInfoFor<T &, TI>...> &&val,
-        const spec                          &s        = spec::default_version(),
-        const std::string                   &filename = ""
+        std::istream                    &stream,
+        std::tuple<TagFor<T &, TI>...> &&val,
+        const spec                      &s        = spec::default_version(),
+        const std::string               &filename = ""
     ) {
         parse(stream, val, s, filename);
     }
 
     CPX_EXPORT template <typename... T, typename... TI>
-    void
-    parse_from_file(std::string_view path, std::tuple<TagInfoFor<T &, TI>...> &&val, const spec &s = spec::default_version()) {
+    void parse_from_file(std::string_view path, std::tuple<TagFor<T &, TI>...> &&val, const spec &s = spec::default_version()) {
         parse(path, val, s);
     }
 
@@ -336,8 +335,8 @@ struct SERIALIZE(std::tuple<Ts...>) {
         size_t oneof_count = 0;
         size_t idx         = 0;
         tuple_for_each(flatten, [&](auto &item, const size_t) {
-            const cpx::TagInfo &t       = cpx::toml::get_tag_info(item);
-            auto               &v       = cpx::detail::get_underlying_value(item);
+            const cpx::Tag &t           = cpx::detail::get_tag(item);
+            auto           &v           = cpx::detail::get_underlying_value(item);
             using T                     = std::decay_t<decltype(v)>;
             constexpr bool serializable = SERIALIZABLE(T);
 
@@ -406,8 +405,8 @@ struct DESERIALIZE(std::tuple<Ts...>) {
         size_t oneof_count = 0;
         size_t idx         = 0;
         tuple_for_each(flattened, [&](auto &item, const size_t) {
-            const cpx::TagInfo &t         = cpx::toml::get_tag_info(item);
-            auto               &v         = detail::get_underlying_value(item);
+            const cpx::Tag &t             = cpx::detail::get_tag(item);
+            auto           &v             = cpx::detail::get_underlying_value(item);
             using T                       = std::decay_t<decltype(v)>;
             constexpr bool deserializable = DESERIALIZABLE(T);
 

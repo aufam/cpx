@@ -55,17 +55,17 @@ namespace cpx::toml::marzer_toml {
     void parse_from_file(std::string_view path, T &val);
 
     CPX_EXPORT template <typename... T, typename... TI>
-    void parse(std::string_view str, std::tuple<TagInfoFor<T &, TI>...> &&val) {
+    void parse(std::string_view str, std::tuple<TagFor<T &, TI>...> &&val) {
         parse(str, val);
     }
 
     CPX_EXPORT template <typename... T, typename... TI>
-    void parse(std::istream &stream, std::tuple<TagInfoFor<T &, TI>...> &&val) {
+    void parse(std::istream &stream, std::tuple<TagFor<T &, TI>...> &&val) {
         parse(stream, val);
     }
 
     CPX_EXPORT template <typename... T, typename... TI>
-    void parse_from_file(std::string_view path, std::tuple<TagInfoFor<T &, TI>...> &&val) {
+    void parse_from_file(std::string_view path, std::tuple<TagFor<T &, TI>...> &&val) {
         parse_from_file(path, val);
     }
 
@@ -326,9 +326,9 @@ struct SERIALIZE(std::tuple<Ts...>) {
         size_t oneof_count = 0;
         size_t idx         = 0;
         tuple_for_each(flattened, [&](auto &item, const size_t) {
-            const cpx::TagInfo &t = cpx::toml::get_tag_info(item);
-            auto               &v = cpx::detail::get_underlying_value(item);
-            using T               = std::decay_t<decltype(v)>;
+            const cpx::Tag &t = cpx::detail::get_tag(item);
+            auto           &v = cpx::detail::get_underlying_value(item);
+            using T           = std::decay_t<decltype(v)>;
 
             if (!SERIALIZABLE(T) || (is_tbl && t.key == ""))
                 return;
@@ -396,9 +396,9 @@ struct DESERIALIZE(std::tuple<Ts...>) {
         size_t oneof_count = 0;
         size_t idx         = 0;
         tuple_for_each(flattened, [&](auto &item, const size_t) {
-            const cpx::TagInfo &t = cpx::toml::get_tag_info(item);
-            auto               &v = cpx::detail::get_underlying_value(item);
-            using T               = std::decay_t<decltype(v)>;
+            const cpx::Tag &t = cpx::detail::get_tag(item);
+            auto           &v = cpx::detail::get_underlying_value(item);
+            using T           = std::decay_t<decltype(v)>;
 
             if (!DESERIALIZABLE(T) || (is_tbl && t.key == ""))
                 return;

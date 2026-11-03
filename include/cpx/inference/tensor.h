@@ -1,7 +1,7 @@
 #ifndef CPX_INFERENCE_TENSOR_H
 #define CPX_INFERENCE_TENSOR_H
 
-#include <cpx/tag_info.h>
+#include <cpx/tag.h>
 #include <cpx/reflect.h>
 #include <stdexcept>
 #include <vector>

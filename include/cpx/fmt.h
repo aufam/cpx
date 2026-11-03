@@ -48,26 +48,14 @@ namespace cpx::fmt::detail {
 } // namespace cpx::fmt::detail
 
 template <typename T, typename TI>
-struct fmt::formatter<cpx::TagInfoFor<T, TI>, char, std::enable_if_t<fmt::is_formattable<std::decay_t<T>, char>::value>>
+struct fmt::formatter<cpx::TagFor<T, TI>, char, std::enable_if_t<fmt::is_formattable<std::decay_t<T>, char>::value>>
     : fmt::formatter<std::decay_t<T>> {
-    fmt::context::iterator format(const cpx::TagInfoFor<T, TI> &v, fmt::context &c) const {
-        if (auto &ti = v.ti; ti.key != "") {
+    fmt::context::iterator format(const cpx::TagFor<T, TI> &v, fmt::context &c) const {
+        if (auto &tag = v.tag; tag.key != "") {
             fmt::context::iterator out = c.out();
-            out                        = fmt::format_to(out, "{}=", ti.key);
+            out                        = fmt::format_to(out, "{}=", tag.key);
         }
         return fmt::formatter<std::decay_t<T>>::format(v.value, c);
-    }
-};
-
-template <typename T>
-struct fmt::formatter<cpx::Tag<T>, char, std::enable_if_t<fmt::is_formattable<std::decay_t<T>, char>::value>>
-    : fmt::formatter<std::decay_t<T>> {
-    fmt::context::iterator format(const cpx::Tag<T> &v, fmt::context &c) const {
-        if (cpx::TagInfo ti = cpx::get_tag_info(v, "fmt"); ti.key != "") {
-            fmt::context::iterator out = c.out();
-            out                        = fmt::format_to(out, "{}=", ti.key);
-        }
-        return fmt::formatter<std::decay_t<T>>::format(v.get_value(), c);
     }
 };
 

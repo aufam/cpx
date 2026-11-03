@@ -1,6 +1,6 @@
 module;
 
-#include <cpx/tag_info.h>
+#include <cpx/tag.h>
 #include <cpx/time.h>
 #include <cpx/module.h>
 

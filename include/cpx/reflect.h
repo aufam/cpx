@@ -1,7 +1,7 @@
 #ifndef CPX_REFLECT_H
 #define CPX_REFLECT_H
 
-#include <cpx/tag_info.h>
+#include <cpx/tag.h>
 
 namespace cpx {
     CPX_EXPORT template <typename T, typename Enable = void>

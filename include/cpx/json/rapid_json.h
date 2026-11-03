@@ -87,12 +87,12 @@ namespace cpx::json::rapid_json {
     void parse(std::istream &, T &val);
 
     CPX_EXPORT template <typename... T, typename... TI>
-    void parse(std::string_view str, std::tuple<TagInfoFor<T &, TI>...> &&val) {
+    void parse(std::string_view str, std::tuple<TagFor<T &, TI>...> &&val) {
         parse(str, val);
     }
 
     CPX_EXPORT template <typename... T, typename... TI>
-    void parse(std::istream &stream, std::tuple<TagInfoFor<T &, TI>...> &&val) {
+    void parse(std::istream &stream, std::tuple<TagFor<T &, TI>...> &&val) {
         parse(stream, val);
     }
 
@@ -529,8 +529,8 @@ struct SERIALIZE(std::tuple<Ts...>) {
         size_t oneof_count = 0;
         size_t idx         = 0;
         tuple_for_each(flatten, [&](auto &item, const size_t) {
-            const cpx::TagInfo &t       = cpx::json::get_tag_info(item);
-            auto               &v       = cpx::detail::get_underlying_value(item);
+            const cpx::Tag &t           = cpx::detail::get_tag(item);
+            auto           &v           = cpx::detail::get_underlying_value(item);
             using T                     = std::decay_t<decltype(v)>;
             constexpr bool serializable = SERIALIZABLE(T);
 
@@ -598,8 +598,8 @@ struct DESERIALIZE(std::tuple<Ts...>) {
         size_t oneof_count = 0;
         size_t idx         = 0;
         tuple_for_each(flattened, [&](auto &item, const size_t) {
-            const cpx::TagInfo &t         = cpx::json::get_tag_info(item);
-            auto               &v         = cpx::detail::get_underlying_value(item);
+            const cpx::Tag &t             = cpx::detail::get_tag(item);
+            auto           &v             = cpx::detail::get_underlying_value(item);
             using T                       = std::decay_t<decltype(v)>;
             constexpr bool deserializable = DESERIALIZABLE(T);
 
@@ -910,8 +910,8 @@ struct SERIALIZE_SAX(OS, std::tuple<Ts...>) {
 
         size_t idx = 0;
         tuple_for_each(flatten, [&](auto &item, const size_t) {
-            const cpx::TagInfo &t       = cpx::json::get_tag_info(item);
-            auto               &v       = cpx::detail::get_underlying_value(item);
+            const cpx::Tag &t           = cpx::detail::get_tag(item);
+            auto           &v           = cpx::detail::get_underlying_value(item);
             using T                     = std::decay_t<decltype(v)>;
             constexpr bool serializable = SERIALIZABLE_SAX(OS, T);
 

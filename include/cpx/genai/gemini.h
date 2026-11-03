@@ -1,7 +1,7 @@
 #ifndef CPX_GENAI_GEMINI_H
 #define CPX_GENAI_GEMINI_H
 
-#include <cpx/tag_info.h>
+#include <cpx/tag.h>
 #include <string>
 #include <utility>
 #include <vector>

@@ -61,42 +61,42 @@ namespace cpx::json::yy_json {
 
     CPX_EXPORT template <typename... T, typename... TI>
     void parse(
-        std::string_view                     str,
-        std::tuple<TagInfoFor<T &, TI>...> &&val,
-        yyjson_read_flag                     flag = YYJSON_READ_NOFLAG,
-        const yyjson_alc                    *alc  = nullptr
+        std::string_view                 str,
+        std::tuple<TagFor<T &, TI>...> &&val,
+        yyjson_read_flag                 flag = YYJSON_READ_NOFLAG,
+        const yyjson_alc                *alc  = nullptr
     ) {
         parse(str, val, flag, alc);
     }
 
     CPX_EXPORT template <typename... T, typename... TI, typename E>
     std::enable_if_t<!std::is_same_v<std::remove_cv_t<E>, yyjson_read_flag>> parse(
-        std::string_view                     str,
-        std::tuple<TagInfoFor<T &, TI>...> &&val,
-        E                                   &err,
-        yyjson_read_flag                     flag = YYJSON_READ_NOFLAG,
-        const yyjson_alc                    *alc  = nullptr
+        std::string_view                 str,
+        std::tuple<TagFor<T &, TI>...> &&val,
+        E                               &err,
+        yyjson_read_flag                 flag = YYJSON_READ_NOFLAG,
+        const yyjson_alc                *alc  = nullptr
     ) {
         parse(str, val, err, flag, alc);
     }
 
     CPX_EXPORT template <typename... T, typename... TI>
     void parse_from_file(
-        const std::string                   &path,
-        std::tuple<TagInfoFor<T &, TI>...> &&val,
-        yyjson_read_flag                     flag = YYJSON_READ_NOFLAG,
-        const yyjson_alc                    *alc  = nullptr
+        const std::string               &path,
+        std::tuple<TagFor<T &, TI>...> &&val,
+        yyjson_read_flag                 flag = YYJSON_READ_NOFLAG,
+        const yyjson_alc                *alc  = nullptr
     ) {
         parse_from_file(path, val, flag, alc);
     }
 
     CPX_EXPORT template <typename... T, typename... TI, typename E>
     std::enable_if_t<!std::is_same_v<std::remove_cv_t<E>, yyjson_read_flag>> parse_from_file(
-        const std::string                   &path,
-        std::tuple<TagInfoFor<T &, TI>...> &&val,
-        E                                   &err,
-        yyjson_read_flag                     flag = YYJSON_READ_NOFLAG,
-        const yyjson_alc                    *alc  = nullptr
+        const std::string               &path,
+        std::tuple<TagFor<T &, TI>...> &&val,
+        E                               &err,
+        yyjson_read_flag                 flag = YYJSON_READ_NOFLAG,
+        const yyjson_alc                *alc  = nullptr
     ) {
         parse_from_file(path, val, err, flag, alc);
     }
@@ -451,9 +451,9 @@ struct SERIALIZE(std::tuple<Ts...>) {
         size_t oneof_count = 0;
         size_t idx         = 0;
         tuple_for_each(flattened, [&](auto &item, const size_t) {
-            const cpx::TagInfo &t = cpx::json::get_tag_info(item);
-            auto               &v = cpx::detail::get_underlying_value(item);
-            using T               = std::decay_t<decltype(v)>;
+            const cpx::Tag &t = cpx::detail::get_tag(item);
+            auto           &v = cpx::detail::get_underlying_value(item);
+            using T           = std::decay_t<decltype(v)>;
 
             if (!SERIALIZABLE(T) || (is_obj && t.key == ""))
                 return;
@@ -521,9 +521,9 @@ struct DESERIALIZE(std::tuple<Ts...>) {
         size_t oneof_count = 0;
         size_t idx         = 0;
         tuple_for_each(flattened, [&](auto &item, const size_t) {
-            const cpx::TagInfo &t = cpx::json::get_tag_info(item);
-            auto               &v = cpx::detail::get_underlying_value(item);
-            using T               = std::decay_t<decltype(v)>;
+            const cpx::Tag &t = cpx::detail::get_tag(item);
+            auto           &v = cpx::detail::get_underlying_value(item);
+            using T           = std::decay_t<decltype(v)>;
 
             if (!DESERIALIZABLE(T) || (is_obj && t.key == ""))
                 return;

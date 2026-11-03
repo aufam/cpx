@@ -23,7 +23,7 @@ namespace cpx::cli::cli11 {
     void parse(const std::string &app_desc, int argc, char **argv, T &v);
 
     CPX_EXPORT template <typename... T, typename... TI>
-    void parse(const std::string &app_desc, int argc, char **argv, std::tuple<TagInfoFor<T &, TI>...> &&val) {
+    void parse(const std::string &app_desc, int argc, char **argv, std::tuple<TagFor<T &, TI>...> &&val) {
         parse(app_desc, argc, argv, val);
     }
 
@@ -46,7 +46,7 @@ namespace cpx {
 }
 
 namespace cpx::cli::cli11::detail {
-    inline std::string generate_option_name(const cpx::TagInfo &ti, bool subcommand = false) {
+    inline std::string generate_option_name(const cpx::Tag &ti, bool subcommand = false) {
         if (ti.positional || subcommand)
             return std::string(ti.key);
         else if (ti.short_.empty())
@@ -149,8 +149,8 @@ struct cpx::serde::Parse<CLI::App, std::pair<int, char **>> {
 
     template <typename T>
     void into(T &tpl) const {
-        auto          app = CLI::App(app_desc, argv[0]);
-        const TagInfo ti  = {};
+        auto      app = CLI::App(app_desc, argv[0]);
+        const Tag ti  = {};
 
         Deserialize<CLI::App, T>{app, ti}.into(tpl);
 
@@ -184,8 +184,8 @@ struct cpx::serde::Parse<CLI::App, std::pair<int, char **>> {
 // bool
 template <>
 struct cpx::serde::Deserialize<CLI::App, bool> {
-    CLI::App      &app;
-    const TagInfo &ti;
+    CLI::App  &app;
+    const Tag &ti;
 
     CLI::Option *into(bool &v) const {
         return this->app.add_flag(cpx::cli::cli11::detail::generate_option_name(ti), v, std::string(ti.help));
@@ -195,8 +195,8 @@ struct cpx::serde::Deserialize<CLI::App, bool> {
 // optional bool
 template <>
 struct cpx::serde::Deserialize<CLI::App, std::optional<bool>> {
-    CLI::App      &app;
-    const TagInfo &ti;
+    CLI::App  &app;
+    const Tag &ti;
 
     CLI::Option *into(std::optional<bool> &v) const {
         auto name = cpx::cli::cli11::detail::generate_option_name(ti);
@@ -208,8 +208,8 @@ struct cpx::serde::Deserialize<CLI::App, std::optional<bool>> {
 // primitive types
 template <typename T>
 struct cpx::serde::Deserialize<CLI::App, T, std::enable_if_t<cpx::cli::cli11::detail::is_primitive_type<T>::value>> {
-    CLI::App      &app;
-    const TagInfo &ti;
+    CLI::App  &app;
+    const Tag &ti;
 
     CLI::Option *into(T &v) const {
         CLI::Option *opt = this->app.add_option(cpx::cli::cli11::detail::generate_option_name(ti), v, std::string(ti.help));
@@ -226,8 +226,8 @@ struct cpx::serde::Deserialize<CLI::App, T, std::enable_if_t<cpx::cli::cli11::de
 // vector of primitive
 template <typename T>
 struct cpx::serde::Deserialize<CLI::App, std::vector<T>, std::enable_if_t<cpx::cli::cli11::detail::is_primitive_type<T>::value>> {
-    CLI::App      &app;
-    const TagInfo &ti;
+    CLI::App  &app;
+    const Tag &ti;
 
     CLI::Option *into(std::vector<T> &v) const {
         CLI::Option *opt = this->app.add_option(cpx::cli::cli11::detail::generate_option_name(ti), v, std::string(ti.help));
@@ -243,8 +243,8 @@ struct cpx::serde::Deserialize<CLI::App, std::vector<T>, std::enable_if_t<cpx::c
 template <typename T>
 struct cpx::serde::
     Deserialize<CLI::App, std::optional<T>, std::enable_if_t<cpx::cli::cli11::detail::is_primitive_type<T>::value>> {
-    CLI::App      &app;
-    const TagInfo &ti;
+    CLI::App  &app;
+    const Tag &ti;
 
     CLI::Option *into(std::optional<T> &v) const {
         CLI::Option *opt = this->app.template add_option<std::optional<T>, T>(
@@ -267,8 +267,8 @@ struct cpx::serde::Deserialize<
         (cpx::cli::cli11::detail::is_primitive_type<T>::value || cpx::cli::cli11::detail::is_string_reflect<T>::value) && ...
     )>
 > {
-    CLI::App      &app;
-    const TagInfo &ti;
+    CLI::App  &app;
+    const Tag &ti;
 
     CLI::Option *into(std::variant<T...> &v) const {
         CLI::Option *opt = this->app.template add_option_function<std::string>(
@@ -306,8 +306,8 @@ struct cpx::serde::Deserialize<
 // tuple
 template <typename... Ts>
 struct cpx::serde::Deserialize<CLI::App, std::tuple<Ts...>> {
-    CLI::App      &app;
-    const TagInfo &ti;
+    CLI::App  &app;
+    const Tag &ti;
 
     CLI::Option *into(std::tuple<Ts...> &tpl) const {
         return into(tpl, nullptr);
@@ -324,8 +324,8 @@ struct cpx::serde::Deserialize<CLI::App, std::tuple<Ts...>> {
 
         std::unordered_map<std::string, CLI::Option_group *> oneof_groups;
         cpx::tuple_for_each(cpx::flatten(tpl), [&app, &oneof_groups](auto &item, size_t) {
-            const cpx::TagInfo &t         = cpx::cli::get_tag_info(item);
-            auto               &v         = cpx::detail::get_underlying_value(item);
+            const cpx::Tag &t             = cpx::detail::get_tag(item);
+            auto           &v             = cpx::detail::get_underlying_value(item);
             using T                       = std::decay_t<decltype(v)>;
             constexpr bool deserializable = cpx::serde::is_deserializable_v<CLI::App, T>;
 
@@ -362,8 +362,8 @@ struct cpx::serde::Deserialize<CLI::App, std::tuple<Ts...>> {
 // reflect to tuple
 template <typename T>
 struct cpx::serde::Deserialize<CLI::App, T, std::enable_if_t<cpx::cli11::detail::is_tuple_reflect<T>::value>> {
-    CLI::App      &app;
-    const TagInfo &ti;
+    CLI::App  &app;
+    const Tag &ti;
 
     CLI::Option *into(T &v) const {
         decltype(auto) r = cpx::cli::reflect_traits<T>::of(v);
@@ -374,8 +374,8 @@ struct cpx::serde::Deserialize<CLI::App, T, std::enable_if_t<cpx::cli11::detail:
 // optional reflect to tuple
 template <typename T>
 struct cpx::serde::Deserialize<CLI::App, std::optional<T>, std::enable_if_t<cpx::cli11::detail::is_tuple_reflect<T>::value>> {
-    CLI::App      &app;
-    const TagInfo &ti;
+    CLI::App  &app;
+    const Tag &ti;
 
     CLI::Option *into(std::optional<T> &v) const {
         if (v.has_value())
@@ -391,8 +391,8 @@ struct cpx::serde::Deserialize<CLI::App, std::optional<T>, std::enable_if_t<cpx:
 // reflect to string
 template <typename T>
 struct cpx::serde::Deserialize<CLI::App, T, std::enable_if_t<cpx::cli11::detail::is_string_reflect<T>::value>> {
-    CLI::App      &app;
-    const TagInfo &ti;
+    CLI::App  &app;
+    const Tag &ti;
 
     CLI::Option *into(T &v) const {
         CLI::Option *opt = this->app.template add_option_function<std::string>(
@@ -421,8 +421,8 @@ struct cpx::serde::Deserialize<CLI::App, T, std::enable_if_t<cpx::cli11::detail:
 // optional reflect to string
 template <typename T>
 struct cpx::serde::Deserialize<CLI::App, std::optional<T>, std::enable_if_t<cpx::cli11::detail::is_string_reflect<T>::value>> {
-    CLI::App      &app;
-    const TagInfo &ti;
+    CLI::App  &app;
+    const Tag &ti;
 
     CLI::Option *into(std::optional<T> &v) const {
         CLI::Option *opt = this->app.template add_option_function<std::string>(
@@ -450,8 +450,8 @@ struct cpx::serde::Deserialize<CLI::App, std::optional<T>, std::enable_if_t<cpx:
 // vector reflect to string
 template <typename T>
 struct cpx::serde::Deserialize<CLI::App, std::vector<T>, std::enable_if_t<cpx::cli::cli11::detail::is_string_reflect<T>::value>> {
-    CLI::App      &app;
-    const TagInfo &ti;
+    CLI::App  &app;
+    const Tag &ti;
 
     CLI::Option *into(std::vector<T> &v) const {
         CLI::Option *opt = this->app.template add_option_function<std::vector<std::string>>(

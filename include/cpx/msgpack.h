@@ -14,14 +14,6 @@
 #endif
 
 namespace cpx::msgpack {
-    CPX_EXPORT template <typename T>
-    constexpr decltype(auto) get_tag_info(const T &field) {
-        if constexpr (cpx::detail::is_tag_info_for_v<T>)
-            return field.ti;
-        else
-            return cpx::get_tag_info(field, "msgpack");
-    }
-
     CPX_EXPORT template <typename OS, typename From>
     using Serialize = cpx::serde::Serialize<::msgpack::packer<OS>, From>;
 
@@ -431,8 +423,8 @@ struct cpx::serde::Serialize<::msgpack::packer<OS>, std::tuple<Ts...>> {
 
         size_t total = 0;
         tuple_for_each(flattened, [&](auto &item, const size_t i) {
-            const cpx::TagInfo &t       = cpx::msgpack::get_tag_info(item);
-            auto               &v       = cpx::detail::get_underlying_value(item);
+            const cpx::Tag &t           = cpx::detail::get_tag(item);
+            auto           &v           = cpx::detail::get_underlying_value(item);
             using T                     = std::decay_t<decltype(v)>;
             constexpr bool serializable = cpx::serde::is_serializable_v<::msgpack::packer<OS>, T>;
 
@@ -492,8 +484,8 @@ struct cpx::serde::Deserialize<::msgpack::object, std::tuple<Ts...>> {
 
         size_t idx = 0;
         tuple_for_each(flattened, [&](auto &item, const size_t) {
-            const cpx::TagInfo &t         = cpx::msgpack::get_tag_info(item);
-            auto               &v         = cpx::detail::get_underlying_value(item);
+            const cpx::Tag &t             = cpx::detail::get_tag(item);
+            auto           &v             = cpx::detail::get_underlying_value(item);
             using T                       = std::decay_t<decltype(v)>;
             constexpr bool deserializable = cpx::serde::is_deserializable_v<::msgpack::object, T>;
 

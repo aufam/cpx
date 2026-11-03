@@ -10,20 +10,29 @@ namespace {
 
     struct Person {
         // required fields
-        Tag<std::string> name = "json:`name`";
-        Tag<int>         age  = "json:`age`";
+        std::string name;
+        int         age;
 
         // optional field
-        Tag<std::optional<std::string>> address = "json:`address`";
+        std::optional<std::string> address;
 
         // fallback if missing
-        Tag<std::string> department = {"json:`department,skipmissing`", "unset"};
+        std::string department = "unset";
 
         // omit when empty (go-style omitempty)
-        Tag<int> salary = "json:`salary,omitempty`";
+        int salary;
 
         // RFC3339 UTC only: YYYY-MM-DDTHH:MM:SSZ
-        Tag<std::tm> created_at = "json:`createdAt`";
+        std::tm created_at;
+
+        static constexpr std::tuple __field_tags__ = {
+            cpx::field<&Person::name>       = "name",
+            cpx::field<&Person::age>        = "age",
+            cpx::field<&Person::address>    = "address",
+            cpx::field<&Person::department> = "department,skipmissing",
+            cpx::field<&Person::salary>     = "salary,omitempty",
+            cpx::field<&Person::created_at> = "createdAt",
+        };
 
         // ignored field
         int dummy = 42;
@@ -70,20 +79,19 @@ namespace {
     )json";
 } // namespace
 
-
 TEST(json, yy_json_parse_full) {
     Person p = json::yy_json::parse<Person>(json_full);
 
-    EXPECT_EQ(p.name(), "Sucipto");
-    EXPECT_EQ(p.age(), 24);
+    EXPECT_EQ(p.name, "Sucipto");
+    EXPECT_EQ(p.age, 24);
 
-    ASSERT_TRUE(p.address().has_value());
+    ASSERT_TRUE(p.address.has_value());
 
-    EXPECT_EQ(*p.address(), "Jakarta");
-    EXPECT_EQ(p.department(), "Engineering");
-    EXPECT_EQ(p.salary(), 1000);
+    EXPECT_EQ(*p.address, "Jakarta");
+    EXPECT_EQ(p.department, "Engineering");
+    EXPECT_EQ(p.salary, 1000);
 
-    const std::tm &t = p.created_at();
+    const std::tm &t = p.created_at;
 
     EXPECT_EQ(t.tm_year + 1900, 2024);
     EXPECT_EQ(t.tm_mon + 1, 1);
@@ -98,18 +106,18 @@ TEST(json, yy_json_parse_full) {
 TEST(json, yy_json_parse_missing_department) {
     Person p = json::yy_json::parse<Person>(json_missing_department);
 
-    ASSERT_TRUE(p.address().has_value());
-    EXPECT_EQ(*p.address(), "Jakarta");
+    ASSERT_TRUE(p.address.has_value());
+    EXPECT_EQ(*p.address, "Jakarta");
 
     // fallback value
-    EXPECT_EQ(p.department(), "unset");
+    EXPECT_EQ(p.department, "unset");
 }
 
 
 TEST(json, yy_json_dump_omitempty) {
     Person p;
-    p.name() = "Sucipto";
-    p.age()  = 24;
+    p.name = "Sucipto";
+    p.age  = 24;
 
     std::string dumped = json::yy_json::dump(p);
 
@@ -127,21 +135,21 @@ TEST(json, yy_json_dump_omitempty) {
 TEST(cpx, nlohmann_json_parse_full) {
     Person p = nlohmann::json::parse(json_full);
 
-    EXPECT_EQ(p.name(), "Sucipto");
-    EXPECT_EQ(p.age(), 24);
+    EXPECT_EQ(p.name, "Sucipto");
+    EXPECT_EQ(p.age, 24);
 
-    ASSERT_TRUE(p.address().has_value());
-    EXPECT_EQ(*p.address(), "Jakarta");
+    ASSERT_TRUE(p.address.has_value());
+    EXPECT_EQ(*p.address, "Jakarta");
 
-    EXPECT_EQ(p.department(), "Engineering");
-    EXPECT_EQ(p.salary(), 1000);
+    EXPECT_EQ(p.department, "Engineering");
+    EXPECT_EQ(p.salary, 1000);
 }
 
 
 TEST(json, nlohmann_json_dump_omitempty) {
     Person p;
-    p.name() = "Sucipto";
-    p.age()  = 24;
+    p.name = "Sucipto";
+    p.age  = 24;
 
     std::string dumped = nlohmann::json(p).dump();
 
@@ -160,25 +168,25 @@ TEST(json, yy_json_round_trip) {
     std::string dumped = json::yy_json::dump(p1);
     Person      p2     = json::yy_json::parse<Person>(dumped);
 
-    EXPECT_EQ(p2.name(), p1.name());
-    EXPECT_EQ(p2.age(), p1.age());
-    EXPECT_EQ(p2.department(), p1.department());
+    EXPECT_EQ(p2.name, p1.name);
+    EXPECT_EQ(p2.age, p1.age);
+    EXPECT_EQ(p2.department, p1.department);
 }
 
 
 TEST(json, rapid_json_parse_full) {
     Person p = json::rapid_json::parse<Person>(json_full);
 
-    EXPECT_EQ(p.name(), "Sucipto");
-    EXPECT_EQ(p.age(), 24);
+    EXPECT_EQ(p.name, "Sucipto");
+    EXPECT_EQ(p.age, 24);
 
-    ASSERT_TRUE(p.address().has_value());
+    ASSERT_TRUE(p.address.has_value());
 
-    EXPECT_EQ(*p.address(), "Jakarta");
-    EXPECT_EQ(p.department(), "Engineering");
-    EXPECT_EQ(p.salary(), 1000);
+    EXPECT_EQ(*p.address, "Jakarta");
+    EXPECT_EQ(p.department, "Engineering");
+    EXPECT_EQ(p.salary, 1000);
 
-    const std::tm &t = p.created_at();
+    const std::tm &t = p.created_at;
 
     EXPECT_EQ(t.tm_year + 1900, 2024);
     EXPECT_EQ(t.tm_mon + 1, 1);
@@ -193,18 +201,18 @@ TEST(json, rapid_json_parse_full) {
 TEST(json, rapid_json_parse_missing_department) {
     Person p = json::rapid_json::parse<Person>(json_missing_department);
 
-    ASSERT_TRUE(p.address().has_value());
-    EXPECT_EQ(*p.address(), "Jakarta");
+    ASSERT_TRUE(p.address.has_value());
+    EXPECT_EQ(*p.address, "Jakarta");
 
     // fallback value
-    EXPECT_EQ(p.department(), "unset");
+    EXPECT_EQ(p.department, "unset");
 }
 
 
 TEST(json, rapid_json_dump_omitempty) {
     Person p;
-    p.name() = "Sucipto";
-    p.age()  = 24;
+    p.name = "Sucipto";
+    p.age  = 24;
 
     std::string dumped = json::rapid_json::dump(p);
 

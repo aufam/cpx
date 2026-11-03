@@ -4,14 +4,6 @@
 #include <cpx/reflect.h>
 
 namespace cpx::json {
-    CPX_EXPORT template <typename T>
-    constexpr decltype(auto) get_tag_info(const T &field) {
-        if constexpr (cpx::detail::is_tag_info_for_v<T>)
-            return field.ti;
-        else
-            return cpx::get_tag_info(field, "json");
-    }
-
     CPX_EXPORT template <typename T, typename Enable = void>
     struct Reflect;
 

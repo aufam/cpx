@@ -6,24 +6,34 @@ using namespace cpx;
 namespace {
     struct Person {
         // required fields
-        Tag<std::string> name = "toml:`name`";
-        Tag<int>         age  = "toml:`age`";
+        std::string name;
+        int         age;
 
         // optional field
-        Tag<std::optional<std::string>> address = "toml:`address`";
+        std::optional<std::string> address;
 
         // fallback if missing
-        Tag<std::string> department = {"toml:`department,skipmissing`", "unset"};
+        std::string department = "unset";
 
         // omit when empty (go-style omitempty)
-        Tag<int> salary = "toml:`salary,omitempty`";
+        int salary;
 
         // RFC3339 UTC only: YYYY-MM-DDTHH:MM:SSZ
-        Tag<std::tm> created_at = "toml:`createdAt`";
+        std::tm created_at;
 
-        // ignored fields
-        int   dummy = 42;
-        void *ptr   = nullptr;
+        static constexpr std::tuple __field_tags__ = {
+            cpx::field<&Person::name>       = "name",
+            cpx::field<&Person::age>        = "age",
+            cpx::field<&Person::address>    = "address",
+            cpx::field<&Person::department> = "department,skipmissing",
+            cpx::field<&Person::salary>     = "salary,omitempty",
+            cpx::field<&Person::created_at> = "createdAt",
+        };
+
+        // ignored field
+        int dummy = 42;
+
+        void *dummy2 = nullptr;
     };
 
     constexpr const char *toml_full = R"toml(
@@ -47,16 +57,16 @@ namespace {
 TEST(toml, marzer_toml_parse_full) {
     Person p = ::cpx::toml::marzer_toml::parse<Person>(toml_full);
 
-    EXPECT_EQ(p.name(), "Sucipto");
-    EXPECT_EQ(p.age(), 24);
+    EXPECT_EQ(p.name, "Sucipto");
+    EXPECT_EQ(p.age, 24);
 
-    ASSERT_TRUE(p.address().has_value());
+    ASSERT_TRUE(p.address.has_value());
 
-    EXPECT_EQ(*p.address(), "Jakarta");
-    EXPECT_EQ(p.department(), "Engineering");
-    EXPECT_EQ(p.salary(), 1000);
+    EXPECT_EQ(*p.address, "Jakarta");
+    EXPECT_EQ(p.department, "Engineering");
+    EXPECT_EQ(p.salary, 1000);
 
-    const std::tm &t = p.created_at();
+    const std::tm &t = p.created_at;
 
     EXPECT_EQ(t.tm_year + 1900, 2024);
     EXPECT_EQ(t.tm_mon + 1, 1);
@@ -71,9 +81,9 @@ TEST(toml, marzer_toml_parse_full) {
 TEST(toml, marzer_toml_parse_missing_department) {
     Person p = ::cpx::toml::marzer_toml::parse<Person>(toml_missing_department);
 
-    ASSERT_TRUE(p.address().has_value());
-    EXPECT_EQ(*p.address(), "Jakarta");
+    ASSERT_TRUE(p.address.has_value());
+    EXPECT_EQ(*p.address, "Jakarta");
 
     // fallback value
-    EXPECT_EQ(p.department(), "unset");
+    EXPECT_EQ(p.department, "unset");
 }

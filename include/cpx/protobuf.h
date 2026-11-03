@@ -31,16 +31,6 @@
 #    include <google/protobuf/wire_format_lite.h>
 #endif
 
-namespace cpx::protobuf {
-    CPX_EXPORT template <typename T>
-    constexpr decltype(auto) get_tag_info(const T &field) {
-        if constexpr (cpx::detail::is_tag_info_for_v<T>)
-            return field.ti;
-        else
-            return cpx::get_tag_info(field, "protobuf");
-    }
-} // namespace cpx::protobuf
-
 #define SERIALIZE(...)      cpx::serde::Serialize<google::protobuf::io::CodedOutputStream, __VA_ARGS__>
 #define DESERIALIZE(...)    cpx::serde::Deserialize<google::protobuf::io::CodedInputStream, __VA_ARGS__>
 #define SERIALIZABLE(...)   cpx::serde::is_serializable_v<google::protobuf::io::CodedOutputStream, __VA_ARGS__>
@@ -165,11 +155,11 @@ namespace cpx::protobuf::detail {
 
 #define SERIALIZER_FIELDS                                                                                                        \
     google::protobuf::io::CodedOutputStream &doc;                                                                                \
-    const cpx::TagInfo                      &ti = {};
+    const cpx::Tag                          &ti = {};
 
 #define DESERIALIZER_FIELDS                                                                                                      \
     google::protobuf::io::CodedInputStream              &doc;                                                                    \
-    const cpx::TagInfo                                  &ti        = {};                                                         \
+    const cpx::Tag                                      &ti        = {};                                                         \
     google::protobuf::internal::WireFormatLite::WireType wire_type = {};                                                         \
     size_t                                               len       = 0;
 
@@ -495,9 +485,9 @@ struct SERIALIZE(std::tuple<Ts...>) {
             auto   oneofs      = std::array<std::string_view, std::tuple_size_v<decltype(flattened)>>();
             size_t oneof_count = 0;
             tuple_for_each(flattened, [&](const auto &item, size_t) {
-                const cpx::TagInfo &t = cpx::protobuf::get_tag_info(item);
-                const auto         &v = detail::get_underlying_value(item);
-                using T               = std::decay_t<decltype(v)>;
+                const cpx::Tag &t = cpx::detail::get_tag(item);
+                const auto     &v = cpx::detail::get_underlying_value(item);
+                using T           = std::decay_t<decltype(v)>;
 
                 bool written = false;
                 if constexpr (SERIALIZABLE(T))
@@ -530,8 +520,8 @@ struct DESERIALIZE(std::tuple<Ts...>) {
         auto             flattened = cpx::flatten(tpl);
         constexpr size_t size      = std::tuple_size_v<decltype(flattened)>;
 
-        std::array<cpx::TagInfo, size> tis = {};
-        tuple_for_each(flattened, [&](auto &v, size_t i) { tis[i] = cpx::protobuf::get_tag_info(v); });
+        std::array<cpx::Tag, size> tis = {};
+        tuple_for_each(flattened, [&](auto &v, size_t i) { tis[i] = cpx::detail::get_tag(v); });
 
         auto   oneofs      = std::array<std::string_view, size>{};
         size_t oneof_count = 0;
@@ -540,7 +530,7 @@ struct DESERIALIZE(std::tuple<Ts...>) {
 
             bool done = false;
             tuple_for_each(flattened, [&](auto &item, size_t i) {
-                const cpx::TagInfo &t = tis[i];
+                const cpx::Tag &t = tis[i];
                 if (done || (int)field_number != t.field_number)
                     return;
 
@@ -581,8 +571,8 @@ struct SERIALIZE(std::unordered_map<K, T, H, P, A>, std::enable_if_t<SERIALIZABL
     SERIALIZER_FIELDS
 
     bool from(const std::unordered_map<K, T, H, P, A> &map) const {
-        cpx::TagInfo tag_key = ti;
-        cpx::TagInfo tag_val = ti;
+        cpx::Tag tag_key     = ti;
+        cpx::Tag tag_val     = ti;
         tag_key.omitempty    = false;
         tag_key.oneof        = "";
         tag_val.oneof        = "";
@@ -650,7 +640,7 @@ struct SERIALIZE(std::tm) {
         std::tm tm  = v;
         time_t  sec = timegm(&tm);
 
-        cpx::TagInfo tag_sec = ti;
+        cpx::Tag tag_sec     = ti;
         tag_sec.field_number = 1;
         tag_sec.omitempty    = true;
 
@@ -701,8 +691,8 @@ struct SERIALIZE(std::timespec) {
     SERIALIZER_FIELDS
 
     bool from(const std::timespec &v) const {
-        cpx::TagInfo tag_sec  = ti;
-        cpx::TagInfo tag_nsec = ti;
+        cpx::Tag tag_sec      = ti;
+        cpx::Tag tag_nsec     = ti;
         tag_sec.field_number  = 1;
         tag_nsec.field_number = 2;
         tag_sec.omitempty = tag_nsec.omitempty = true;
