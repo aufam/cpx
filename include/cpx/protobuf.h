@@ -155,17 +155,17 @@ namespace cpx::protobuf::detail {
 
 #define SERIALIZER_FIELDS                                                                                                        \
     google::protobuf::io::CodedOutputStream &doc;                                                                                \
-    const cpx::Tag                          &ti = {};
+    const cpx::Tag                          &tag = {};
 
 #define DESERIALIZER_FIELDS                                                                                                      \
     google::protobuf::io::CodedInputStream              &doc;                                                                    \
-    const cpx::Tag                                      &ti        = {};                                                         \
+    const cpx::Tag                                      &tag       = {};                                                         \
     google::protobuf::internal::WireFormatLite::WireType wire_type = {};                                                         \
     size_t                                               len       = 0;
 
 #define DESERIALIZER_BODY                                                                                                        \
-    const uint32_t field_number = tag >> 3;                                                                                      \
-    const auto     wire_type    = static_cast<google::protobuf::internal::WireFormatLite::WireType>(tag & 0x07);                 \
+    const uint32_t field_number = proto_tag >> 3;                                                                                \
+    const auto     wire_type    = static_cast<google::protobuf::internal::WireFormatLite::WireType>(proto_tag & 0x07);           \
     uint64_t       len          = 0;                                                                                             \
     int            limit        = -1;                                                                                            \
     if (wire_type == google::protobuf::internal::WireFormatLite::WIRETYPE_LENGTH_DELIMITED) {                                    \
@@ -186,19 +186,19 @@ struct SERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_numeric<T>::value
     SERIALIZER_FIELDS
 
     bool from(T v) const {
-        if ((ti.omitempty || !ti.oneof.empty()) && v == T())
+        if ((tag.omitempty || !tag.oneof.empty()) && v == T())
             return false;
 
-        if (ti.field_number > 0) {
-            auto tag = google::protobuf::internal::WireFormatLite::MakeTag(
-                ti.field_number,
+        if (tag.field_number > 0) {
+            auto proto_tag = google::protobuf::internal::WireFormatLite::MakeTag(
+                tag.field_number,
                 std::is_same_v<T, double>       ? google::protobuf::internal::WireFormatLite::WIRETYPE_FIXED64
                 : std::is_same_v<T, float>      ? google::protobuf::internal::WireFormatLite::WIRETYPE_FIXED32
-                : !ti.fixed                     ? google::protobuf::internal::WireFormatLite::WIRETYPE_VARINT
+                : !tag.fixed                    ? google::protobuf::internal::WireFormatLite::WIRETYPE_VARINT
                 : sizeof(T) == sizeof(uint64_t) ? google::protobuf::internal::WireFormatLite::WIRETYPE_FIXED64
                                                 : google::protobuf::internal::WireFormatLite::WIRETYPE_FIXED32
             );
-            doc.WriteTag(tag);
+            doc.WriteTag(proto_tag);
         }
 
         if constexpr (std::is_same_v<T, double>) {
@@ -206,12 +206,12 @@ struct SERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_numeric<T>::value
         } else if constexpr (std::is_same_v<T, float>) {
             doc.WriteLittleEndian32(google::protobuf::internal::WireFormatLite::EncodeFloat(v));
         } else {
-            if (ti.fixed) {
+            if (tag.fixed) {
                 if constexpr (sizeof(T) == 8)
                     doc.WriteLittleEndian64(static_cast<uint64_t>(v));
                 else
                     doc.WriteLittleEndian32(static_cast<uint32_t>(v));
-            } else if (ti.zigzag) {
+            } else if (tag.zigzag) {
                 if constexpr (sizeof(T) == 8)
                     doc.WriteVarint64(google::protobuf::internal::WireFormatLite::ZigZagEncode64(static_cast<int64_t>(v)));
                 else
@@ -243,7 +243,7 @@ struct DESERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_numeric<T>::val
         if constexpr (std::is_same_v<T, double> || std::is_same_v<T, float>) {
             v = (T)google::protobuf::internal::WireFormatLite::DecodeFloat(bits);
         } else {
-            if (ti.zigzag)
+            if (tag.zigzag)
                 v = static_cast<T>(google::protobuf::internal::WireFormatLite::ZigZagDecode32(bits));
             else
                 v = static_cast<T>(bits);
@@ -259,7 +259,7 @@ struct DESERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_numeric<T>::val
         if constexpr (std::is_same_v<T, double> || std::is_same_v<T, float>) {
             v = (T)google::protobuf::internal::WireFormatLite::DecodeDouble(bits);
         } else {
-            if (ti.zigzag)
+            if (tag.zigzag)
                 v = static_cast<T>(google::protobuf::internal::WireFormatLite::ZigZagDecode64(bits));
             else
                 v = static_cast<T>(bits);
@@ -273,14 +273,14 @@ struct SERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_bytes<T>::value>)
     SERIALIZER_FIELDS
 
     bool from(const T &v) const {
-        if ((ti.omitempty || !ti.oneof.empty()) && v.empty())
+        if ((tag.omitempty || !tag.oneof.empty()) && v.empty())
             return false;
 
-        if (ti.field_number > 0) {
-            auto tag = google::protobuf::internal::WireFormatLite::MakeTag(
-                ti.field_number, google::protobuf::internal::WireFormatLite::WIRETYPE_LENGTH_DELIMITED
+        if (tag.field_number > 0) {
+            auto proto_tag = google::protobuf::internal::WireFormatLite::MakeTag(
+                tag.field_number, google::protobuf::internal::WireFormatLite::WIRETYPE_LENGTH_DELIMITED
             );
-            doc.WriteTag(tag);
+            doc.WriteTag(proto_tag);
             doc.WriteVarint64(v.size());
         }
         doc.WriteRaw(v.data(), (int)v.size());
@@ -330,14 +330,14 @@ struct SERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_repeated_numeric<
 
     bool from(const T &arr) const {
         bool ret = false;
-        if (ti.packed) {
+        if (tag.packed) {
             std::string buffer = create_packed_buffer(arr);
-            ret                = SERIALIZE(std::string){doc, ti}.from(buffer);
+            ret                = SERIALIZE(std::string){doc, tag}.from(buffer);
         } else {
-            auto ti        = this->ti;
-            ti.omitempty   = false;
-            ti.oneof       = "";
-            const auto ser = SERIALIZE(typename T::value_type){doc, ti};
+            auto tag       = this->tag;
+            tag.omitempty  = false;
+            tag.oneof      = "";
+            const auto ser = SERIALIZE(typename T::value_type){doc, tag};
             for (auto &v : arr)
                 ret |= ser.from(v);
         }
@@ -349,12 +349,12 @@ struct SERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_repeated_numeric<
         google::protobuf::io::StringOutputStream os(&buffer);
         google::protobuf::io::CodedOutputStream  doc(&os);
 
-        auto ti         = this->ti;
-        ti.field_number = 0;
-        ti.omitempty    = false;
-        ti.oneof        = "";
+        auto tag         = this->tag;
+        tag.field_number = 0;
+        tag.omitempty    = false;
+        tag.oneof        = "";
 
-        SERIALIZE(typename T::value_type) ser = {doc, ti};
+        SERIALIZE(typename T::value_type) ser = {doc, tag};
         for (auto &v : arr)
             ser.from(v);
 
@@ -372,18 +372,18 @@ struct DESERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_repeated_numeri
         if constexpr (cpx::detail::is_std_array<T>::value) {
             read_packed(v);
         } else {
-            if (ti.packed) {
+            if (tag.packed) {
                 read_packed(v);
             } else {
                 value_type val;
-                DESERIALIZE(value_type){doc, ti, wire_type, len}.into(val);
+                DESERIALIZE(value_type){doc, tag, wire_type, len}.into(val);
                 v.push_back(val);
             }
         }
     }
 
     void read_packed(T &v) const {
-        const bool fixed     = std::is_same_v<value_type, double> || std::is_same_v<value_type, float> || ti.fixed;
+        const bool fixed     = std::is_same_v<value_type, double> || std::is_same_v<value_type, float> || tag.fixed;
         const auto wire_type = //
             !fixed                                ? google::protobuf::internal::WireFormatLite::WIRETYPE_VARINT
             : sizeof(typename T::value_type) == 8 ? google::protobuf::internal::WireFormatLite::WIRETYPE_FIXED64
@@ -394,10 +394,10 @@ struct DESERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_repeated_numeri
             if constexpr (cpx::detail::is_std_array<T>::value) {
                 if (i == v.size())
                     throw size_mismatch_error(v.size(), i);
-                DESERIALIZE(value_type){doc, ti, wire_type}.into(arr.at(i++));
+                DESERIALIZE(value_type){doc, tag, wire_type}.into(arr.at(i++));
             } else {
                 value_type val;
-                DESERIALIZE(value_type){doc, ti, wire_type}.into(val);
+                DESERIALIZE(value_type){doc, tag, wire_type}.into(val);
                 arr.push_back(val);
             }
     }
@@ -410,7 +410,7 @@ struct SERIALIZE(std::optional<T>, std::enable_if_t<SERIALIZABLE(T)>) {
 
     bool from(const std::optional<T> &v) const {
         if (v.has_value())
-            return SERIALIZE(T){doc, ti}.from(*v);
+            return SERIALIZE(T){doc, tag}.from(*v);
         return false;
     }
 };
@@ -421,7 +421,7 @@ struct DESERIALIZE(std::optional<T>, std::enable_if_t<DESERIALIZABLE(T) && std::
 
     void into(std::optional<T> &v) const {
         v.emplace();
-        DESERIALIZE(T){doc, ti, wire_type, len}.into(*v);
+        DESERIALIZE(T){doc, tag, wire_type, len}.into(*v);
     }
 };
 
@@ -434,7 +434,7 @@ struct SERIALIZE(T, std::enable_if_t<cpx::protobuf::detail::is_repeated_serializ
         bool ret = false;
         for (const auto &v : arr) {
             using VT     = std::decay_t<decltype(v)>;
-            auto ti      = this->ti;
+            auto ti      = this->tag;
             ti.omitempty = false;
             ti.oneof     = "";
             ret |= SERIALIZE(VT){doc, ti}.from(v);
@@ -463,7 +463,7 @@ struct DESERIALIZE(
 
     void into(T &arr) const {
         value_type v = {};
-        DESERIALIZE(value_type){doc, ti, wire_type, len}.into(v);
+        DESERIALIZE(value_type){doc, tag, wire_type, len}.into(v);
         arr.push_back(std::move(v));
     }
 };
@@ -480,8 +480,8 @@ struct SERIALIZE(std::tuple<Ts...>) {
             google::protobuf::io::StringOutputStream os(&buffer);
             google::protobuf::io::CodedOutputStream  sdoc(&os);
 
-            auto  &doc         = ti.field_number > 0 ? sdoc : this->doc;
-            auto   flattened   = flatten(tpl);
+            auto  &doc         = tag.field_number > 0 ? sdoc : this->doc;
+            auto   flattened   = cpx::flatten(tpl);
             auto   oneofs      = std::array<std::string_view, std::tuple_size_v<decltype(flattened)>>();
             size_t oneof_count = 0;
             tuple_for_each(flattened, [&](const auto &item, size_t) {
@@ -491,8 +491,8 @@ struct SERIALIZE(std::tuple<Ts...>) {
 
                 bool written = false;
                 if constexpr (SERIALIZABLE(T))
-                    if (ti.field_number > 0)
-                        written = SERIALIZE(T){doc, ti}.from(v);
+                    if (t.field_number > 0)
+                        written = SERIALIZE(T){doc, t}.from(v);
 
                 if (written && !t.oneof.empty()) {
                     for (size_t j = 0; j < oneof_count; ++j) {
@@ -505,8 +505,8 @@ struct SERIALIZE(std::tuple<Ts...>) {
                 ret |= written;
             });
         }
-        if (ti.field_number > 0)
-            ret = SERIALIZE(std::string){doc, ti}.from(buffer);
+        if (tag.field_number > 0)
+            ret = SERIALIZE(std::string){doc, tag}.from(buffer);
 
         return ret;
     }
@@ -525,7 +525,7 @@ struct DESERIALIZE(std::tuple<Ts...>) {
 
         auto   oneofs      = std::array<std::string_view, size>{};
         size_t oneof_count = 0;
-        while (const uint32_t tag = doc.ReadTag()) {
+        while (const uint32_t proto_tag = doc.ReadTag()) {
             DESERIALIZER_BODY
 
             bool done = false;
@@ -559,7 +559,7 @@ struct DESERIALIZE(std::tuple<Ts...>) {
                 if (wire_type == google::protobuf::internal::WireFormatLite::WireType::WIRETYPE_LENGTH_DELIMITED)
                     std::ignore = doc.Skip((int)len);
                 else
-                    std::ignore = google::protobuf::internal::WireFormatLite::SkipField(&doc, tag);
+                    std::ignore = google::protobuf::internal::WireFormatLite::SkipField(&doc, proto_tag);
             }
         }
     }
@@ -571,8 +571,8 @@ struct SERIALIZE(std::unordered_map<K, T, H, P, A>, std::enable_if_t<SERIALIZABL
     SERIALIZER_FIELDS
 
     bool from(const std::unordered_map<K, T, H, P, A> &map) const {
-        cpx::Tag tag_key     = ti;
-        cpx::Tag tag_val     = ti;
+        cpx::Tag tag_key     = tag;
+        cpx::Tag tag_val     = tag;
         tag_key.omitempty    = false;
         tag_key.oneof        = "";
         tag_val.oneof        = "";
@@ -589,7 +589,7 @@ struct SERIALIZE(std::unordered_map<K, T, H, P, A>, std::enable_if_t<SERIALIZABL
                 SERIALIZE(K){entry_doc, tag_key}.from(k);
                 SERIALIZE(T){entry_doc, tag_val}.from(v);
             }
-            ret |= SERIALIZE(std::string){doc, ti}.from(entry_buffer);
+            ret |= SERIALIZE(std::string){doc, tag}.from(entry_buffer);
         }
         return ret;
     }
@@ -610,15 +610,15 @@ struct DESERIALIZE(
 
         K k = {};
         T v = {};
-        while (const uint32_t tag = doc.ReadTag()) {
+        while (const uint32_t proto_tag = doc.ReadTag()) {
             DESERIALIZER_BODY
 
             try {
                 if (field_number == 1) {
-                    DESERIALIZE(K){doc, ti, wire_type, len}.into(k);
+                    DESERIALIZE(K){doc, tag, wire_type, len}.into(k);
                     std::ignore = map[k];
                 } else if (field_number == 2) {
-                    DESERIALIZE(T){doc, ti, wire_type, len}.into(v);
+                    DESERIALIZE(T){doc, tag, wire_type, len}.into(v);
                     map[k] = std::move(v);
                 } else {
                     throw error("expect field_number 1 or 2 got " + std::to_string(field_number));
@@ -640,7 +640,7 @@ struct SERIALIZE(std::tm) {
         std::tm tm  = v;
         time_t  sec = timegm(&tm);
 
-        cpx::Tag tag_sec     = ti;
+        cpx::Tag tag_sec     = tag;
         tag_sec.field_number = 1;
         tag_sec.omitempty    = true;
 
@@ -650,12 +650,12 @@ struct SERIALIZE(std::tm) {
             google::protobuf::io::StringOutputStream os(&buffer);
             google::protobuf::io::CodedOutputStream  sdoc(&os);
 
-            auto &doc = ti.field_number > 0 ? sdoc : this->doc;
+            auto &doc = tag.field_number > 0 ? sdoc : this->doc;
 
             ret |= SERIALIZE(time_t){doc, tag_sec}.from(sec);
         };
-        if (ti.field_number > 0)
-            ret = SERIALIZE(std::string){doc, ti}.from(buffer);
+        if (tag.field_number > 0)
+            ret = SERIALIZE(std::string){doc, tag}.from(buffer);
 
         return ret;
     }
@@ -666,13 +666,13 @@ struct DESERIALIZE(std::tm) {
     DESERIALIZER_FIELDS
 
     void into(std::tm &tm) const {
-        while (const uint32_t tag = doc.ReadTag()) {
+        while (const uint32_t proto_tag = doc.ReadTag()) {
             DESERIALIZER_BODY
 
             time_t sec;
             try {
                 if (field_number == 1) {
-                    DESERIALIZE(time_t){doc, ti, wire_type, len}.into(sec);
+                    DESERIALIZE(time_t){doc, tag, wire_type, len}.into(sec);
                     tm = *std::gmtime(&sec);
                 } else {
                     throw error("expect field_number 1 or 2 got " + std::to_string(field_number));
@@ -691,8 +691,8 @@ struct SERIALIZE(std::timespec) {
     SERIALIZER_FIELDS
 
     bool from(const std::timespec &v) const {
-        cpx::Tag tag_sec      = ti;
-        cpx::Tag tag_nsec     = ti;
+        cpx::Tag tag_sec      = tag;
+        cpx::Tag tag_nsec     = tag;
         tag_sec.field_number  = 1;
         tag_nsec.field_number = 2;
         tag_sec.omitempty = tag_nsec.omitempty = true;
@@ -703,13 +703,13 @@ struct SERIALIZE(std::timespec) {
             google::protobuf::io::StringOutputStream os(&buffer);
             google::protobuf::io::CodedOutputStream  sdoc(&os);
 
-            auto &doc = ti.field_number > 0 ? sdoc : this->doc;
+            auto &doc = tag.field_number > 0 ? sdoc : this->doc;
 
             ret |= SERIALIZE(decltype(std::timespec::tv_sec)){doc, tag_sec}.from(v.tv_sec);
             ret |= SERIALIZE(decltype(std::timespec::tv_sec)){doc, tag_nsec}.from(v.tv_nsec);
         };
-        if (ti.field_number > 0)
-            ret = SERIALIZE(std::string){doc, ti}.from(buffer);
+        if (tag.field_number > 0)
+            ret = SERIALIZE(std::string){doc, tag}.from(buffer);
 
         return ret;
     }
@@ -720,14 +720,14 @@ struct DESERIALIZE(std::timespec) {
     DESERIALIZER_FIELDS
 
     void into(std::timespec &v) const {
-        while (const uint32_t tag = doc.ReadTag()) {
+        while (const uint32_t proto_tag = doc.ReadTag()) {
             DESERIALIZER_BODY
 
             try {
                 if (field_number == 1) {
-                    DESERIALIZE(decltype(std::timespec::tv_sec)){doc, ti, wire_type, len}.into(v.tv_sec);
+                    DESERIALIZE(decltype(std::timespec::tv_sec)){doc, tag, wire_type, len}.into(v.tv_sec);
                 } else if (field_number == 2) {
-                    DESERIALIZE(decltype(std::timespec::tv_nsec)){doc, ti, wire_type, len}.into(v.tv_nsec);
+                    DESERIALIZE(decltype(std::timespec::tv_nsec)){doc, tag, wire_type, len}.into(v.tv_nsec);
                 } else {
                     throw error("expect field_number 1 or 2 got " + std::to_string(field_number));
                 }
@@ -752,11 +752,11 @@ struct SERIALIZE(T, std::enable_if_t<cpx::protobuf::has_reflect_v<T>>) {
                 traits::to_bytes(v, str);
             else
                 traits::to_str(v, str);
-            return SERIALIZE(std::string){doc, ti}.from(str);
+            return SERIALIZE(std::string){doc, tag}.from(str);
         }
 
         if constexpr (traits::has_default_traits) {
-            return SERIALIZE(typename traits::const_type){doc, ti}.from(traits::of(v));
+            return SERIALIZE(typename traits::const_type){doc, tag}.from(traits::of(v));
         }
 
         return false;
@@ -774,7 +774,7 @@ struct DESERIALIZE(T, std::enable_if_t<cpx::protobuf::has_reflect_v<T>>) {
         if constexpr (traits::has_from_bytes)
             try {
                 std::string_view r;
-                DESERIALIZE(std::string_view){doc, ti, wire_type, len}.into(r);
+                DESERIALIZE(std::string_view){doc, tag, wire_type, len}.into(r);
                 traits::from_bytes(v, r);
                 return;
             } catch (...) {
@@ -784,7 +784,7 @@ struct DESERIALIZE(T, std::enable_if_t<cpx::protobuf::has_reflect_v<T>>) {
         if constexpr (traits::has_from_str)
             try {
                 std::string_view r;
-                DESERIALIZE(std::string_view){doc, ti, wire_type, len}.into(r);
+                DESERIALIZE(std::string_view){doc, tag, wire_type, len}.into(r);
                 traits::from_str(v, r);
                 return;
             } catch (...) {
@@ -794,7 +794,7 @@ struct DESERIALIZE(T, std::enable_if_t<cpx::protobuf::has_reflect_v<T>>) {
         if constexpr (traits::has_default_traits)
             try {
                 decltype(auto) r = traits::of(v);
-                DESERIALIZE(typename traits::type){doc, ti, wire_type, len}.into(r);
+                DESERIALIZE(typename traits::type){doc, tag, wire_type, len}.into(r);
                 return;
             } catch (...) {
                 eptr = std::current_exception();
